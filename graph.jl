@@ -7,10 +7,11 @@ using GraphPlot
 const ORGANIC_ELEMENTS = (:C, :H, :O, :N)
 
 function find_identical_vertex(bonds::BitMatrix)
+    @warn "Not finished"
 end
 
 function coordination_sequence(bonds::BitMatrix)
-
+    @warn "Not finished"
 end
 
 function identify_subgroups(c::Crystal, x::Symbol)
@@ -63,5 +64,6 @@ function find_clusters(c::Crystal; tol)
 end
 
 function find_equilibrium
+    @warn "Not finished"
     #TODO
 end

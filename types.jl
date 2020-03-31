@@ -86,7 +86,7 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
     EquivalentPosition(SMatrix{3, 3, Rational{Int}, 9}(mat), SVector{3, Rational{Int}}(ofs))
 end
 
-function show(io::IO, eq::EquivalentPosition)
+function Base.show(io::IO, eq::EquivalentPosition)
     function rationaltostring(x::Rational{<:Integer})
         sign = x > 0 ? '+' : '-'
         (x == 1 || x == -1) && return string(sign)
