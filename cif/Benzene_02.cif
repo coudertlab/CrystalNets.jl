@@ -1,0 +1,94 @@
+
+#######################################################################
+#
+#                 Cambridge Crystallographic Data Centre
+#                                CCDC 
+#
+#######################################################################
+#
+# If this CIF has been generated directly or indirectly from an entry in the 
+# Cambridge Structural Database, then it will include bibliographic, chemical, 
+# crystal, experimental, refinement or atomic coordinate data resulting from 
+# the CCDC's data processing and validation procedures. Files generated from 
+# CSD entries are Copyright 2014 Cambridge Crystallographic Data Centre. They 
+# may be used in bona fide research applications only, and may not be copied or 
+# further disseminated in any form, whether machine-readable or not, except for 
+# the purposes of generating routine backup copies on your local computer 
+# system.
+# 
+# Files arising from any other source may also contain material that is the 
+# copyright of third parties, including the originator, and you should check 
+# with the originator concerning the permitted uses of the information 
+# contained in this CIF.
+#
+# For further information on the CCDC and the free tools enCIFer and Mercury
+# for validating and visualising CIF files, please visit www.ccdc.cam.ac.uk
+#
+#######################################################################
+
+data_BENZEN16
+_audit_creation_date             2011-02-02
+_database_code_depnum_ccdc_archive 'CCDC 757060'
+_chemical_formula_moiety         'C6 H6'
+_chemical_name_systematic        Benzene
+_journal_coden_Cambridge         1147
+_journal_volume                  10
+_journal_year                    2010
+_journal_page_first              3461
+_journal_name_full               'Cryst.Growth Des.'
+loop_
+_publ_author_name
+A.Katrusiak
+M.Podsiadlo
+A.Budzianowski
+_chemical_absolute_configuration unk
+_diffrn_ambient_temperature      295
+_diffrn_ambient_pressure         'at 0.91(5) GPa'
+_exptl_crystal_density_meas      1.195
+_exptl_crystal_density_diffrn    1.195
+#These two values have been output from a single CSD field.
+_refine_ls_R_factor_gt           0.0804
+_refine_ls_wR_factor_gt          0.0804
+_diffrn_radiation_probe          x-ray
+_symmetry_cell_setting           monoclinic
+_symmetry_space_group_name_H-M   'P 21/c'
+_symmetry_Int_Tables_number      14
+loop_
+_symmetry_equiv_pos_site_id
+_symmetry_equiv_pos_as_xyz
+1 x,y,z
+2 -x,1/2+y,1/2-z
+3 -x,-y,-z
+4 x,1/2-y,1/2+z
+_cell_length_a                   5.5146(11)
+_cell_length_b                   5.4951(11)
+_cell_length_c                   7.6536(15)
+_cell_angle_alpha                90
+_cell_angle_beta                 110.59(3)
+_cell_angle_gamma                90
+_cell_volume                     217.114
+_exptl_crystal_colour            colorless
+_exptl_crystal_description       cylinder
+_chemical_melting_point          '279 K'
+_cell_formula_units_Z            2
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+C1 C -0.2557(12) -0.025(3) -0.1131(9)
+H1 H -0.4289 -0.0396 -0.1886
+C2 C -0.0805(11) -0.199(3) -0.1203(8)
+H2 H -0.1341 -0.3309 -0.2007
+C3 C -0.1754(12) 0.175(3) 0.0071(8)
+H3 H -0.2952 0.2925 0.0105
+C1B C 0.2557 0.025 0.1131
+H1B H 0.4289 0.0396 0.1886
+C2B C 0.0805 0.199 0.1203
+H2B H 0.1341 0.3309 0.2007
+C3B C 0.1754 -0.175 -0.0071
+H3B H 0.2952 -0.2925 -0.0105
+
+#END
+
