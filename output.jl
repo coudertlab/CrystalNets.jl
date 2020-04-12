@@ -1,5 +1,6 @@
-includet("types.jl")
+
 using .CIFTypes
+import LinearAlgebra: norm
 
 function export_dataline(f, x)
     inbetween = '\t'
@@ -16,6 +17,7 @@ function export_dataline(f, x)
 end
 
 function export_cif(file, c::Union{Crystal, CIF})
+    mkpath(splitdir(file)[1])
     info = copy(c.cifinfo)
     loops = Dict{Int, Tuple{Vector{String}, Vector{Vector{String}}}}()
     open(file, write=true) do f
@@ -31,41 +33,52 @@ function export_cif(file, c::Union{Crystal, CIF})
                     push!(loops[n][1], id)
                     push!(loops[n][2], data)
                 else
-                    loops[n] = [String[id], Vector{String}[data]]
+                    loops[n] = (String[id], Vector{String}[data])
                 end
             end
         end
 
+        #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
+        _a, _b, _c, α, β, γ = CIFTypes.cell_parameters(c.cell)
+
         println(f, """
 
-        _cell_length_a\t\t$(c.geometry.a/1.2)
-        _cell_length_b\t\t$(c.geometry.b/1.2)
-        _cell_length_c\t\t$(c.geometry.c/1.2)
-        _cell_angle_alpha\t\t$(c.geometry.α)
-        _cell_angle_beta\t\t$(c.geometry.β)
-        _cell_angle_gamma\t\t$(c.geometry.γ)
+        _cell_length_a\t\t$_a
+        _cell_length_b\t\t$_b
+        _cell_length_c\t\t$_c
+        _cell_angle_alpha\t\t$α
+        _cell_angle_beta\t\t$β
+        _cell_angle_gamma\t\t$γ
 
-        _symmetry_space_group_name_H-M\t'$(c.geometry.spacegroup)'
-        _symmetry_Int_Tables_number\t$(c.geometry.tablenumber)
-        _symmetry_cell_setting\t$(c.geometry.latticesystem)
+        _symmetry_space_group_name_H-M\t'$(c.cell.spacegroup)'""")
+        if c.cell.tablenumber != 0
+            println(f, "_symmetry_Int_Tables_number\t$(c.cell.tablenumber)")
+        end
+        if c.cell.latticesystem !== Symbol("")
+            println(f, "_symmetry_cell_setting\t$(c.cell.latticesystem)")
+        end
+
+        println(f, """
 
         loop_
         _symmetry_equiv_pos_as_xyz
-        x, y, z""")
-        for eq in c.geometry.equivalents
+        x,y,z""")
+        for eq in c.cell.equivalents
             println(f, eq)
         end
         println(f)
 
-        if !haskey(loops, c.natoms)
-            loops[c.natoms] = (String[], Vector{String}[])
+        n = length(c.ids)
+        if !haskey(loops, n)
+            loops[n] = (String[], Vector{String}[])
         end
-        append!(loops[c.natoms][1],
-                ["_atom_site_label", "atom_site_type_symbol",
+        append!(loops[n][1],
+                ["atom_site_label", "atom_site_type_symbol",
                  "atom_site_fract_x", "atom_site_fract_y", "atom_site_fract_z"])
-        labels = String[string(c.atoms[i])*string(i) for i in 1:c.natoms]
+        labels = String[string(c.types[c.ids[i]])*string(i) for i in 1:n]
         pos = string.(round.(c.pos; sigdigits=6))
-        append!(loops[c.natoms][2], [labels, string.(c.atoms), pos[1,:], pos[2,:], pos[3,:]])
+        append!(loops[n][2], [labels, string.(c.types[x] for x in c.ids),
+                pos[1,:], pos[2,:], pos[3,:]])
 
         if c isa Crystal
             bonds = edges(c.graph)
@@ -73,7 +86,7 @@ function export_cif(file, c::Union{Crystal, CIF})
             if !haskey(loops, n)
                 loops[n] = (String[], Vector{String}[])
             end
-            append!(loops[n][1], ["_geom_bond_atom_site_label_1", "_geom_bond_atom_site_label_2"])
+            append!(loops[n][1], ["geom_bond_atom_site_label_1", "geom_bond_atom_site_label_2"])
             append!(loops[n][2], [String[], String[]])
             for e in bonds
                 push!(loops[n][2][end-1], string(labels[e.src]))
@@ -97,4 +110,34 @@ function export_cif(file, c::Union{Crystal, CIF})
         println(f, "\n#END")
     end
     nothing
+end
+
+function export_cgd(file, c::Crystal)
+    mkpath(splitdir(file)[1])
+    open(file, write=true) do f
+        println(f, "CRYSTAL\n")
+        margin = 1
+        println(f, "\tNAME\t", c.cifinfo["data"])
+        #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
+        _a, _b, _c, α, β, γ = CIFTypes.cell_parameters(c.cell)
+        println(f, "\tGROUP\t\"", join(split(c.cell.spacegroup, ' ')), "\"")
+        println(f, "\tCELL\t", _a, ' ', _b, ' ', _c, ' ', α, ' ', β, ' ', γ, ' ')
+        println(f, "\tATOM")
+        to_revisit = Int[]
+        for i in 1:length(c.ids)
+            # c.ids[i] ∈ (@view c.ids[to_revisit]) && continue
+            push!(to_revisit, i)
+            println(f, "\t\t", i, ' ', degree(c.graph, i), ' ', c.pos[1,i], ' ',
+                    c.pos[2,i], ' ', c.pos[3,i])
+        end
+        println(f, "\tEDGE")
+        for i in to_revisit
+            for e in neighbors(c.graph, i)
+                e.v < i && continue
+                dest = c.pos[:,e.v] .+ e.ofs
+                println(f, "\t\t", i, '\t', dest[1], ' ', dest[2], ' ', dest[3])
+            end
+        end
+        println(f, "\nEND")
+    end
 end

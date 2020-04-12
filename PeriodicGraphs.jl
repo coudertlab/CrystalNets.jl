@@ -1,21 +1,21 @@
 module PeriodicGraphs
 
-using Reexport
 using LinearAlgebra
-@reexport using LightGraphs
+using StaticArrays
+using LightGraphs
 export PeriodicVertex, PeriodicEdge3D, PeriodicGraph3D,
-       cellgraph, periodiccellgraph, equilibrium
+       vertex_sequence, cellgraph, periodiccellgraph, equilibrium
 import Base:(==)
 
 struct PeriodicVertex
     v::Int
-    ofs::Tuple{Int, Int, Int}
+    ofs::SVector{3,Int}
 end
 PeriodicVertex(n::Integer) = PeriodicVertex(n, (0, 0, 0))
 function Base.show(io::IO, x::PeriodicVertex)
     print(io, "PeriodicVertex($(x.v), $(x.ofs))")
 end
-function Base.convert(::Type{<:PeriodicVertex}, (dst, offset)::Tuple{Int, Tuple{Int, Int, Int}})
+function Base.convert(::Type{<:PeriodicVertex}, (dst, offset)::Tuple{Int, Any})
     PeriodicVertex(dst, offset)
 end
 function Base.isless(x::PeriodicVertex, y::PeriodicVertex)
@@ -27,14 +27,14 @@ end
 ZtoN(x::Int) = -(x<0) + 2*abs(x)
 
 """
-    hash_position((x1,x2,x3)::Tuple{Int, Int, Int})
+    hash_position((x1,x2,x3)::SVector{3,Int})
 
 Bijection from Z^3 -> N.
 For n = max(abs.(x1, x2, x3)), m = max(abs.(y1, y2, y3)), the hash is such that
 n < m implies hash_position((x1, x2, x3)) < hash_position((y1, y2, y3))
 
 """
-function hash_position((x1,x2,x3)::Tuple{Int, Int, Int})
+function hash_position((x1,x2,x3))
     _b = x1 >= x2
     b1 = _b & (x1 >= x3)
     b2 = (!_b) & (x2 >= x3)
@@ -44,29 +44,29 @@ function hash_position((x1,x2,x3)::Tuple{Int, Int, Int})
            b3*((x3 + 1)*(2x3 + 1) + x3*(x1 + x3^2) + x2)
 end
 function hash_position(x::PeriodicVertex, n::Int)
-    v, t::Tuple{Int, Int, Int} = x.v, ZtoN.(x.ofs)
+    v, t = x.v, ZtoN.(x.ofs)
     return v + n*hash_position(t)
 end
 
 struct PeriodicEdge3D <: LightGraphs.SimpleGraphs.AbstractSimpleEdge{Int}
     src::Int
     dst::PeriodicVertex
-    function PeriodicEdge3D(src::Int, dst::Int, offset::Tuple{Int, Int, Int}, check)
-        if check
-            src == dst && offset == (0, 0, 0) && throw("Loops are forbidden edges : PeriodicEdge3D($((src, dst, offset))) is invalid")
-            src > dst && begin src, dst, offset = dst, src, .-offset end#throw("Order bonds such that src <= dst : PeriodicEdge3D($((src, dst, offset))) is invalid")
+    function PeriodicEdge3D(src::Int, dst::Int, offset, check::Bool)
+        @boundscheck if check
+            src == dst && all(iszero.(offset)) && throw("Loops are forbidden edges : PeriodicEdge3D($((src, dst, offset))) is invalid")
+            src > dst && begin src, dst, offset = dst, src, .-offset end
             src == dst && offset > .-offset && (offset = .-offset)
         end
         return new(src, PeriodicVertex(dst, offset))
     end
 end
-function PeriodicEdge3D(src::Int, dst::Int, offset::Tuple{Int, Int, Int})
+function PeriodicEdge3D(src::Int, dst::Int, offset)
     PeriodicEdge3D(src, dst, offset, true)
 end
 function PeriodicEdge3D(src::Int, dst::PeriodicVertex)
     PeriodicEdge3D(src, dst.v, dst.ofs, false)
 end
-function Base.convert(::Type{<:PeriodicEdge3D}, (src, dst, offset)::Tuple{T,T,Tuple{T,T,T}}) where {T<:Integer}
+function Base.convert(::Type{<:PeriodicEdge3D}, (src, dst, offset)::Tuple{T,T,Union{SVector{3,T},NTuple{3,T}}}) where {T<:Integer}
     PeriodicEdge3D(src, dst, offset, true)
 end
 function LightGraphs.reverse(e::PeriodicEdge3D)
@@ -86,6 +86,7 @@ end
 function Base.show(io::IO, x::PeriodicEdge3D)
     print(io, "PeriodicEdge3D($(x.src), $(x.dst))")
 end
+
 
 struct PeriodicGraph3D <: AbstractGraph{Int}
     edges::Vector{PeriodicVertex}
@@ -163,7 +164,7 @@ function LightGraphs.add_edge!(g::PeriodicGraph3D, e::PeriodicEdge3D)
     success = _add_edge!(g, e) && _add_edge!(g, reverse(e))
     return success
 end
-function LightGraphs.add_edge!(g::PeriodicGraph3D, src::Int, dst::Int, offset::Tuple{Int, Int, Int})
+function LightGraphs.add_edge!(g::PeriodicGraph3D, src, dst, offset)
     add_edge!(g, PeriodicEdge3D(src, dst, offset))
 end
 
@@ -174,6 +175,7 @@ function LightGraphs.edges(g::PeriodicGraph3D)
     ret = PeriodicEdge3D[]
     for i in vertices(g)
         for j in g.indices[i]:g.indices[i+1]-1
+            g.edges[j].v < i && break # Do not count twice each edge
             push!(ret, PeriodicEdge3D(i, g.edges[j]))
         end
     end
@@ -195,13 +197,13 @@ end
 function LightGraphs.outneighbors(g::PeriodicGraph3D, v::Int)
     return @inbounds @view g.edges[g.indices[v]:g.indices[v+1]-1]
 end
-@inline function num_neighbors(g::PeriodicGraph3D, v::Int)
+function LightGraphs.indegree(g::PeriodicGraph3D, v::Integer)
     return g.indices[v+1] - g.indices[v]
 end
 LightGraphs.inneighbors(g::PeriodicGraph3D, v::Integer) = outneighbors(g, v)
 Base.zero(::Type{PeriodicGraph3D}) = PeriodicGraph3D(0)
 LightGraphs.is_directed(::Type{<:PeriodicGraph3D}) = false
-@inline has_contiguous_vertices(::Type{<:PeriodicGraph3D}) = true
+@inline has_contiguous_vertices(::Type{<:PeriodicGraph3D}) = true # TODO use LightGraphs.has_contiguous_vertices (LightGraphs version > 1.3.1)
 LightGraphs.has_vertex(g::PeriodicGraph3D, v::Integer) = 1 <= v <= nv(g)
 function LightGraphs.SimpleGraphs.add_vertices!(g::PeriodicGraph3D, n::Integer)
     append!(g.indices, fill(length(g.edges) + 1, n))
@@ -316,27 +318,38 @@ end
 
 function LightGraphs._neighborhood(g::PeriodicGraph3D, v::Integer, d::Real, distmx::AbstractMatrix{U}, neighborfn::Function) where U <: Real
     @assert typeof(neighborfn) === typeof(outneighbors)
-    Q = Vector{Tuple{PeriodicVertex, U}}()
+    Q = Tuple{PeriodicVertex, U}[]
     d < zero(U) && return Q
     start_vertex = PeriodicVertex(v, (0, 0, 0))
     push!(Q, (start_vertex, zero(U),) )
     n = nv(g)
-    seen = BitArray(0 for _ in 1:(n*(2d+1)^3))
+    seen = falses(n*(2d+1)^3)
     seen[hash_position(start_vertex, n)] = true
     @inbounds for (src, currdist) in Q
-        currdist >= d && continue
+        currdist == d && continue # should be in Q but all its neighbours are too far
         @simd for dst in outneighbors(g, src.v)
             dst = PeriodicVertex(dst.v, dst.ofs .+ src.ofs)
             position = hash_position(dst, n)
             if !seen[position]
                 seen[position] = true
-                if currdist + distmx[src.v, dst.v] <= d
-                    push!(Q, (dst , currdist + distmx[src.v, dst.v],))
+                distance = currdist + distmx[src.v, dst.v]
+                if distance <= d
+                    push!(Q, (dst, distance))
                 end
             end
         end
     end
     return Q
+end
+
+function vertex_sequence(g::PeriodicGraph3D, v::Integer, dmax)
+    Q = LightGraphs._neighborhood(g, v, dmax, weights(g), outneighbors)
+    popfirst!(Q)
+    ret = zeros(Int, dmax)
+    for (_, d) in Q
+        ret[d] += 1
+    end
+    return ret
 end
 
 function cellgraph(g::PeriodicGraph3D)
@@ -355,28 +368,6 @@ function periodiccellgraph(g::PeriodicGraph3D)
     ret = SimpleGraph([Edge{Int}(i, j.v) for i in vertices(g) for j in outneighbors(g, i)])
     add_vertices!(ret, nv(g) - nv(ret))
     return ret
-end
-
-function equilibrium(g::PeriodicGraph3D)
-    n = nv(g)
-    Y = Array{Rational{Int128}}(undef, 3, n)
-    A = Array{Rational{Int128}}(undef, n, n)
-    neigh = Array{Int}(undef, n)
-    offset = Array{Int}(undef, 3)
-    for i in 1:n
-        m = num_neighbors(g, i)
-        neigh .= 0
-        offset .= 0
-        for k in neighbors(g, i)
-            neigh[k.v] += 1
-            offset .+= k.ofs
-        end
-        A[i,:] = neigh ./ m
-        Y[:,i] = offset ./ m
-    end
-    @show factorize(A)
-    @show Y
-    return factorize(A)\Y'
 end
 
 end

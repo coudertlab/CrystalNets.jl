@@ -1,5 +1,5 @@
-includet("./PeriodicGraphs.jl")
-using Test, .PeriodicGraphs, Random
+include("./PeriodicGraphs.jl")
+using Test, .PeriodicGraphs, Random, LightGraphs
 
 Random.seed!(12)
 
@@ -99,14 +99,14 @@ end
 
 @testset "Periodic vertex hash" begin
     n::Int = 6
-    seen = BitArray(0 for _ in 1:n^3)
+    seen = falses(n^3)
     for i in 0:n-1, j in 0:n-1, k in 0:n-1
         x = PeriodicGraphs.hash_position((i,j,k))+1
         @test !seen[x]
         seen[x] = true
     end
     @test all(seen)
-    append!(seen, BitArray(0 for _ in n^3+1:(n+1)^3))
+    append!(seen, falses((n+1)^3-n^3+1-1))
     for j in 0:n, k in 0:n
         x = PeriodicGraphs.hash_position((n,j,k))+1
         @test !seen[x]

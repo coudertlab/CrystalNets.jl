@@ -1,8 +1,4 @@
 
-
-includet("types.jl")
-using .CIFTypes
-
 """
     nextword(l, k)
 
@@ -147,7 +143,7 @@ end
 
 function parsestrip(s)
     s = s[end] == ')' ? s[1:prevind(s, findlast('(', s))] : s
-    return parse(Float64, s)
+    return parse(BigFloat, s)
 end
 
 
@@ -158,9 +154,11 @@ Make a CIF object out of the parsed file.
 """
 function CIF(parsed)
     natoms = length(parsed["atom_site_label"])
-    cell = Cell(Symbol(pop!(parsed, "symmetry_cell_setting")),
+    cell = Cell(Symbol(haskey(parsed, "symmetry_cell_setting") ?
+                            pop!(parsed, "symmetry_cell_setting") : ""),
                 pop!(parsed, "symmetry_space_group_name_H-M"),
-                parse(Int, pop!(parsed, "symmetry_Int_Tables_number")),
+                haskey(parsed, "symmetry_Int_Tables_number") ?
+                    parse(Int, pop!(parsed, "symmetry_Int_Tables_number")) : 0,
                 parsestrip(pop!(parsed, "cell_length_a")),
                 parsestrip(pop!(parsed, "cell_length_b")),
                 parsestrip(pop!(parsed, "cell_length_c")),
@@ -173,27 +171,42 @@ function CIF(parsed)
                 )))
 
     haskey(parsed, "symmetry_equiv_pos_site_id") && pop!(parsed, "symmetry_equiv_pos_site_id")
-    identityposition = popfirst!(cell.equivalents)
-    @assert isone(identityposition.mat)
-    @assert iszero(identityposition.ofs)
+    removed_identity = false
+    for i in eachindex(cell.equivalents)
+        eq = cell.equivalents[i]
+        if isone(eq.mat) && iszero(eq.ofs)
+            deleteat!(cell.equivalents, i)
+            removed_identity = true
+            break
+        end
+    end
+    @assert removed_identity
 
-    labels = pop!(parsed, "atom_site_label")
-    symbols = pop!(parsed, "atom_site_type_symbol")
+    labels =  pop!(parsed, "atom_site_label")
+    _symbols = haskey(parsed, "atom_site_type_symbol") ?
+                    pop!(parsed, "atom_site_type_symbol") : copy(labels)
+    symbols = String[]
+    @inbounds for x in _symbols
+        i = findfirst(!isletter, x)
+        push!(symbols, isnothing(i) ? x : x[1:i-1])
+    end
     pos_x = pop!(parsed, "atom_site_fract_x")
     pos_y = pop!(parsed, "atom_site_fract_y")
     pos_z = pop!(parsed, "atom_site_fract_z")
 
-    atoms = Symbol[]
+
+    types = Symbol[]
     pos = Matrix{Float64}(undef, 3, natoms)
     correspondence = Dict{String, Int}()
-    atom_types = Symbol[]
     for i in 1:natoms
         @assert !haskey(correspondence, labels[i])
         correspondence[labels[i]] = i
-        push!(atoms, Symbol(symbols[i]))
+        push!(types, Symbol(symbols[i]))
         pos[:,i] = parsestrip.([pos_x[i], pos_y[i], pos_z[i]])
     end
-    bonds = zero(BitMatrix(undef, natoms, natoms))
+    ids = sortperm(types)
+    types = types[ids]
+    bonds = falses(natoms, natoms)
     if haskey(parsed, "geom_bond_atom_site_label_1") &&
        haskey(parsed, "geom_bond_atom_site_label_2")
         bond_a = pop!(parsed, "geom_bond_atom_site_label_1")
@@ -204,7 +217,7 @@ function CIF(parsed)
             bonds[x,y] = bonds[y,x] = 1
         end
     end
-    return CIF(natoms, parsed, cell, atoms, pos, bonds)
+    return CIF(parsed, cell, ids, types, pos, bonds)
 end
 
 Crystal(parsed::Dict) = Crystal(CIF(parsed))
