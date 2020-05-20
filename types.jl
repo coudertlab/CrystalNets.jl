@@ -1,10 +1,13 @@
 module CIFTypes
 
 include("./PeriodicGraphs.jl")
+include("./rationallu.jl")
 using Serialization
 using StaticArrays, Tokenize
 using .PeriodicGraphs
-import LinearAlgebra: norm
+import LightGraphs: nv, neighbors, is_connected
+import LinearAlgebra: norm, issuccess, det
+import Statistics: mean
 export EquivalentPosition, Cell, CIF, Crystal, CrystalNet
 
 struct EquivalentPosition
@@ -127,32 +130,40 @@ struct Cell
     equivalents::Vector{EquivalentPosition}
 
     function Cell(lattice, space, table, a, b, c, α, β, γ, eq)
-        cosα = cosd(α); cosβ = cosd(β); cosγ = cosd(γ); sinβ = sind(β)
+        cosα = cosd(α); cosβ = cosd(β); cosγ = cosd(γ); sinγ = sind(γ)
         ω = sqrt(1 - cosα^2 - cosβ^2 - cosγ^2 + 2*cosα*cosβ*cosγ)
-        mat = SMatrix{3,3,BigFloat,9}([a   b*cosγ                      c*cosβ ;
-                                      0   b*ω/sinβ                    0      ;
-                                      0   b*(cosα - cosβ*cosγ)/sinβ   c*sinβ ])
+        mat = SMatrix{3,3,BigFloat,9}([a  b*cosγ  c*cosβ ;
+                                      0   b*sinγ  c*(cosα - cosβ*cosγ)/sinγ ;
+                                      0   0       c*ω/sinγ ])
         return new(lattice, space, table, mat, eq)
     end
 
-    function Cell(c::Cell, mat::SMatrix{3,3,BigFloat,9})
-        return new(c.latticesystem, c.spacegroup, c.tablenumber, mat, c.equivalents)
-    end
+    # function Cell(c::Cell, mat::StaticArray{Tuple{3,3},BigFloat})
+    #     return new(c.latticesystem, c.spacegroup, c.tablenumber, mat, c.equivalents)
+    # end
 
     function Cell(c::Cell, eqs::Vector{EquivalentPosition})
         return new(c.latticesystem, c.spacegroup, c.tablenumber, c.mat, eqs)
     end
 end
-function cell_parameters(cell::Cell)
-    a, b, c = eachcol(cell.mat)# ./ scale_factor)
-    α = Float64(acosd(b'c/(norm(b)*norm(c))))
-    β = Float64(acosd(c'a/(norm(c)*norm(a))))
-    γ = Float64(acosd(a'b/(norm(a)*norm(b))))
-    return (Float64(norm(a)), Float64(norm(b)), Float64(norm(c)), α, β, γ)
+function cell_parameters(mat::StaticArray{Tuple{3,3},BigFloat})
+    _a, _b, _c = eachcol(mat)
+    a = norm(_a)
+    b = norm(_b)
+    c = norm(_c)
+    α = acosd(_b'_c/(b*c))
+    β = acosd(_c'_a/(c*a))
+    γ = acosd(_a'_b/(a*b))
+    return (a, b, c, α, β, γ)
+end
+cell_parameters(cell::Cell) = cell_parameters(cell.mat)
+function Cell(cell::Cell, mat::StaticArray{Tuple{3,3},BigFloat})
+    a, b, c, α, β, γ = cell_parameters(mat)
+    return Cell(cell.latticesystem, cell.spacegroup, cell.tablenumber, a, b, c, α, β, γ, cell.equivalents)
 end
 function Base.show(io::IO, cell::Cell)
-    a, b, c, α, β, γ = cell_parameters(cell)
-    print(io, "Cell(\"$(cell.spacegroup)\", ($a, $b, $c), ($α, $β, $γ)")
+    a, b, c, α, β, γ = Float64.(cell_parameters(cell))
+    print(io, "Cell(\"$(cell.spacegroup)\", ($a, $b, $c), ($α, $β, $γ))")
 end
 
 struct CIF
@@ -161,7 +172,18 @@ struct CIF
     ids::Vector{Int}
     types::Vector{Symbol}
     pos::Matrix{Float64}
-    bonds::BitMatrix
+    bonds::Matrix{Bool}
+end
+
+function keep_atoms(cif::CIF, kept)
+    kept_ids = sort!([cif.ids[i] for i in kept])
+    unique!(kept_ids)
+    idmap = Vector{Int}(undef, length(cif.types))
+    for (i,x) in enumerate(kept_ids)
+        idmap[x] = i
+    end
+    return CIF(cif.cifinfo, cif.cell, [idmap[cif.ids[i]] for i in kept],
+               cif.types[kept_ids], cif.pos[:, kept], cif.bonds[kept, kept])
 end
 
 function strip_atoms(cif::CIF, atoms)
@@ -170,9 +192,14 @@ function strip_atoms(cif::CIF, atoms)
                cif.types[vmap], cif.pos[:, vmap], cif.bonds[vmap, vmap])
 end
 
+# function strip_atoms(cif::CIF, atoms::Union{Tuple{Vararg{Symbol}},AbstractVector{Symbol}})
+#     kept = [i for i in 1:length(cif.ids) if cif.types[import[]] ∉ atoms]
+#     keep_atoms(cif, kept)
+# end
+
 function periodic_distance(u, v)
     dst = 0.0
-    @inbounds for i in 1:3
+    #=@inbounds=# for i in 1:3
         x = abs2(u[i] - v[i])
         if x > 0.25
             x = (1 - sqrt(x))^2
@@ -187,7 +214,7 @@ function periodic_distance(u, v, mat)
     x = similar(u)
     uu = copy(u)
     vv = copy(v)
-    @inbounds for i in 1:3
+    #=@inbounds=# for i in 1:3
         diff = u[i] - v[i]
         if diff > 0.5
             x[i] = diff - 1
@@ -205,7 +232,7 @@ function expand_symmetry(cif::CIF)
     newids = copy(cif.ids)
     newpos::Vector{Vector{Float64}} = collect(eachcol(cif.pos))
     ret = Vector{Vector{Int}}
-    @inbounds for equiv in cif.cell.equivalents, i in 1:length(cif.ids)
+    #=@inbounds=# for equiv in cif.cell.equivalents, i in 1:length(cif.ids)
         v = newpos[i]
         p = Vector(equiv.mat*v + equiv.ofs)
         @. p = p - floor(p)
@@ -222,16 +249,18 @@ function expand_symmetry(cif::CIF)
         end
     end
     return CIF(cif.cifinfo, cif.cell, newids, cif.types, reduce(hcat, newpos),
-               BitMatrix(undef, length(newids), length(newids)))
+               Matrix{Bool}(undef, length(newids), length(newids)))
 end
 
 function set_unique_bond_type!(cif::CIF, bond_length, bonded_atoms::Tuple{Symbol, Symbol}, tol=0.1)
-    @inbounds for i in 1:length(cif.ids)
-        @simd for j in 1:length(cif.ids)
+    #=@inbounds=# for i in 1:length(cif.ids)
+    cif.bonds[i,i] = false
+        Threads.@threads for j in i+1:length(cif.ids)
             bonded = abs2(periodic_distance(cif.pos[:,i], cif.pos[:,j], cif.cell.mat) - bond_length) <= tol
             cif.bonds[i,j] = bonded
-            if bonded && (cif.types[cif.ids[i]], cif.types[cif.ids[j]]) != bonded_atoms
-                throw("Not an $(bonded_atoms[1])-$(bonded_atoms[2]) bond")
+            cif.bonds[j,i] = bonded
+            if bonded && minmax(cif.types[cif.ids[i]], cif.types[cif.ids[j]]) != bonded_atoms
+                throw("$(cif.types[cif.ids[i]])-$(cif.types[cif.ids[j]]) is not an $(bonded_atoms[1])-$(bonded_atoms[2]) bond")
             end
         end
     end
@@ -247,22 +276,31 @@ struct Crystal
     graph::PeriodicGraph3D
 end
 
-function Crystal(c::CIF)
-    if iszero(c.bonds)
-        atoms = unique!(sort(c.types))
+function Crystal(cif::CIF)
+    c1 = Ref(cif)
+    if iszero(cif.bonds)
+        atoms::Vector{Symbol} = unique!(sort(c1[].types))
         if atoms == [:O, :Si] || atoms == [:Si] # zeolite
-            c = expand_symmetry(strip_atoms(c, (:O,)))
-            set_unique_bond_type!(c, 3.1, (:Si, :Si))
-        elseif atoms == [:C]
-            c = expand_symmetry(c)
-            set_unique_bond_type!(c, 1.54, (:C, :C), 0.3)
+            c1[] = expand_symmetry(strip_atoms(cif, (:O,)))
+            set_unique_bond_type!(c1[], 3.1, (:Si, :Si))
+        elseif atoms == [:C] || atoms == [:C, :H]
+            c1[] = expand_symmetry(strip_atoms(cif, (:H,)))
+            set_unique_bond_type!(c1[], 1.54, (:C, :C), 0.3)
+        elseif atoms == [:Cl, :Na]
+            c1[] = expand_symmetry(cif)
+            set_unique_bond_type!(c1[], 2.82, (:Cl, :Na), 0.1)
         else
-            throw("Missing bonds on CIF object $(c.cifinfo["data"])")
+            @show atoms
+            throw("Missing bonds on CIF object $(cif.cifinfo["data"])")
         end
     end
-    edges = PeriodicEdge3D[]
+    c2 = c1[]
+    @assert !iszero(c2.bonds)
+    bondedatoms::Vector{Int} = [i for i in 1:length(c2.ids) if count(c2.bonds[:,i]) > 1]
+    c = keep_atoms(c2, bondedatoms) # Only keep those that matter for the topology
     n = length(c.ids)
-    for i in 1:n, k in findall(@view c.bonds[i,:])
+    edges = PeriodicEdge3D[]
+    for i in 1:n, k in findall(@view c.bonds[:,i])
         k < i && continue
         offset::Vector{SVector{3, Int}} = []
         old_dst = norm(c.cell.mat*[1, 1, 1])
@@ -281,14 +319,105 @@ function Crystal(c::CIF)
             push!(edges, (i, k, ofs))
         end
     end
+    @assert !isempty(edges)
     Crystal(c.cifinfo, c.cell, c.ids, c.types, c.pos, PeriodicGraph3D(n, edges))
 end
 
-struct CrystalNet
+
+function equilibrium(g::PeriodicGraph3D)
+    n = nv(g)
+    iszero(n) && return Matrix{Rational{Int}}(undef, 3, 0)
+    Y = Array{Rational{BigInt}}(undef, n, 3)
+    A = spzeros(Int, n, n)
+    neigh = Array{Int}(undef, n)
+    offset = SizedVector{3,Int}(undef)
+    for i in 1:n
+        neigh .= 0
+        offset .= 0
+        count = 0
+        for k in neighbors(g, i)
+            k.v == i && continue
+            count += 1
+            neigh[k.v] += 1
+            offset .-= k.ofs
+        end
+        Y[i,:] .= offset
+        A[i,:] .= neigh
+        A[i,i] = -count
+    end
+
+    B = rational_lu(A[2:end,2:end], false)
+    if !issuccess(B)
+        throw(is_connected(g) ? "Singular exception while equilibrating" :
+                                "Cannot equilibrate a disconnected graph")
+    end
+    Y = linsolve!(B, Y[2:end,:])
+    ret = hcat(zeros(Rational{Int128}, 3), Rational{Int128}.(Y)')
+    # Rational{Int64} is not enough for tep for instance.
+    return ret
+end
+
+struct CrystalNet{T<:Real}
     cell::Cell
     types::Vector{Symbol}
-    pos::Matrix{Rational{Int}}
+    pos::Vector{SVector{3,T}}
     graph::PeriodicGraph3D
+end
+
+function CrystalNet{T}(cell::Cell, types::AbstractVector{Symbol}, ids::AbstractVector{<:Integer},
+                    graph::PeriodicGraph3D, eq::AbstractMatrix{T}) where T
+    n = nv(graph)
+    pos = Vector{SVector{3,T}}(undef, n)
+    offsets = Vector{SVector{3,Int}}(undef, n)
+    for (i, x) in enumerate(eachcol(eq))
+        offsets[i] = floor.(Int, x)
+        pos[i] = x .- offsets[i]
+    end
+    s = sortperm(pos)
+    pos = pos[s]
+    types = Symbol[types[ids[s[i]]] for i in 1:n]
+    cell = Cell(cell, EquivalentPosition[])
+    graph = offset_representatives!(graph, .-offsets)[s]
+    @assert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
+    return CrystalNet(cell, types, pos, graph)
+end
+
+function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, ids::AbstractVector{<:Integer},
+                    graph::PeriodicGraph3D, eq::Matrix{T}) where T
+    CrystalNet{T}(cell, types, ids, graph, eq)
+end
+
+function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, ids::AbstractVector{Int}, graph::PeriodicGraph3D)
+    eq = equilibrium(graph)
+    minnum = minimum(numerator.(eq))
+    maxnum = maximum(numerator.(eq))
+    minden = minimum(denominator.(eq))
+    maxden = maximum(denominator.(eq))
+    for T in (Int32, Int64)
+        if ((typemin(T) < min(minnum, minden)) & (max(maxnum, maxden) < typemax(T)))
+            return CrystalNet{Rational{T}}(cell, types, ids, graph, Rational{T}.(eq))
+        end
+    end
+    return CrystalNet{Rational{Int128}}(cell, types, ids, graph, eq)
+    # Type-unstable function, but yields better performance than always falling back on Int128
+end
+function CrystalNet{T}(cell::Cell, types::AbstractVector{Symbol}, ids::AbstractVector{Int}, graph::PeriodicGraph3D) where T
+    CrystalNet{T}(cell, types, ids, graph, T.(equilibrium(graph)))
+end
+
+CrystalNet(c::Crystal) = CrystalNet(c.cell, c.types, c.ids, c.graph)
+
+function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph3D)
+    n = nv(graph)
+    return CrystalNet(cell, types, 1:n, graph)
+end
+
+function CrystalNet(g::Union{PeriodicGraph3D,AbstractString,AbstractVector{PeriodicEdge3D}})
+    graph = PeriodicGraph3D(g)
+    cell = Cell(Symbol(""), "P 1", 0, 10, 10, 10, 90, 90, 90, EquivalentPosition[])
+    n = nv(g)
+    types = [Symbol("") for _ in 1:n]
+    return CrystalNet(cell, types, graph)
 end
 
 

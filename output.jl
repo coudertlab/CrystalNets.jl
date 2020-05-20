@@ -1,5 +1,6 @@
-
+include("types.jl")
 using .CIFTypes
+using .CIFTypes.PeriodicGraphs
 import LinearAlgebra: norm
 
 function export_dataline(f, x)
@@ -14,6 +15,91 @@ function export_dataline(f, x)
         end
     end
     println(f, inbetween*x)
+end
+
+function export_vtf(file, c::CrystalNet, repeatedges=1)
+    mkpath(splitdir(file)[1])
+    n = length(c.types)
+    @assert length(c.pos) == n
+    invcorres = [PeriodicVertex3D(i) for i in 1:n]
+    corres = Dict{PeriodicVertex3D,Int}([invcorres[i]=>i for i in 1:n])
+    open(file, write=true) do f
+        println(f, """
+        ###############################
+        # written by PeriodicGraphs.jl
+        ###############################
+        """)
+
+        for i in 1:n
+            ty = c.types[i]
+            println(f, "atom $(i-1) name $i type ",
+                    ty == Symbol("") ? string(i) : string(ty), " resid $(i-1)")
+        end
+        j = n + 1
+        for _ in 1:repeatedges
+            jmax = j - 1
+            for i in 1:jmax
+                vertex = invcorres[i]
+                for x in neighbors(c.graph, vertex.v)
+                    y = PeriodicVertex3D(x.v, x.ofs .+ vertex.ofs)
+                    if get!(corres, y, j) == j
+                        j += 1
+                        push!(invcorres, y)
+                    end
+                end
+            end
+        end
+        for i in n+1:length(invcorres)
+            v = invcorres[i].v
+            ofs = invcorres[i].ofs
+            ty = c.types[v]
+            println(f, "atom $(i-1) name $v type ",
+                    ty == Symbol("") ? string(i) : string(ty), " resid $(i-1)")
+        end
+        println(f)
+
+        for (i,x) in enumerate(invcorres)
+            for neigh in neighbors(c.graph, x.v)
+                j = get(corres, PeriodicVertex3D(neigh.v, neigh.ofs .+ x.ofs), nothing)
+                isnothing(j) && continue
+                if i < j
+                    println(f, "bond ", i - 1, ':', j - 1)
+                end
+            end
+        end
+        #
+        # for e in edges(c.graph)
+        #     print(f, "bond ", e.src - 1, ':', corres[e.dst] - 1)
+        #     if iszero(e.dst.ofs)
+        #         println(f)
+        #     else
+        #         println(f, ", ", corres[PeriodicVertex3D(e.src, .-e.dst.ofs)] - 1, ':', e.dst.v - 1)
+        #     end
+        # end
+        println(f)
+
+        _a, _b, _c, α, β, γ = CIFTypes.cell_parameters(c.cell)
+        println(f, "pbc $_a $_b $_c $α $β $γ\n")
+
+        # axis1 = (c.cell.mat[:,1] .+ [_a, 0, 0]) ./ 2
+        # if norm(axis1) <= 1e-8 # The origin is at the middle point
+        #     axis1 .= [0, 1, 0]
+        # end
+        # rotation1 = 2*axis1*axis1'/(axis1'axis1) - LinearAlgebra.I(3)
+        # @assert inv(rotation1) ≈ rotation1 ≈ rotation1'
+        # mat = rotation1 * c.cell.mat
+        # if abs(mat[3,2]) > 1e-8
+        #     θ = sign(mat[3,2]*mat[2,2])*π/2 + atan(mat[2,2] / mat[3,2])
+        #     mat = [1 0 0; 0 cos(θ) -sin(θ); 0 sin(θ) cos(θ)] * mat
+        # end
+        mat = c.cell.mat
+
+        println(f, "ordered")
+        for x in invcorres
+            coord = mat * (c.pos[x.v] .+ x.ofs)
+            println(f, join(round.(Float64.(coord); digits=15), ' '))
+        end
+    end
 end
 
 function export_cif(file, c::Union{Crystal, CIF})
@@ -39,7 +125,7 @@ function export_cif(file, c::Union{Crystal, CIF})
         end
 
         #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
-        _a, _b, _c, α, β, γ = CIFTypes.cell_parameters(c.cell)
+        _a, _b, _c, α, β, γ = Float64.(CIFTypes.cell_parameters(c.cell))
 
         println(f, """
 
@@ -82,16 +168,27 @@ function export_cif(file, c::Union{Crystal, CIF})
 
         if c isa Crystal
             bonds = edges(c.graph)
-            n = length(bonds)
+            src = String[]
+            dst = String[]
+            mult = Int[]
+            last_bond = (0, 0)
+            n = 0
+            for e in bonds
+                if (e.src, e.dst.v) == last_bond
+                    mult[end] += 1
+                else
+                    push!(src, string(labels[e.src]))
+                    push!(dst, string(labels[e.dst.v]))
+                    push!(mult, 1)
+                    last_bond = (e.src, e.dst.v)
+                    n += 1
+                end
+            end
             if !haskey(loops, n)
                 loops[n] = (String[], Vector{String}[])
             end
-            append!(loops[n][1], ["geom_bond_atom_site_label_1", "geom_bond_atom_site_label_2"])
-            append!(loops[n][2], [String[], String[]])
-            for e in bonds
-                push!(loops[n][2][end-1], string(labels[e.src]))
-                push!(loops[n][2][end], string(labels[e.dst.v]))
-            end
+            append!(loops[n][1], ["geom_bond_atom_site_label_1", "geom_bond_atom_site_label_2", "geom_bond_multiplicity"])
+            append!(loops[n][2], [src, dst, string.(mult)])
         end
 
         for (n, (ids, datas)) in sort(loops)
@@ -119,7 +216,7 @@ function export_cgd(file, c::Crystal)
         margin = 1
         println(f, "\tNAME\t", c.cifinfo["data"])
         #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
-        _a, _b, _c, α, β, γ = CIFTypes.cell_parameters(c.cell)
+        _a, _b, _c, α, β, γ = Float64.(CIFTypes.cell_parameters(c.cell))
         println(f, "\tGROUP\t\"", join(split(c.cell.spacegroup, ' ')), "\"")
         println(f, "\tCELL\t", _a, ' ', _b, ' ', _c, ' ', α, ' ', β, ' ', γ, ' ')
         println(f, "\tATOM")
@@ -139,5 +236,28 @@ function export_cgd(file, c::Crystal)
             end
         end
         println(f, "\nEND")
+    end
+end
+
+function export_cgd(file, g::PeriodicGraph)
+    mkpath(splitdir(file)[1])
+    open(file, write=true) do f
+        println(f, "PERIODIC_GRAPH\n")
+        println(f, "ID ", basename(splitext(file)[1]), '\n')
+        println(f, "EDGES")
+        repr = reverse(split(string(g)))
+        n = parse(Int, pop!(repr))
+        m = length(repr) ÷ (n+2)
+        @assert iszero(length(repr) % (n+2))
+        for _ in 1:m
+            src = pop!(repr)
+            dst = pop!(repr)
+            ofs = Vector{String}(undef, n)
+            for i in 1:n
+                ofs[i] = pop!(repr)
+            end
+            println(f, '\t', src, ' ', dst, ' ', join(ofs, ' '))
+        end
+        println(f, "END\n")
     end
 end

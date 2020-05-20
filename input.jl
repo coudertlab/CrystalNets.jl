@@ -206,14 +206,16 @@ function CIF(parsed)
     end
     ids = sortperm(types)
     types = types[ids]
+    pos .= pos[:,ids]
+    invids = invperm(ids)
     bonds = falses(natoms, natoms)
     if haskey(parsed, "geom_bond_atom_site_label_1") &&
        haskey(parsed, "geom_bond_atom_site_label_2")
         bond_a = pop!(parsed, "geom_bond_atom_site_label_1")
         bond_b = pop!(parsed, "geom_bond_atom_site_label_2")
         for i in 1:length(bond_a)
-            x = correspondence[bond_a[i]]
-            y = correspondence[bond_b[i]]
+            x = invids[correspondence[bond_a[i]]]
+            y = invids[correspondence[bond_b[i]]]
             bonds[x,y] = bonds[y,x] = 1
         end
     end
@@ -221,3 +223,30 @@ function CIF(parsed)
 end
 
 Crystal(parsed::Dict) = Crystal(CIF(parsed))
+
+
+
+function parse_arc(file)
+    pairs = Tuple{String,String}[]
+    curr_key = ""
+    counter = 1
+    for l in eachline(file)
+        if length(l) > 3 && l[1:3] == "key"
+            @assert isempty(curr_key)
+            i = 4
+            while isspace(l[i])
+                i += 1
+            end
+            curr_key = l[i:end]
+        elseif length(l) > 2 && l[1:2] == "id"
+            @assert !isempty(curr_key)
+            i = 3
+            while isspace(l[i])
+                i += 1
+            end
+            push!(pairs, (l[i:end], curr_key))
+            curr_key = ""
+        end
+    end
+    return pairs
+end
