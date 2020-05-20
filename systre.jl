@@ -689,10 +689,11 @@ end
 
 function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}, vmaps, symmetries) where T
     # @show sum(length, values(candidates))
-    unique_candidates = Set{Pair{Int,SMatrix{3,3,T,9}}}()
+    unique_candidates = Pair{Int,SMatrix{3,3,T,9}}[]
     for (i, mats) in candidates
         @assert i == minimum(vmap[i] for vmap in vmaps)
         indices = [j for j in 1:length(vmaps) if vmaps[j][i] == i]
+        min_mats = Set{SVector{9,T}}()
         for mat in mats
             # # push!(unique_candidates, i => mat)
             # for j in indices
@@ -706,12 +707,15 @@ function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}
                     min_mat = new_mat
                 end
             end
-            push!(unique_candidates, i => SMatrix{3,3,T,9}(min_mat))
+            push!(min_mats, min_mat)
+        end
+        for x in min_mats
+            push!(unique_candidates, i => SMatrix{3,3,T,9}(x))
         end
     end
     # @show unique_candidates
     # @show length(collect(unique_candidates))
-    return collect(unique_candidates)
+    return unique_candidates
 end
 
 function find_candidates_onlyneighbors(net::CrystalNet{T}, candidates_v) where T
