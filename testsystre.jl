@@ -12,7 +12,7 @@ function stress_test(g::Union{AbstractString,PeriodicGraph3D}, num=nothing,
         clamp(round(Int, begin
             _counter = 0
             timebefore = time_ns()
-            while time_ns() - timebefore < 3e9
+            while time_ns() - timebefore < 1.5e9
                 _ref = string(systre(refgraph))
                 @assert _ref == ref
                 _counter += 1
@@ -20,19 +20,19 @@ function stress_test(g::Union{AbstractString,PeriodicGraph3D}, num=nothing,
             timeafter = time_ns()
             elapsed = (timeafter - timebefore)*1.0e-9 / _counter
             if elapsed < 0.5
-                10 + 3 / elapsed
+                20 + 30 / elapsed
             elseif elapsed < 5
                 control = 10
-                3 + 6 / elapsed
+                10 + 19 / elapsed
             elseif elapsed < 30
                 control = 3
-                3 + 20 / elapsed
+                3 + 59 / elapsed
             else
                 skiplong && throw("(skipped: over 30s)")
                 control = 1
-                10 / elapsed
+                120 / elapsed
             end
-        end), 3, 100)
+        end), 2, 200)
     else
         num
     end
@@ -84,7 +84,10 @@ function test_arc(path, newarc)
     arc = parse_arc(path)
     @show length(arc)
     @show nthreads()
-    id, _ = popfirst!(arc)
+    # id, _ = popfirst!(arc)
+    # while id != "ucn"
+    #     id, _ = popfirst!(arc)
+    # end
     for (id, key) in arc
         key[1] != '3' && continue
         print("Testing ", id, ' ')
@@ -98,12 +101,12 @@ function test_arc(path, newarc)
                 end
                 rethrow()
             end
-            #=open(newarc, "a") do f
-                println(f, "key\t\t", string(graph))
-                println(f, "id\t\t", id)
-                println(f)
-            end=#
-            stress_test(key, nothing, graph, true)
+            # open(newarc, "a") do f
+            #     println(f, "key\t\t", string(graph))
+            #     println(f, "id\t\t", id)
+            #     println(f)
+            # end
+            stress_test(key, nothing, graph, false)
         catch e
             if e isa String
                 println("\"\"\"", e, "\"\"\"")

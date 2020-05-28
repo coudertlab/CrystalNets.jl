@@ -461,18 +461,23 @@ function cmp(it1::PeriodicEdgeIter{N}, it2::PeriodicEdgeIter{N}) where N
     m = length(it2)
     n == m || return cmp(n,m)
     n == 0 && return 0
+    cmpofs = 0
     e1::PeriodicEdge{N}, st1::Tuple{Int,Int} = iterate(it1)
     e2::PeriodicEdge{N}, st2::Tuple{Int,Int} = iterate(it2)
     for _ in 1:n-1
-        c = cmp(e1, e2)
+        c = cmp((e1.src, e1.dst.v), (e2.src, e2.dst.v))
         if iszero(c)
+            if iszero(cmpofs)
+                cmpofs = cmp(e1.dst.ofs, e2.dst.ofs)
+            end
             e1, st1 = iterate(it1, st1)
             e2, st2 = iterate(it2, st2)
             continue
         end
         return c
     end
-    return cmp(e1, e2)
+    c = cmp((e1.src, e1.dst.v), (e2.src, e2.dst.v))
+    return iszero(c) ? (iszero(cmpofs) ? cmp(e1.dst.ofs, e2.dst.ofs) : cmpofs) : c
 end
 
 function isless(it1::PeriodicEdgeIter{N}, it2::PeriodicEdgeIter{N}) where N

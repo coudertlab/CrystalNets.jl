@@ -393,7 +393,7 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, ids::AbstractVect
     maxnum = maximum(numerator.(eq))
     minden = minimum(denominator.(eq))
     maxden = maximum(denominator.(eq))
-    for T in (Int32, Int64)
+    for T in (Int8, Int16, Int32, Int64)
         if ((typemin(T) < min(minnum, minden)) & (max(maxnum, maxden) < typemax(T)))
             return CrystalNet{Rational{T}}(cell, types, ids, graph, Rational{T}.(eq))
         end
