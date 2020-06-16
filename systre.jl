@@ -206,44 +206,49 @@ function findfirstbasis(offsets)
     return newbasis, intcoords
 end
 
-function findbasis(edges::Vector{Tuple{Int,Int,SVector{3,T}}}, nonzerosoffsets) where T
-    nzoffsets = [edges[i][3] for i in nonzerosoffsets]
-    I_sorted = sortperm(nzoffsets)
-    sorted_uniques = SVector{3,T}[nzoffsets[I_sorted[1]]]
-    I_uniques = Int[I_sorted[1]]
-    perm = Vector{Int}(undef, length(nonzerosoffsets))
-    perm[I_sorted[1]] = 1
-    for i in 2:length(nonzerosoffsets)
-        x = nzoffsets[I_sorted[i]]
-        if x != sorted_uniques[end]
-            push!(sorted_uniques, x)
-            push!(I_uniques, I_sorted[i])
+function findbasis(edges::Vector{Tuple{Int,Int,SVector{3,T}}}) where T
+    m = length(edges)
+    positivetrans = SVector{3,T}[]
+    map_to_ofs = Vector{Int}(undef, m)
+    tmp_map = Int[]
+    for i in 1:m
+        trans = last(edges[i])
+        c = cmp(trans, zero(SVector{3,Int}))
+        if iszero(c)
+            map_to_ofs[i] = 0
+        elseif c < 0
+            push!(tmp_map, -i)
+            push!(positivetrans, .-trans)
+        else
+            push!(tmp_map, i)
+            push!(positivetrans, trans)
         end
-        perm[I_sorted[i]] = length(I_uniques)
     end
-    original_order = sortperm(I_uniques)
-    uniques = sorted_uniques[original_order]
-    # TODO only keep offsets > [0,0,0]
-    # TODO simplify this code, since there is no point in trying to achieve the minimal
-    # lexicographical order for the found key.
+
+    I_sort = sortperm(positivetrans)
+    uniques = SVector{3,T}[]
+    last_trans = zero(SVector{3,T})
+
+    for j in 1:length(positivetrans)
+        i = tmp_map[I_sort[j]]
+        trans = positivetrans[I_sort[j]]
+        if trans != last_trans
+            push!(uniques, trans)
+            last_trans = trans
+        end
+        map_to_ofs[abs(i)] = sign(i) * length(uniques)
+    end
 
     basis, unique_coords = findfirstbasis(uniques)
 
-    n = length(edges)
-    order = zeros(Int, n)
-    reverse_order = invperm(original_order)
-    for i in 1:length(nonzerosoffsets)
-        order[nonzerosoffsets[i]] = reverse_order[perm[i]]
-    end
-
-    newedges = Vector{PeriodicEdge3D}(undef, n)
-    for j in 1:n
-        i = order[j]
+    newedges = Vector{PeriodicEdge3D}(undef, m)
+    for j in 1:m
+        i = map_to_ofs[j]
         src, dst, _ = edges[j]
         if i == 0
             newedges[j] = PeriodicEdge3D(src, dst, zero(SVector{3,Int}))
         else
-            newedges[j] = PeriodicEdge3D(src, dst, unique_coords[i])
+            newedges[j] = PeriodicEdge3D(src, dst, sign(i) .* unique_coords[abs(i)])
         end
     end
 
@@ -253,7 +258,7 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{3,T}}}, nonzerosoffsets) 
 end
 
 
-function candidate_key(net::CrystalNet{T}, u, basis, nonoffsetedges) where T
+function candidate_key(net::CrystalNet{T}, u, basis, minimal_edgs) where T
     V = widen(widen(T))
     n = nv(net.graph)
     h = 2 # Next node to assign
@@ -267,16 +272,11 @@ function candidate_key(net::CrystalNet{T}, u, basis, nonoffsetedges) where T
     vmap[1] = u
     rev_vmap = zeros(Int, n) # inverse of vmap
     rev_vmap[u] = 1
-    newnonoffsetedges = similar(nonoffsetedges)
-    flag_besnoofsedgs = false
-    counter_noofsedgs_stop = 0
+    flag_bestedgs = false # Marks whether the current list of edges is lexicographically
+    # below the best known one. If not by the end of the algorithm, return false
     edgs = Tuple{Int,Int,SVector{3,V}}[]
     mat = V.(inv(widen(V).(basis)))
-    nonzerosoffsets = Int[]
     for t in 1:n # t is the node being processed
-        counter_noofsedgs_start = counter_noofsedgs_stop
-        counter_noofsedgs_double = 0
-        noofsedgs_toadd = Tuple{Int,Int}[]
         neighs = neighbors(net.graph, vmap[t])
         ofst = offsets[t]
         pairs = Vector{Tuple{SVector{3,V},Int}}(undef, length(neighs))
@@ -298,8 +298,6 @@ function candidate_key(net::CrystalNet{T}, u, basis, nonoffsetedges) where T
             idx = rev_vmap[v]
             if idx == 0 # New node to which h is assigned
                 @assert t < h
-                counter_noofsedgs_double += 2
-                push!(noofsedgs_toadd, (t, h))
                 vmap[h] = v
                 rev_vmap[v] = h
                 newpos[h] = coordinate
@@ -307,40 +305,24 @@ function candidate_key(net::CrystalNet{T}, u, basis, nonoffsetedges) where T
                 push!(edgs, (t, h, zero(SVector{3,T})))
                 h += 1
             else
-                if t <= idx
-                    counter_noofsedgs_double += 2 - (t == idx)
-                    if iseven(counter_noofsedgs_double)
-                        push!(noofsedgs_toadd, (t, idx))
-                    end
-                end
                 realofs = coordinate .- newpos[idx]
                 # offset between this representative of the node and that which was first encountered
                 push!(edgs, (t, idx, realofs))
-                iszero(realofs) || push!(nonzerosoffsets, length(edgs))
             end
-        end
-
-        @assert iseven(counter_noofsedgs_double)
-        num_noofsedgs = counter_noofsedgs_double >> 1
-        @assert length(noofsedgs_toadd) == num_noofsedgs
-        counter_noofsedgs_stop = counter_noofsedgs_start + num_noofsedgs
-        sort!(noofsedgs_toadd)
-        for i in 1:num_noofsedgs
-            if !flag_besnoofsedgs
-                c = cmp(nonoffsetedges[counter_noofsedgs_start+i], noofsedgs_toadd[i])
+            if !flag_bestedgs
+                j = length(edgs)
+                c = cmp(minimal_edgs[j], edgs[j])
                 c < 0 && return nothing
-                c > 0 && (flag_besnoofsedgs = true)
+                c > 0 && (flag_bestedgs = true)
             end
-            newnonoffsetedges[counter_noofsedgs_start+i] = noofsedgs_toadd[i]
         end
     end
     @assert allunique(edgs)
-
-    newbasis, coords = findbasis(edgs, nonzerosoffsets)
-    newbasis = basis * newbasis
-    # @assert abs(det(newbasis)) == 1 # FIXME this sometimes breaks, see "3 1 2 2 0 0 1 2 0 2 0 1 2 0 0 2 1 2 0 0 0". Is it a valid assert?
-
-    return newbasis, vmap, PeriodicGraph3D(n, coords), newnonoffsetedges
+    if !flag_bestedgs
+        @assert minimal_edgs == edgs
+        return nothing
+    end
+    return vmap, edgs
 end
 
 
@@ -489,7 +471,7 @@ function find_symmetries(net::CrystalNet{Rational{S}}) where S
     positions = Matrix{Cdouble}(undef, 3, n)
     den = 1
     for i in 1:n
-        den = lcm(den, lcm(T.(denominator.(uniquepos[i]))))
+        den = lcm(den, lcm((T∘denominator).(uniquepos[i])))
         positions[:,i] .= uniquepos[i]
     end
 
@@ -613,15 +595,16 @@ function partition_by_coordination_sequence(graph, vmaps=Vector{Int}[])
         cat_map[i] = cat
     end
 
-    vsequences = [vertex_sequence(graph, first(cat), 10) for cat in categories]
-    I = sortperm(vsequences)
-    @assert vsequences[I[1]][1] >= 2 # vertices of degree <= 1 should have been removed at input creation
+    PeriodicGraphs.graph_width!(graph) # setup for the computation of coordination sequences
+    csequences = [coordination_sequence(graph, first(cat), 10) for cat in categories]
+    I = sortperm(csequences)
+    @assert csequences[I[1]][1] >= 2 # vertices of degree <= 1 should have been removed at input creation
 
     todelete = falses(length(categories))
     last_i = I[1]
     for j in 2:length(I)
         i = I[j]
-        if vsequences[i] == vsequences[last_i]
+        if csequences[i] == csequences[last_i]
             todelete[i] = true
             append!(categories[last_i], categories[i])
             push!(unique_reprs[last_i], pop!(unique_reprs[i]))
@@ -632,22 +615,22 @@ function partition_by_coordination_sequence(graph, vmaps=Vector{Int}[])
     end
     deleteat!(categories, todelete)
     deleteat!(unique_reprs, todelete)
-    deleteat!(vsequences, todelete)
+    deleteat!(csequences, todelete)
 
     num = length(categories)
     numoutgoingedges = Vector{Tuple{Int,Vector{Int}}}(undef, num)
     for i in 1:num
-        seq = vsequences[i]
+        seq = csequences[i]
         numoutgoingedges[i] = (length(categories[i]) * seq[1], seq)
     end
     sortorder = sortperm(numoutgoingedges)
     # categories are sorted by the total number of outgoing directed edges from each category
-    # and by the vertex sequence in case of ex-aequo.
+    # and by the coordination sequence in case of ex-aequo.
     # categories are thus uniquely determined and ordered independently of the representation of the net
 
-    @assert allunique(vsequences)
+    @assert allunique(csequences)
     for i in 1:num
-        @assert all(vertex_sequence(graph, x, 10) == vsequences[i] for x in categories[i])
+        @assert all(coordination_sequence(graph, x, 10) == csequences[i] for x in categories[i])
     end # TODO comment out these costly asserts
     return categories[sortorder], cat_map, unique_reprs[sortorder]
 end
@@ -680,22 +663,12 @@ function find_candidates(net::CrystalNet{T}) where T
     end
     if isempty(candidates)
         # If we arrive at this point, it means that all vertices only have coplanar neighbors.
-        for (i, cat) in enumerate(categories)
-            # Then we look for triplet of edges two of which start from a vertex and one does not, but all
-            # three belonging to the same category.
-            length(cat) == 1 && continue
-            for v in unique_reprs[i]
-                others = [x for x in cat if x != v]
-                mergewith!(append!, candidates, find_candidates_fallback(net, [v], [others], category_map))
-            end
-            !isempty(candidates) && break
-        end
+        # Then we look for all triplets of edges two of which start from a vertex
+        # and one does not, stopping and the first pair of categories for which this
+        # set of candidates is non-empty.
         if isempty(candidates)
-            for (i, reprs) in enumerate(unique_reprs)
-                # Finally, we look for the triplet of edges two of which start from a vertex and one does not,
-                # without the constraint that all three belong to the same category.
-                othercats = [categories[j+(j>=i)] for j in 1:length(categories)-1]
-                candidates = find_candidates_fallback(net, reprs, othercats, category_map)
+            for reprs in unique_reprs
+                candidates = find_candidates_fallback(net, reprs, categories, category_map)
                 !isempty(candidates) && break
             end
         end
@@ -950,27 +923,26 @@ function systre_key(net::CrystalNet{T}) where T
     candidates, category_map = find_candidates(net)
     # @show category_map
     # @show length(candidates)
-    v, basis = popfirst!(candidates)
-    # cats = fill(length(category_map), length(category_map))
-    # cats[1] = category_map[v]
-    nonoffsetedges = fill((nv(net.graph), nv(net.graph)), ne(net.graph))
-    minimal_basis, minimal_vmap, minimal_graph, minimal_nonoffsetedges = candidate_key(net, v, basis, nonoffsetedges)
+    v, minimal_basis = popfirst!(candidates)
+    n = nv(net.graph)
+    _edgs = [(n + 1, 0, zero(SVector{3,T}))]
+    minimal_vmap, minimal_edgs = candidate_key(net, v, minimal_basis, _edgs)
     for (v, basis) in candidates
-        ret = candidate_key(net, v, basis, minimal_nonoffsetedges)
+        ret = candidate_key(net, v, basis, minimal_edgs)
         isnothing(ret) && continue
-        newbasis, vmap, graph, nonoffsetedges = ret
-        @assert nonoffsetedges <= minimal_nonoffsetedges
-        @assert issorted(collect(edges(minimal_graph)))
-        if edges(graph) < edges(minimal_graph)
-            minimal_graph = graph
+        vmap, edgs = ret
+        @assert edgs < minimal_edgs
+        if edgs < minimal_edgs
+            minimal_edgs = edgs
             minimal_vmap = vmap
-            minimal_basis = newbasis
-            # minimal_cats = cats
-            minimal_nonoffsetedges = nonoffsetedges
+            minimal_basis = basis
         end
     end
-    # println()
-    return minimal_basis, minimal_vmap, minimal_graph
+
+    newbasis, coords = findbasis(minimal_edgs)
+    # @assert abs(det(newbasis)) == 1 # FIXME this sometimes breaks, see "3 1 2 2 0 0 1 2 0 2 0 1 2 0 0 2 1 2 0 0 0". Is it a valid assert?
+
+    return minimal_basis * newbasis, minimal_vmap, PeriodicGraph3D(n, coords)
 end
 
 function find_new_representation(pos, basis, vmap, graph)
@@ -1003,7 +975,7 @@ end
 function systre(net::CrystalNet)
     basis, vmap, graph = systre_key(net)
 
-    return CrystalNet(graph) # TODO remove this temprorary bandaid
+    return CrystalNet(graph) # TODO remove this temporary bandaid
     # FIXME CrystalNet(graph).graph != graph so this is invalid !
 
     positions = find_new_representation(net.pos, basis, vmap, graph)

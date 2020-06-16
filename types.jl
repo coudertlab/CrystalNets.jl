@@ -397,17 +397,15 @@ end
 
 function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, ids::AbstractVector{Int}, graph::PeriodicGraph3D)
     eq = equilibrium(graph)
-    minnum = minimum(numerator.(eq))
-    maxnum = maximum(numerator.(eq))
-    minden = minimum(denominator.(eq))
-    maxden = maximum(denominator.(eq))
+    m = min(minimum(numerator.(eq)), minimum(denominator.(eq)))
+    M = max(maximum(numerator.(eq)), maximum(denominator.(eq)))
     for T in (Int8, Int16, Int32, Int64)
-        if ((typemin(T) < min(minnum, minden)) & (max(maxnum, maxden) < typemax(T)))
+        if ((typemin(T) < m) & (M < typemax(T)))
             return CrystalNet{Rational{T}}(cell, types, ids, graph, Rational{T}.(eq))
         end
     end
     return CrystalNet{Rational{Int128}}(cell, types, ids, graph, eq)
-    # Type-unstable function, but yields better performance than always falling back on Int128
+    # Type-unstable function, but yields better performance than always falling back to Int128
 end
 function CrystalNet{T}(cell::Cell, types::AbstractVector{Symbol}, ids::AbstractVector{Int}, graph::PeriodicGraph3D) where T
     CrystalNet{T}(cell, types, ids, graph, T.(equilibrium(graph)))

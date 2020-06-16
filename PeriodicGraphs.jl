@@ -4,7 +4,7 @@ using LinearAlgebra
 using StaticArrays
 using LightGraphs
 export PeriodicVertex, PeriodicEdge, PeriodicGraph, LoopException,
-       PeriodicVertex3D, PeriodicEdge3D, PeriodicGraph3D, vertex_sequence,
+       PeriodicVertex3D, PeriodicEdge3D, PeriodicGraph3D, coordination_sequence,
        ofs, cellgraph, periodiccellgraph, equilibrium, offset_representatives!,
        swap_axes!, find_edges
 import Base: (==), isless, convert, show, showerror, eltype, iterate, zero,
@@ -679,7 +679,7 @@ the unit cell (0,0,0) is in a unit cell (i,j,k) such that
 max∘abs.((i,k,k)) ≤ 1 + fld((n - 1), width)
 """
 function graph_width!(g::PeriodicGraph{N}) where N
-    distances = LightGraphs.Parallel.floyd_warshall_shortest_paths(cellgraph(g)).dists
+    distances = floyd_warshall_shortest_paths(cellgraph(g)).dists
     extremalpoints = NTuple{N,NTuple{2,Vector{Tuple{Int,Int}}}}((([],[]),([],[]),([],[])))
     # a, x ∈ extremalpoints[i][j] where i ∈ ⟦1,N⟧ and j ∈ ⟦1,2⟧ means that
     # vertex x has a neighbor whose offset is a*(-1)^(j-1) along dimension i
@@ -773,7 +773,7 @@ function LightGraphs._neighborhood(g::PeriodicGraph{N}, v::Integer, d::Real, dis
     return Q
 end
 
-function vertex_sequence(g::PeriodicGraph, v::Integer, dmax)
+function coordination_sequence(g::PeriodicGraph, v::Integer, dmax)
     Q = LightGraphs._neighborhood(g, v, dmax, weights(g), outneighbors)
     popfirst!(Q)
     ret = zeros(Int, dmax)

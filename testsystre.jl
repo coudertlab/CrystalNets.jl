@@ -12,7 +12,7 @@ function stress_test(g::Union{AbstractString,PeriodicGraph3D}, num=0,
         clamp(round(Int, begin
             _counter = 0
             timebefore = time_ns()
-            while time_ns() - timebefore < 1.5e9
+            while time_ns() - timebefore < 0.5e9
                 _ref = string(systre(refgraph))
                 @assert _ref == ref
                 _counter += 1
