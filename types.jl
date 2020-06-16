@@ -267,6 +267,33 @@ function set_unique_bond_type!(cif::CIF, bond_length, bonded_atoms::Tuple{Symbol
     nothing
 end
 
+function edges_from_bonds(bonds, mat, pos)
+    @assert size(pos)[1] == 3
+    n = size(pos)[2]
+    edges = PeriodicEdge3D[]
+    ref_dst = norm(mat*[1, 1, 1])
+    for i in 1:n, k in (i+1):n
+        bonds[k,i] || continue
+        offset::Vector{SVector{3, Int}} = []
+        old_dst = ref_dst
+        for ofsx in -1:1, ofsy in -1:1, ofsz in -1:1
+            dst = norm(mat*(pos[:,i] .- (pos[:,k] .+ [ofsx, ofsy, ofsz])))
+            if abs2(dst - old_dst) < 1e-4
+                push!(offset, (ofsx, ofsy, ofsz))
+                old_dst = (dst + old_dst)/2
+            elseif dst < old_dst
+                offset = [(ofsx, ofsy, ofsz)]
+                old_dst = dst
+            end
+        end
+        for ofs in offset
+            push!(edges, (i, k, ofs))
+        end
+    end
+    return edges
+end
+
+
 struct Crystal
     cifinfo::Dict{String, Union{String, Vector{String}}}
     cell::Cell
@@ -299,38 +326,19 @@ function Crystal(cif::CIF)
     bondedatoms::Vector{Int} = [i for i in 1:length(c2.ids) if count(c2.bonds[:,i]) > 1]
     c = keep_atoms(c2, bondedatoms) # Only keep those that matter for the topology
     n = length(c.ids)
-    edges = PeriodicEdge3D[]
-    for i in 1:n, k in findall(@view c.bonds[:,i])
-        k < i && continue
-        offset::Vector{SVector{3, Int}} = []
-        old_dst = norm(c.cell.mat*[1, 1, 1])
-        for ofsx in -1:1, ofsy in -1:1, ofsz in -1:1
-            # dst = norm(c.cell.mat*(c.pos[:,i] .- (c.pos[:,k] + [ofsx; ofsy; ofsz])))
-            dst = norm(c.cell.mat*(c.pos[:,i] .- (c.pos[:,k] .+ [ofsx; ofsy; ofsz])))
-            if abs2(dst - old_dst) < 1e-4
-                push!(offset, (ofsx, ofsy, ofsz))
-                old_dst = (dst + old_dst)/2
-            elseif dst < old_dst
-                offset = [(ofsx, ofsy, ofsz)]
-                old_dst = dst
-            end
-        end
-        for ofs in offset
-            push!(edges, (i, k, ofs))
-        end
-    end
+    edges = edges_from_bonds(c.bonds, c.cell.mat, c.pos)
     @assert !isempty(edges)
     Crystal(c.cifinfo, c.cell, c.ids, c.types, c.pos, PeriodicGraph3D(n, edges))
 end
 
 
-function equilibrium(g::PeriodicGraph3D)
+function equilibrium(g::PeriodicGraph{N}) where N
     n = nv(g)
-    iszero(n) && return Matrix{Rational{Int}}(undef, 3, 0)
-    Y = Array{Rational{BigInt}}(undef, n, 3)
+    iszero(n) && return Matrix{Rational{Int}}(undef, N, 0)
+    Y = Array{Rational{BigInt}}(undef, n, N)
     A = spzeros(Int, n, n)
     neigh = Array{Int}(undef, n)
-    offset = SizedVector{3,Int}(undef)
+    offset = SizedVector{N,Int}(undef)
     for i in 1:n
         neigh .= 0
         offset .= 0
@@ -352,7 +360,7 @@ function equilibrium(g::PeriodicGraph3D)
                                 "Cannot equilibrate a disconnected graph")
     end
     Y = linsolve!(B, Y[2:end,:])
-    ret = hcat(zeros(Rational{Int128}, 3), Rational{Int128}.(Y)')
+    ret = hcat(zeros(Rational{Int128}, N), Rational{Int128}.(Y)')
     # Rational{Int64} is not enough for tep for instance.
     return ret
 end
@@ -420,6 +428,17 @@ function CrystalNet(g::Union{PeriodicGraph3D,AbstractString,AbstractVector{Perio
     return CrystalNet(cell, types, graph)
 end
 
+
+function CrystalNet(cif::CIF)
+    @assert isempty(cif.cell.equivalents) # FIXME we only handle P1 representations
+    n = length(cif.types)
+    @assert size(cif.pos)[1] == 3
+    @assert size(cif.pos)[2] == n
+
+    edges = edges_from_bonds(cif.bonds, cif.cell.mat, cif.pos)
+    pos = SVector{3,Rational{Int}}[rationalize.(Int,x) for x in eachcol(cif.pos)]
+    return CrystalNet(cif.cell, cif.types, pos, PeriodicGraph3D(edges))
+end
 
 include("symmetries.jl")
 

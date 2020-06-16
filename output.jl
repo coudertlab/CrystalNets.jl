@@ -17,12 +17,14 @@ function export_dataline(f, x)
     println(f, inbetween*x)
 end
 
-function export_vtf(file, c::CrystalNet, repeatedges=1)
+function export_vtf(file, c::CrystalNet, repeatedges=1, colorname=false)
     mkpath(splitdir(file)[1])
     n = length(c.types)
     @assert length(c.pos) == n
     invcorres = [PeriodicVertex3D(i) for i in 1:n]
     corres = Dict{PeriodicVertex3D,Int}([invcorres[i]=>i for i in 1:n])
+    encounteredtypes = Dict{Symbol,String}()
+    numencounteredtypes = 0
     open(file, write=true) do f
         println(f, """
         ###############################
@@ -32,8 +34,11 @@ function export_vtf(file, c::CrystalNet, repeatedges=1)
 
         for i in 1:n
             ty = c.types[i]
-            println(f, "atom $(i-1) name $i type ",
-                    ty == Symbol("") ? string(i) : string(ty), " resid $(i-1)")
+            sty = ty === Symbol("") ? string(i) : string(ty)
+            name = colorname ? get!(encounteredtypes, ty) do
+                string(numencounteredtypes+=1)
+            end : string(i)
+            println(f, "atom $(i-1) type $sty name $name resid $(i-1)")
         end
         j = n + 1
         for _ in 1:repeatedges
@@ -53,8 +58,9 @@ function export_vtf(file, c::CrystalNet, repeatedges=1)
             v = invcorres[i].v
             ofs = invcorres[i].ofs
             ty = c.types[v]
-            println(f, "atom $(i-1) name $v type ",
-                    ty == Symbol("") ? string(i) : string(ty), " resid $(i-1)")
+            sty = ty === Symbol("") ? string(i) : string(ty)
+            name = colorname ? encounteredtypes[ty] : string(v)
+            println(f, "atom $(i-1) type $sty name $name resid $v")
         end
         println(f)
 
@@ -100,6 +106,10 @@ function export_vtf(file, c::CrystalNet, repeatedges=1)
             println(f, join(round.(Float64.(coord); digits=15), ' '))
         end
     end
+end
+
+function export_vtf(file, cif::CIF, repeatedges=1)
+    export_vtf(file, CrystalNet(cif), repeatedges, true)
 end
 
 function export_cif(file, c::Union{Crystal, CIF})

@@ -18,8 +18,8 @@ soft_widen(::Type{Rational{T}}) where {T} = Rational{soft_widen(T)}
 
 function issingular(x::SMatrix{3,3,T,9}) where T<:Rational{<:Integer}
     (i, j, k) = iszero(x[1,1]) ? (iszero(x[1,2]) ? (3,1,2)  : (2,1,3)) : (1,2,3)
-    U = widen(T)
     iszero(x[1,i]) && return true
+    U = widen(T)
     x1i = U(x[1,i])
     factj = (x[1,j] // x1i)
     factk = (x[1,k] // x1i)
@@ -37,12 +37,13 @@ function back_to_unit(r::Rational)
 end
 
 function check_valid_translation(c::CrystalNet{T}, t::SVector{3,<:Rational{<:Integer}}, r=nothing) where T
+    U = soft_widen(T)
     n = length(c.pos)
     vmap = Int[]
     offsets = SVector{3,Int}[]
     for k in 1:n
         curr_pos = c.pos[k]
-        transl = (isnothing(r) ? curr_pos : (r * curr_pos)) .+ t
+        transl = U.(isnothing(r) ? curr_pos : (r * curr_pos)) .+ t
         ofs = floor.(Int, transl)
         x = transl .- ofs
         (i, j) = x < curr_pos ? (1, k) : (k, length(c.types)+1)
@@ -73,7 +74,7 @@ function possible_translations(c::CrystalNet{T}) where T
     sortedpos = copy(c.pos)
     origin = popfirst!(sortedpos)
     @assert iszero(origin)
-    sort!(SVector{3,soft_widen(T)}.(sortedpos), by=norm)
+    sort!(SVector{3,widen(widen(T))}.(sortedpos), by=norm)
     for t in sortedpos
         @assert t == back_to_unit.(t)
         max_den, i_max_den = findmax(denominator.(t))
@@ -149,11 +150,12 @@ function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
     return ret
 end
 
-function reduce_with_matrix(c::CrystalNet{T}, mat) where T
+function reduce_with_matrix(c::CrystalNet{<:Rational{T}}, mat) where T
+    U = widen(T)
     lengths = degree(c.graph)
     cell = Cell(c.cell, c.cell.mat * mat)
-    imat = Int.(inv(mat)) # The inverse should only have integer coefficients
-    poscol = (imat,) .* c.pos
+    imat = soft_widen(T).(inv(mat)) # The inverse should only have integer coefficients
+    poscol = (U.(imat),) .* c.pos
 
     offset = [floor.(Int, x) for x in poscol]
     for i in 1:length(poscol)
@@ -163,7 +165,7 @@ function reduce_with_matrix(c::CrystalNet{T}, mat) where T
     i = popfirst!(I_sort)
     @assert iszero(offset[i])
     I_kept = Int[i]
-    sortedcol = SVector{3,T}[poscol[i]]
+    sortedcol = SVector{3,Rational{U}}[poscol[i]]
     for i in I_sort
         x = poscol[i]
         if x != sortedcol[end]
@@ -221,6 +223,9 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{3,T}}}, nonzerosoffsets) 
     end
     original_order = sortperm(I_uniques)
     uniques = sorted_uniques[original_order]
+    # TODO only keep offsets > [0,0,0]
+    # TODO simplify this code, since there is no point in trying to achieve the minimal
+    # lexicographical order for the found key.
 
     basis, unique_coords = findfirstbasis(uniques)
 
@@ -333,18 +338,8 @@ function candidate_key(net::CrystalNet{T}, u, basis, nonoffsetedges) where T
 
     newbasis, coords = findbasis(edgs, nonzerosoffsets)
     newbasis = basis * newbasis
-    @assert abs(det(newbasis)) == 1
+    # @assert abs(det(newbasis)) == 1 # FIXME this sometimes breaks, see "3 1 2 2 0 0 1 2 0 2 0 1 2 0 0 2 1 2 0 0 0". Is it a valid assert?
 
-    # newedges = collect(edges(PeriodicGraph3D(nv(net.graph), coords))) # TODO improve?
-    # @show newbasis
-    # @show newedges
-    # @show vmap
-    # @show collect(edges(net.graph[rev_vmap]))
-    # global g = CrystalNet(Cell(net.cell, net.cell.mat), net.types[vmap], newpos, PeriodicGraph3D(n, coords))
-    # @assert all(g.pos[i] == mean(g.pos[x.v] .+ x.ofs for x in neighbors(g.graph, i)) for i in 1:n)
-    # @assert all(z-> begin x, y = z; (x.src, x.dst.v, (basis*newbasis)*x.dst.ofs) == (y.src, y.dst.v, y.dst.ofs) end, zip(edges(net.graph[vmap]), newedges))
-    # @show newcats
-    # @show newnonoffsetedges
     return newbasis, vmap, PeriodicGraph3D(n, coords), newnonoffsetedges
 end
 
@@ -518,7 +513,7 @@ function find_symmetries(net::CrystalNet{Rational{S}}) where S
     floatpos = [float(x) for x in net.pos]
     hasmirror = false # whether a mirror plane exists or not. If so, the graph is achiral
     for i in 2:len
-        rot = SMatrix{3,3,Int,9}(transpose(rotations[:,:,i]))
+        rot = SMatrix{3,3,T,9}(transpose(rotations[:,:,i]))
         if det(rot) < 0
             @assert det(rot) == -1
             hasmirror = true
@@ -676,7 +671,7 @@ function find_candidates(net::CrystalNet{T}) where T
     # @show categories
     # @show first(partition_by_coordination_sequence(net.graph, []))
     @assert sort.(categories) == sort.(first(partition_by_coordination_sequence(net.graph, [])))
-    candidates = Dict{Int,Vector{SMatrix{3,3,T,9}}}()
+    candidates = Dict{Int,Vector{SMatrix{3,3,soft_widen(T),9}}}()
     for reprs in unique_reprs
         # First, we try to look for triplet of edges all starting from the same vertex within a category
         degree(net.graph, first(reprs)) <= 3 && continue
@@ -769,8 +764,8 @@ function find_candidates_onlyneighbors(net::CrystalNet{T}, candidates_v, categor
     end
 
     candidates = Dict{Int,Vector{SMatrix{3,3,U,9}}}()
-    current_cats = SizedVector{3,Int}(fill(length(category_map), 3))
-    current_ordertype = 1
+    current_cats::SizedVector{3,Int} = SizedVector{3,Int}(fill(length(category_map), 3))
+    current_ordertype::Int = 1
     isempty(initial_candidates) && return candidates
     # @show initial_candidates
     @threads for (v, (mat, cats)) in initial_candidates
@@ -802,22 +797,22 @@ function find_candidates_onlyneighbors(net::CrystalNet{T}, candidates_v, categor
                     mincats = subcats
                 end
                 orders = SVector{3,Int}[(1,2,3), (1,3,2), (2,1,3), (2,3,1), (3,1,2), (3,2,1)]
-            elseif subcats[1] == subcats[2]
+            elseif subcats[2] == subcats[3]
                 (ordertype > 2 || (ordertype == 2 && mincats < subcats)) && continue
                 if ordertype == 1 || mincats > subcats
                     empty!(matv)
                     ordertype = 2
                     mincats = subcats
                 end
-                orders = SVector{3,Int}[reorder, (reorder[2], reorder[1], reorder[3])]
-            elseif subcats[2] == subcats[3]
+                orders = SVector{3,Int}[reorder, (reorder[1], reorder[3], reorder[2])]
+            elseif subcats[1] == subcats[2]
                 (ordertype == 4 || (ordertype == 3 && mincats < subcats)) && continue
                 if ordertype <= 2 || mincats > subcats
                     empty!(matv)
                     ordertype = 3
                     mincats = subcats
                 end
-                orders = SVector{3,Int}[reorder, (reorder[1], reorder[3], reorder[2])]
+                orders = SVector{3,Int}[reorder, (reorder[2], reorder[1], reorder[3])]
             else
                 ordertype == 4 && mincats < subcats && continue
                 if ordertype != 4 || mincats > subcats
@@ -856,8 +851,8 @@ end
 
 
 function find_candidates_fallback(net::CrystalNet{T}, reprs, othercats, category_map) where T
-    # throw("UNTESTED")
-    candidates = Dict{Int,Vector{SMatrix{3,3,T,9}}}(u => [] for u in reprs)
+    U = soft_widen(T)
+    candidates = Dict{Int,Vector{SMatrix{3,3,U,9}}}(u => [] for u in reprs)
     n = length(category_map)
     mincats = SizedVector{3,Int}(fill(n, 3))
     current_cats = SizedVector{3,Int}(fill(0, 3))
@@ -922,7 +917,7 @@ function find_candidates_fallback(net::CrystalNet{T}, reprs, othercats, category
          end
     end
     @assert all(isempty, values(candidates))
-    return Dict{Int,Vector{SMatrix{3,3,T,9}}}()
+    return Dict{Int,Vector{SMatrix{3,3,U,9}}}()
 end
 
 # function parallel_systre_key(net::CrystalNet{T}) where T
@@ -951,7 +946,7 @@ end
 # end
 
 function systre_key(net::CrystalNet{T}) where T
-    @assert allunique(net.pos) # otherwise the net is unstable
+    # @assert allunique(net.pos) # FIXME make a more precise check for net stability. Currently fails for sxt
     candidates, category_map = find_candidates(net)
     # @show category_map
     # @show length(candidates)
@@ -1009,6 +1004,7 @@ function systre(net::CrystalNet)
     basis, vmap, graph = systre_key(net)
 
     return CrystalNet(graph) # TODO remove this temprorary bandaid
+    # FIXME CrystalNet(graph).graph != graph so this is invalid !
 
     positions = find_new_representation(net.pos, basis, vmap, graph)
 

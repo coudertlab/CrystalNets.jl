@@ -76,7 +76,7 @@ end
 struct LoopException <: Exception
     src::Int
 end
-showerror(io::IO, e::LoopException) = println("LoopException: a loop from vertex $(e.src) to itself in the same unit cell is a forbidden edges. Maybe the offset is wrong?")
+showerror(io::IO, e::LoopException) = print(io, "LoopException: a loop from vertex $(e.src) to itself in the same unit cell is a forbidden edges. Maybe the offset is wrong?")
 @noinline __throw_loopexception(src) = throw(LoopException(src))
 
 struct unsafe_edge{N} end
