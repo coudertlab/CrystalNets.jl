@@ -1,0 +1,51 @@
+data_global
+_chemical_name_mineral 'Moganite'
+loop_
+_publ_author_name
+'Heaney P J'
+'Post J E'
+_journal_name_full 'American Mineralogist'
+_journal_volume 86 
+_journal_year 2001
+_journal_page_first 1358
+_journal_page_last 1366
+_publ_section_title
+;
+ Evidence for an I2/a to Imab phase transition in the silica
+ polymorph moganite at ~570 K
+ Sample: T = 298 K, neutron
+;
+_database_code_amcsd 0002737
+_chemical_formula_sum 'Si O2'
+_chemical_formula_sum ''
+_cell_length_a 8.7371
+_cell_length_b 4.8692
+_cell_length_c 10.7217
+_cell_angle_alpha 90
+_cell_angle_beta 90.193
+_cell_angle_gamma 90
+_cell_volume 456.127
+_exptl_crystal_density_diffrn      2.625
+_symmetry_space_group_name_H-M 'I 1 2/a 1'
+loop_
+_space_group_symop_operation_xyz
+  'x,y,z'
+  '1/2+x,1/2+y,1/2+z'
+  '1/2-x,y,-z'
+  '-x,1/2+y,1/2-z'
+  '1/2+x,-y,z'
+  '+x,1/2-y,1/2+z'
+  '-x,-y,-z'
+  '1/2-x,1/2-y,1/2-z'
+loop_
+_atom_site_label
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_U_iso_or_equiv
+Si1   0.25000   0.97260   0.00000   0.00970
+Si2   0.01030   0.24860   0.16820   0.01100
+O1   0.97810   0.06440   0.28780   0.01480
+O2   0.16780   0.17080   0.10020   0.01720
+O3   0.87030   0.22960   0.06750   0.01890
+

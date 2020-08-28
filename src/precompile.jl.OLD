@@ -1,0 +1,16 @@
+## Precompilation directives
+
+precompile(topological_genome, (CrystalNet{Rational{Int8}},))
+precompile(topological_genome, (CrystalNet{Rational{Int16}},))
+precompile(topological_genome, (CrystalNet{Rational{Int32}},))
+precompile(topological_genome, (CrystalNet{Rational{Int64}},))
+precompile(topological_genome, (CrystalNet{Rational{Int128}},))
+
+precompile(parse_arc, (String,))
+precompile(reckognize_topology, (String,))
+precompile(parse_chemfile, (String, Bool))
+precompile(parse_commandline, ())
+precompile(export_clusters, (Crystal{Clusters}, String))
+precompile(export_clusters, (Crystal{Clusters},))
+
+precompile(julia_main, ())
