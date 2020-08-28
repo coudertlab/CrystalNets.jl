@@ -15,7 +15,7 @@ Install julia and add this module either from a console with:
 julia -e 'import Pkg; Pkg.add(url="https://github.com/coudertlab/CrystalNets.jl")'
 ```
 or from the julia REPL by typing
-```julia
+```
 ] add https://github.com/coudertlab/CrystalNets.jl
 ```
 
@@ -43,17 +43,46 @@ julia> string(topological_genome(net))
 
 This string can be fed to the `reckognize_topology` function in order to determine the RCSR name of the topology:
 ```julia
-julia> reckognize_topology(ans)
+julia> reckognize_topology("3 1 2 0 0 0 1 2 0 0 1 1 2 0 1 0 1 2 1 0 0")
 "dia"
 ```
+
+All these steps can be summarised by executing
+```julia
+julia> reckognize_topology(topological_genome(CrystalNet(parse_chemfile(FILE))))
+```
+where `FILE` is the path to the crystal in a reckognizable chemical file format.
 
 ## Use as an executable
 
 ### Without additional installation
 
+Once installed following the [Installation](#installation) section, the following script will yield the path to the local installation of the module:
+```julia
+julia> using CrystalNets
+
+julia> path = pathof(CrystalNets)
+"/the/path/to/CrystalNets/src/CrystalNets.jl"
+
+julia> normpath(path, "..", "..")
+"/the/path/to/CrystalNets/"
+
+```
+
+Once you have this path, execute the CrystalNets.jl file using the CrystalNet directory as project from a shell with julia. For instance:
+```
+$ julia --project=/the/path/to/CrystalNets/ /the/path/to/CrystalNets/src/CrystalNets.jl
+Missing a CRYSTAL_FILE.
+See --help for usage.
+
+$ julia --project=/the/path/to/CrystalNets/ /the/path/to/CrystalNets/src/CrystalNets.jl -c mof /path/to/HKUST-1.cif
+Clustering of vertices represented represented at /path/to/clusters.pdb
+tbo
+```
+
 ### Full installation
 
-To create a proper executable, follow the previous [Installation](#installation) section and then run the following julia script after changing the `INSTALLATION_PATH` variable to the location where the CrystalNets executable will be installed. Note that this requires the [PackageCompiler](https://github.com/JuliaLang/PackageCompiler.jl/) module, which can be installed by replacing "CrystalNets" with "PackageCompiler" in the [Installation](#installation) section.
+To create a proper executable (which will execute faster than the previous option), follow the previous [Installation](#installation) section and then run the following julia script after changing the `INSTALLATION_PATH` variable to the location where the CrystalNets executable will be installed. Note that this requires the [PackageCompiler](https://github.com/JuliaLang/PackageCompiler.jl/) module, which can be installed by replacing "CrystalNets" with "PackageCompiler" in the [Installation](#installation) section.
 ```julia
 INSTALLATION_PATH = "/fill/with/installation/path"
 
