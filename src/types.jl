@@ -167,7 +167,7 @@ function Cell(cell::Cell, mat::StaticArray{Tuple{3,3},BigFloat})
 end
 function Base.show(io::IO, cell::Cell)
     a, b, c, α, β, γ = Float64.(cell_parameters(cell))
-    print(io, "Cell(\"$(cell.spacegroup)\", ($a, $b, $c), ($α, $β, $γ))")
+    print(io, Cell, "(\"$(cell.spacegroup)\", ($a, $b, $c), ($α, $β, $γ))")
 end
 
 
@@ -599,7 +599,7 @@ function CrystalNet(g::Union{PeriodicGraph3D,AbstractString,AbstractVector{Perio
     return CrystalNet(cell, types, graph)
 end
 
-# 
+
 # function CrystalNet(cif::CIF)
 #     @assert isempty(cif.cell.equivalents) # FIXME we only handle P1 representations
 #     n = length(cif.ids)

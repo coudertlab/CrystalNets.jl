@@ -48,7 +48,7 @@ function possible_translations(c::CrystalNet{T}) where T
     sortedpos = copy(c.pos)
     origin = popfirst!(sortedpos)
     @assert iszero(origin)
-    sort!(SVector{3,widen(widen(T))}.(sortedpos), by=norm)
+    sort!(SVector{3,widen(widen(soft_widen(T)))}.(sortedpos), by=norm)
     for t in sortedpos
         @assert t == back_to_unit.(t)
         max_den, i_max_den = findmax(denominator.(t))
@@ -125,7 +125,7 @@ function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
 end
 
 function reduce_with_matrix(c::CrystalNet{<:Rational{T}}, mat) where T
-    U = widen(T)
+    U = soft_widen(widen(T))
     lengths = degree(c.graph)
     cell = Cell(c.cell, c.cell.mat * mat)
     imat = soft_widen(T).(inv(mat)) # The inverse should only have integer coefficients

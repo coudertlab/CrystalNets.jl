@@ -68,9 +68,9 @@ function rational_lu!(B::SparseMatrixCSC{BigRational}, col_offset, check::Bool=t
                 check && checknonsingular(k-1, Val(false)) # TODO update with Pivot
                 return LU{Tf,SparseMatrixCSC{Tf,Int}}(B, collect(1:minmn), convert(BlasInt, k-1))
             end
-            BigRationals.inv!(Bkkinv, piv)
+            BigRationals.MPQ.inv!(Bkkinv, piv)
             @simd for i in ipiv+1:getcolptr(B)[k+1]-1
-                BigRationals.mul!(nonzeros(B)[i], Bkkinv)
+                BigRationals.MPQ.mul!(nonzeros(B)[i], Bkkinv)
             end
             for j in k+1:n
                 r1 = getcolptr(B)[j]
@@ -87,8 +87,8 @@ function rational_lu!(B::SparseMatrixCSC{BigRational}, col_offset, check::Bool=t
                     end
                     # Base.GMP.MPZ.mul!(tmp, Bik, Bkj)
                     # Base.GMP.MPZ.sub!(nonzeros(B)[l+r], tmp)
-                    BigRationals.mul!(tmp, Bik, Bkj)
-                    BigRationals.sub!(nonzeros(B)[l+r], tmp)
+                    BigRationals.MPQ.mul!(tmp, Bik, Bkj)
+                    BigRationals.MPQ.sub!(nonzeros(B)[l+r], tmp)
                 end
             end
         end
@@ -219,7 +219,7 @@ end
 function rational_solve(::Val{N}, A, Y) where N
     B = rational_lu(A, false)
     if !issuccess(B)
-        throw("Singular exception while equilibrating. Is the graph connected?")
+        error("Singular exception while equilibrating. Is the graph connected?")
     end
     Z = linsolve!(B, Rational{BigInt}.(Y))
     return hcat(zeros(Rational{Int128}, N), Rational{Int128}.(Z)')
@@ -235,7 +235,11 @@ function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
     for _ in 1:N
         popfirst!(λs)
     end
-    δ = prod(BigFloat, λs; init=one(BigFloat))
+    δ = @static if VERSION > v"1.5+"
+        prod(BigFloat, λs; init=one(BigFloat))
+    else
+        prod(BigFloat, λs)::BigFloat
+    end
     # @show δ
     # @show p
     m = ceil(Int, 2*log(δ / (MathConstants.φ - 1))/log(p))
@@ -326,7 +330,7 @@ function dixon_solve(::Val{N}, A, Y) where N
         if issuccess(B)
             Z = Rational{Int128}.(dixon_p(Val(N), A, B, Y)')
         else
-            B = rational_lu(A, false, Modulo{2147483629,Int32})
+            B = rational_lu(A, false, Modulo{2147483587,Int32})
             if issuccess(B)
                 Z = Rational{Int128}.(dixon_p(Val(N), A, B, Y)')
             else

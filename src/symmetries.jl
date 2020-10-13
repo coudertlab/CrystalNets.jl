@@ -148,7 +148,7 @@ function find_symmetries(net::CrystalNet{Rational{S}}) where S
     positions = Matrix{Cdouble}(undef, 3, n)
     den = 1
     for i in 1:n
-        den = lcm(den, lcm((T∘denominator).(uniquepos[i])))
+        den = lcm(den, lcm((soft_widen(T)∘denominator).(uniquepos[i])))
         positions[:,i] .= uniquepos[i]
     end
 
