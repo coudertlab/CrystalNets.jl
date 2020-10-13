@@ -57,6 +57,10 @@ function parse_commandline()
             help = "Show this help message and exit."
             action = :store_true
 
+        "--no-warn"
+            help = "Discard all warnings and information messages."
+            action = :store_true
+
         "--archive", "-a"
             help = """Specify the path to an archive used to reckognize topologies.
             If unspecified while using Form A, defaults to the RCSR Systre archive
@@ -151,7 +155,7 @@ function parse_to_str_or_nothing(@nospecialize(x))::Union{Nothing,String,Int}
 end
 
 
-function julia_main()::Cint
+Base.@ccallable function julia_main()::Cint
     try
 
         parsed_args = parse_commandline()

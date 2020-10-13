@@ -26,6 +26,12 @@ import PeriodicGraphs: hash_position
 using StaticArrays
 using LightGraphs
 
+NOWARN = false
+
+function __init__()
+    global NOWARN = "--no-warn" ∈ ARGS
+end
+
 include("utils.jl")
 include("types.jl") # Main internal type definitions used to represent topologies
 include("input.jl") # Crystal file parsing and conversion to an internal type

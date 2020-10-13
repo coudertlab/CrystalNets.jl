@@ -231,7 +231,10 @@ end
 
 
 function set_unique_bond_type!(frame::Frame, types, bond_length, bonded_atoms::Tuple{Symbol, Symbol}, onlykeep, tol)
-    @info "To avoid guessing bonds, use a file format that contains the bonds."
+    global NOWARN
+    if !(NOWARN::Bool)
+        @info "To avoid guessing bonds, use a file format that contains the bonds."
+    end
     n = Int(size(frame))
     pos = Chemfiles.positions(frame)
     mat = Chemfiles.matrix(UnitCell(frame))'
@@ -252,6 +255,7 @@ function set_unique_bond_type!(frame::Frame, types, bond_length, bonded_atoms::T
 end
 
 function try_guess_bonds!(frame::Frame)
+    global NOWARN
     n = Int(size(frame))
     types = Vector{Symbol}(undef, n)
     for i in 1:n
@@ -259,14 +263,20 @@ function try_guess_bonds!(frame::Frame)
     end
     unique_types = unique!(sort(types))
     if unique_types == [:C] || unique_types == [:C, :H]
-        @warn "Guessing bonds. The structure seems to be made of only carbons (and possibly hydrogens): using an interatomic distance of 1.54±0.3 Å to assign edges between C atoms."
+        if !(NOWARN::Bool)
+            @warn "Guessing bonds. The structure seems to be made of only carbons (and possibly hydrogens): using an interatomic distance of 1.54±0.3 Å to assign edges between C atoms."
+        end
         set_unique_bond_type!(frame, types, 1.54, (:C, :C), (:C,), 0.3)
     elseif unique_types == [:O, :Si] || unique_types == [:Si]
-        @warn "Guessing bonds. The structure seems to be a zeolite: using an interatomic distance of 3.1±0.1 Å to assign edges between Si atoms."
-        set_unique_bond_type!(frame, types, 3.1, (:Si, :Si), (:Si,), 0.1)
+        if !(NOWARN::Bool)
+            @warn "Guessing bonds. The structure seems to be a zeolite: using an interatomic distance of 3.1±0.2 Å to assign edges between Si atoms."
+        end
+        set_unique_bond_type!(frame, types, 1.63, (:O, :Si), (:O, :Si), 0.1)
     else
-        @warn "Guessing bonds through Chemfiles. This may take a while for big structures and may well be inexact."
-        @info "To avoid guessing bonds, use a file format that contains the bonds."
+        if !(NOWARN::Bool)
+            @warn "Guessing bonds through Chemfiles. This may take a while for big structures and may well be inexact."
+            @info "To avoid guessing bonds, use a file format that contains the bonds."
+        end
         guess_bonds!(frame)
     end
 end
@@ -290,6 +300,7 @@ Such format can be .cif or any file format reckognised by Chemfiles.jl that
 contains all the necessary topological information.
 """
 function parse_chemfile(path, assert_use_existing_residues=false)
+    global NOWARN
     # Separate the cases unhandled by Chemfiles from the others
     path = expanduser(path)
     if lowercase(last(splitext(path))) == ".cif"
@@ -338,8 +349,10 @@ function parse_chemfile(path, assert_use_existing_residues=false)
                 To fix this, either assign a residue to each atom or provide another way to detect the vertices.
                 """))
             end
-            if atoms_in_residues > 0
-                @warn "Some but not all atoms have an associated residue, so we cannot rely on existing residues"
+            if !(NOWARN::Bool)
+                if atoms_in_residues > 0
+                    @warn "Some but not all atoms have an associated residue, so we cannot rely on existing residues"
+                end
             end
             attributions = Int[]
         else
@@ -354,7 +367,9 @@ function parse_chemfile(path, assert_use_existing_residues=false)
 
     cell = Cell(Cell(), SMatrix{3,3,BigFloat}(matrix(UnitCell(frame)))')
     if !all(isfinite, cell.mat) || iszero(det(cell.mat))
-        @warn "Suspicious unit cell of matrix $(Float64.(cell.mat)). Is the input really periodic? Using a cubic unit cell instead"
+        if !(NOWARN::Bool)
+            @warn "Suspicious unit cell of matrix $(Float64.(cell.mat)). Is the input really periodic? Using a cubic unit cell instead"
+        end
         cell = Cell()
     end
     adjacency = zeros(Bool, n, n)

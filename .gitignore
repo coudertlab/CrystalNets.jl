@@ -1,3 +1,2 @@
 Manifest.toml
-deps/build.log
-src/arc.serial
+*.OLD
