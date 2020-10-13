@@ -235,10 +235,10 @@ function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
     for _ in 1:N
         popfirst!(λs)
     end
-    δ = @static if VERSION > v"1.5+"
-        prod(BigFloat, λs; init=one(BigFloat))
-    else
+    δ = @static if VERSION < v"1.6-"
         (isempty(λs) ? BigFloat(1) : prod(BigFloat, λs))::BigFloat
+    else
+        prod(BigFloat, λs; init=one(BigFloat))
     end
     # @show δ
     # @show p
