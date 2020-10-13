@@ -8,6 +8,7 @@ precompile(Tuple{getfield(TextWrap, Symbol("#wrap##kw")), NamedTuple{(:break_lon
 using Random
 using Logging
 using Statistics
+using Libdl
 
 precompile(Tuple{typeof(Base.isassigned), Core.SimpleVector, Int64})
 precompile(Tuple{typeof(Random.shuffle!), Random.MersenneTwister, Array{Symbol, 1}})
@@ -20,7 +21,7 @@ precompile(Tuple{getfield(Core, Symbol("#Type##kw")), NamedTuple{(:libc, :compil
 precompile(Tuple{Type{Base.Pair{A, B} where B where A}, Pkg.BinaryPlatforms.FreeBSD, Base.Dict{String, Any}})
 precompile(Tuple{typeof(Base.setindex!), Base.Dict{Pkg.BinaryPlatforms.Platform, Base.Dict{String, Any}}, Base.Dict{String, Any}, Pkg.BinaryPlatforms.FreeBSD})
 precompile(Tuple{getfield(Pkg.Artifacts, Symbol("#ensure_artifact_installed##kw")), Any, typeof(Pkg.Artifacts.ensure_artifact_installed), String, Base.Dict{K, V} where V where K, String})
-precompile(Tuple{typeof(Base.Libc.Libdl.dlopen), String})
+precompile(Tuple{typeof(Libdl.dlopen), String})
 precompile(Tuple{typeof(Chemfiles._warning_callback_adaptator), Ptr{UInt8}})
 precompile(Tuple{typeof(Chemfiles.__init__)})
 precompile(Tuple{getfield(Base, Symbol("#@__DIR__")), LineNumberNode, Module})
