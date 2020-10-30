@@ -14,10 +14,14 @@ function export_dataline(f, x)
     println(f, inbetween*x)
 end
 
-function export_vtf(file, c::CrystalNet, repeatedges=1, colorname=false)
+function export_vtf(file, c::Union{Crystal{Nothing},CrystalNet}, repeatedges=1, colorname=false)
     mkpath(splitdir(file)[1])
     n = length(c.types)
-    @assert length(c.pos) == n
+    if c isa CrystalNet
+        @assert length(c.pos) == n
+    else
+        @assert size(c.pos)[2] == n
+    end
     invcorres = [PeriodicVertex3D(i) for i in 1:n]
     corres = Dict{PeriodicVertex3D,Int}([invcorres[i]=>i for i in 1:n])
     encounteredtypes = Dict{Symbol,String}()
@@ -77,7 +81,9 @@ function export_vtf(file, c::CrystalNet, repeatedges=1, colorname=false)
 
         println(f, "ordered")
         for x in invcorres
-            coord = c.cell.mat * (widen.(c.pos[x.v]) .+ x.ofs)
+            coord = c isa CrystalNet ?
+                c.cell.mat * (widen.(c.pos[x.v]) .+ x.ofs) :
+                c.pos[:,x.v] + c.cell.mat * x.ofs
             println(f, join(round.(Float64.(coord); digits=15), ' '))
         end
     end

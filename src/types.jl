@@ -2,6 +2,7 @@
 
 include("specialsolver.jl")
 
+import Base: ==
 using Serialization
 using Tokenize
 
@@ -14,6 +15,45 @@ struct EquivalentPosition
     mat::SMatrix{3,3,Rational{Int}, 9}
     ofs::SVector{3,Rational{Int}}
 end
+
+"""
+Find the reference identifiers for the three dimensions for the CIF group called
+symmetry_equiv_pos_as_xyz or space_group_symop_operation_xyz.
+Usually this is simply ("x", "y", "z").
+"""
+function find_refid(eqs)
+    isempty(eqs) && return ("x", "y", "z")
+    for eq in eqs # Normally it should be the first one but I'm not sure of the specs here
+        ts = collect(tokenize(eq))
+        any(Tokenize.Tokens.isoperator∘Tokenize.Tokens.kind, ts) && continue
+        refid = [""]
+        not_at_the_end = true
+        for t in ts
+            @assert not_at_the_end
+            k = Tokenize.Tokens.kind(t)
+            if k === Tokenize.Tokens.IDENTIFIER
+                @assert refid[end] == ""
+                refid[end] = Tokenize.Tokens.untokenize(t)
+            elseif k === Tokenize.Tokens.COMMA || k === Tokenize.Tokens.SEMICOLON
+                @assert refid[end] != ""
+                push!(refid, "")
+            elseif k === Tokenize.Tokens.ENDMARKER
+                not_at_the_end = false
+            else
+                error("Input string {$eq} is not a valid symmetry equivalent")
+            end
+        end
+        if not_at_the_end
+            error("Unknown end of line marker for symmetry equivalent {$eq}")
+        end
+        if length(refid) != 3 || refid[end] == ""
+            error("Input string {$eq} is not a valid symmetry equivalent")
+        end
+        return tuple(refid[1], refid[2], refid[3])
+    end
+    return ("x", "y", "z")
+end
+
 function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "y", "z"))
     const_dict = Dict{String, Int}(refid[1]=>1, refid[2]=>2, refid[3]=>3)
     mat = zeros(Rational{Int}, 3, 3)
@@ -80,13 +120,13 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                 elseif x.kind === Tokenize.Tokens.MINUS
                     curr_sign = false
                 elseif k === Tokenize.Tokens.COMMA || k === Tokenize.Tokens.SEMICOLON
-                    i > 2 && throw("Too many dimensions specified for symmetry equivalent {$s}")
-                    something_written || throw("{$s} is not a symmetry equivalent (no dependency expressed in position $i)")
+                    i > 2 && error("Too many dimensions specified for symmetry equivalent {$s}")
+                    something_written || error("{$s} is not a symmetry equivalent (no dependency expressed in position $i)")
                     something_written = false
                     i += 1
                 else
-                    k !== Tokenize.Tokens.ENDMARKER && throw("Unknown end of line marker for symmetry equivalent {$s}")
-                    i!= 3 && throw("Input string {$s} is not a valid symmetry equivalent")
+                    k !== Tokenize.Tokens.ENDMARKER && error("Unknown end of line marker for symmetry equivalent {$s}")
+                    i!= 3 && error("Input string {$s} is not a valid symmetry equivalent")
                 end
             end
         end
@@ -147,6 +187,11 @@ struct Cell
     function Cell(c::Cell, eqs::Vector{EquivalentPosition})
         return new(c.latticesystem, c.spacegroup, c.tablenumber, c.mat, eqs)
     end
+end
+
+function ==(c1::Cell, c2::Cell)
+    c1.latticesystem == c2.latticesystem && c1.spacegroup == c2.spacegroup &&
+    c1.tablenumber == c2.tablenumber && c1.mat == c2.mat && c1.equivalents == c2.equivalents
 end
 
 Cell() = Cell(Symbol(""), "P 1", 0, 10, 10, 10, 90, 90, 90, EquivalentPosition[])
@@ -210,6 +255,13 @@ function periodic_distance(u, v)
     return sqrt(dst)
 end
 
+"""
+    periodic_distance(u, v, mat)
+
+Distance between points u and v, given as triplets of fractional coordinates, in
+a repeating unit cell of matrix mat.
+The distance is the shortest between all equivalents of u and v.
+"""
 function periodic_distance(u, v, mat)
     dst = 0.0
     x = similar(u)
@@ -228,29 +280,122 @@ function periodic_distance(u, v, mat)
     return norm(mat*x)
 end
 
+
+"""
+    remove_partial_occupancy(::CIF)
+
+Only keep one atom per atom site.
+"""
+function remove_partial_occupancy(cif::CIF)
+    points::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
+    perm = sortperm(points)
+    n = length(perm)
+    last_triplet = points[perm[1]] .+ (1,1,1)
+    last_position = 0
+    toremove = Int[]
+    for i in 1:n
+        j = perm[i]
+        thispoint = points[j]
+        if norm(thispoint .- last_triplet) < 4e-4
+            push!(toremove, max(last_position, j)) # keep the first that appears
+        else
+            last_position = j
+            last_triplet = thispoint
+        end
+    end
+    if isempty(toremove) # Nothing to do, we simply alias the CIF to help the compiler (it may be useless)
+        return CIF(cif.cifinfo, cif.cell, cif.ids, cif.types, cif.pos, cif.bonds)
+    end
+    global NOWARN
+    if !(NOWARN::Bool)
+        @warn "This CIF file contains a site with multiple atoms. Only one atom will be kept per atom site."
+    end
+    sort!(toremove)
+    ids = deleteat!(copy(cif.ids), toremove)
+    tokeep = deleteat!(collect(1:n), toremove)
+    bonds = cif.bonds[tokeep, tokeep]
+    pos = cif.pos[:,tokeep]
+    @assert allunique(collect(eachcol(pos)))
+    return CIF(cif.cifinfo, cif.cell, ids, cif.types, pos, bonds)
+end
+
+"""
+    prune_collisions(::CIF)
+
+Remove all atoms that are suspiciously close to one another. This arises when all
+the possible positions of at atom are superposed in the CIF file, typically for
+a solvent which should be disregarded anyway.
+"""
+function prune_collisions(cif::CIF)
+    toremove = Int[]
+    points::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
+    n = length(points)
+    for i in 1:n, j in (i+1):n
+        if periodic_distance(points[i], points[j], cif.cell.mat) < 0.55
+            push!(toremove, i)
+            push!(toremove, j)
+        end
+    end
+    if isempty(toremove) # Nothing to do, we simply alias the CIF to help the compiler (it may be useless)
+        return CIF(cif.cifinfo, cif.cell, cif.ids, cif.types, cif.pos, cif.bonds)
+    end
+    global NOWARN
+    if !(NOWARN::Bool)
+        @warn "This CIF file contains multiple colliding atoms. All colliding atoms will be removed."
+    end
+    unique!(sort!(toremove))
+    ids = deleteat!(copy(cif.ids), toremove)
+    tokeep = deleteat!(collect(1:n), toremove)
+    bonds = cif.bonds[tokeep, tokeep]
+    pos = cif.pos[:,tokeep]
+    return CIF(cif.cifinfo, cif.cell, ids, cif.types, pos, bonds)
+end
+
+"""
+    expand_symmetry(::CIF)
+
+Applies all the symmetry operations listed in the CIF file to the atoms and the bonds.
+"""
 function expand_symmetry(cif::CIF)
-    @assert iszero(cif.bonds)
+    cif = remove_partial_occupancy(cif)
+    n = length(cif.ids)
+    oldbonds = [(i,j) for i in 1:n for j in i:n if cif.bonds[i,j]]
+    newbonds = Set{Tuple{Int,Int}}(oldbonds)
     newids = copy(cif.ids)
     newpos::Vector{Vector{Float64}} = collect(eachcol(cif.pos))
     ret = Vector{Vector{Int}}
-    #=@inbounds=# for equiv in cif.cell.equivalents, i in 1:length(cif.ids)
-        v = newpos[i]
-        p = Vector(equiv.mat*v + equiv.ofs)
-        @. p = p - floor(p)
-        already_present = false
-        for j in 1:length(newpos)
-            if periodic_distance(newpos[j], p) < 4e-4
-                already_present = true
-                break
+    #=@inbounds=# for equiv in cif.cell.equivalents
+        image = zeros(Int, n)
+        for i in 1:length(cif.ids)
+            v = newpos[i]
+            p = Vector(equiv.mat*v + equiv.ofs)
+            @. p = p - floor(p)
+            for j in 1:length(newpos)
+                if periodic_distance(newpos[j], p, cif.cell.mat) < 0.5
+                    image[i] = j
+                    break
+                end
+            end
+            if image[i] == 0
+                push!(newpos, p)
+                push!(newids, cif.ids[i])
+                image[i] = length(newpos)
             end
         end
-        if !already_present
-            push!(newpos, p)
-            push!(newids, cif.ids[i])
+        for (i,j) in oldbonds
+            push!(newbonds, minmax(image[i], image[j]))
         end
     end
-    return CIF(cif.cifinfo, deepcopy(cif.cell), newids, copy(cif.types), reduce(hcat, newpos),
-               zeros(Bool, length(newids), length(newids)))
+    m = length(newids)
+    bonds = zeros(Bool, m, m)
+    for (i,j) in newbonds
+        bonds[i,j] = true
+        bonds[j,i] = true
+    end
+
+    cif = CIF(cif.cifinfo, deepcopy(cif.cell), newids, copy(cif.types), reduce(hcat, newpos), bonds)
+
+    return prune_collisions(cif)
 end
 
 # function set_unique_bond_type!(cif::CIF, bond_length, bonded_atoms::Tuple{Symbol, Symbol}, onlykeep, tol)
@@ -290,12 +435,14 @@ function edges_from_bonds(bonds, mat, pos)
         offset::Vector{SVector{3, Int}} = []
         old_dst = ref_dst
         for ofsx in -1:1, ofsy in -1:1, ofsz in -1:1
-            dst = norm(mat*(pos[:,i] .- (pos[:,k] .+ [ofsx, ofsy, ofsz])))
-            if abs2(dst - old_dst) < 1e-4
+            # dst = norm(mat*(pos[:,i] .- (pos[:,k] .+ [ofsx, ofsy, ofsz])))
+            dst = norm(pos[:,i] .- (pos[:,k] .+ (mat * [ofsx, ofsy, ofsz])))
+            if abs2(dst - old_dst) < 1e-3
                 push!(offset, (ofsx, ofsy, ofsz))
                 old_dst = (dst + old_dst)/2
             elseif dst < old_dst
-                offset = [(ofsx, ofsy, ofsz)]
+                empty!(offset)
+                push!(offset, (ofsx, ofsy, ofsz))
                 old_dst = dst
             end
         end
@@ -344,6 +491,11 @@ struct Crystal{T<:Union{Nothing,Clusters}}
     clusters::T
     pos::Matrix{Float64}
     graph::PeriodicGraph3D
+end
+
+function ==(c1::Crystal{T}, c2::Crystal{T}) where T
+    c1.cell == c2.cell && c1.types == c2.types && c1.clusters == c2.clusters &&
+    c1.pos == c2.pos && c1.graph == c2.graph
 end
 
 Crystal{Nothing}(c::Crystal{Nothing}) = c
@@ -449,7 +601,6 @@ function trim_topology(graph::PeriodicGraph{N}) where N
             n = nv(newgraph)
             for i in 1:n
                 if degree(newgraph, i) == 2
-
                     neigh1, neigh2 = neighbors(newgraph, i)
                     add_edge!(newgraph, PeriodicEdge{N}(neigh1.v, neigh2.v, neigh2.ofs .- neigh1.ofs))
                     push!(remove_idx, i)
@@ -464,6 +615,12 @@ function trim_topology(graph::PeriodicGraph{N}) where N
         flag = any(<=(2), degree(newgraph))
     end
     return vmap, newgraph
+end
+
+trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(coalesce_sbus(c))
+function trimmed_crystal(c::Crystal{Nothing})
+    vmap, graph = trim_topology(c.graph)
+    return Crystal(c.cell, c.types[vmap], nothing, c.pos[:,vmap], graph)
 end
 
 """
@@ -509,12 +666,46 @@ macro tryinttype(inttype, m, M, cell, types, graph, placement)
     end
 end
 
+function trim_crystalnet!(graph, types, l, keep)
+    tohandle::Vector{Int} = reduce(vcat, l)
+    sort!(tohandle)
+    toremove = keep ? deleteat!(collect(1:length(types)), tohandle) : tohandle
+    vmap = rem_vertices!(graph, toremove)
+    return vmap
+    nothing
+end
+
 function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph3D)
+    global NOWARN
     vmap, graph = trim_topology(graph)
     types = types[vmap]
-    if isempty(vmap)
+    dimensions = PeriodicGraphs.dimensionality(graph)
+    if haskey(dimensions, 0)
+        if !(NOWARN::Bool)
+            @warn "Removing complex structure of dimension 0, possibly solvent residues."
+        end
+        vmap = trim_crystalnet!(graph, types, dimensions[0], false)
+        types = types[vmap]
+        dimensions = PeriodicGraphs.dimensionality(graph)
+    end
+
+    if isempty(dimensions)
         return CrystalNet{Rational{Bool}}(cell, types, graph, Matrix{Rational{Bool}}(undef, 3, 0))
     end
+    if length(dimensions) > 1 || only(keys(dimensions)) != 3
+        if !(NOWARN::Bool)
+            @warn "Presence of periodic structures with a periodicity different than 3. At the moment, all substructures with periodicity other than 3 will be ignored"
+        end
+        vmap = trim_crystalnet!(graph, types, dimensions[3], true)
+        types = types[vmap]
+        dimensions = PeriodicGraphs.dimensionality(graph)
+    end
+    dim3 = dimensions[3]
+    @assert length(dim3) > 0
+    if length(dim3) > 1
+        error("Multiple entertwined tridimensional structures. This is not currently handled")
+    end
+    @assert sort!(only(dim3)) == collect(1:nv(graph))
     placement = equilibrium(graph)
     m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
     M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))
@@ -530,6 +721,9 @@ end
 function CrystalNet(c::Crystal{T}) where T
     if T === Clusters # the only alternative is c.clusters === nothing
         c = coalesce_sbus(c)
+    end
+    if ne(c.graph) == 0
+        error("Empty graph. This probably means that the bonds have not been correctly attributed. Please switch to an input file containing explicit bonds.")
     end
     CrystalNet(c.cell, c.types, c.graph)
 end

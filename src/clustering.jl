@@ -305,7 +305,7 @@ function coalesce_sbus(crystal::Crystal{Clusters})
     types = Vector{Symbol}(undef, n)
     for (i, sbu) in enumerate(clusters.sbus)
         pos[:,i] = mean(crystal.pos[:,x.v] .+ x.ofs for x in sbu)
-        types[i] = Symbol(clusters.classes[i]) #Symbol(join(sort!([crystal.types[x.v] for x in sbu])))
+        types[i] = length(sbu) == 1 ? crystal.types[only(sbu).v] : Symbol(clusters.classes[i]) #Symbol(join(sort!([crystal.types[x.v] for x in sbu])))
     end
     edgs = PeriodicEdge3D[]
     for e in edges(crystal.graph)

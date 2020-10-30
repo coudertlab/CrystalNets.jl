@@ -8,15 +8,13 @@ const crystalnetsdir = normpath(@__DIR__, "..")
 const exename = `$(Base.julia_cmd()) --project=$crystalnetsdir
                  $(joinpath(crystalnetsdir, "src", "CrystalNets.jl"))`
 
-@info """The following warnings about guessing bonds are expected."""
-
 @testset "Module" begin
-    for target in ["afy", "apc", "bam", "bcf", "cdp", "cnd", "ecb", "fiv", "ftd",
-                   "ftj", "ins", "kgt", "llw-z", "mot", "moz", "muh", "pbz",
+    for target in ["pbc", "afy", "apc", "bam", "bcf", "cdp", "cnd", "ecb", "fiv",
+                   "ftd", "ftj", "ins", "kgt", "llw-z", "mot", "moz", "muh", "pbz",
                    "qom", "sig", "sma", "sod-f", "sod-h", "sxt", "utj", "utp"]
        graph = PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE[target])
        n = PeriodicGraphs.nv(graph)
-       for k in 1:300
+       for k in 1:50
            r = randperm(n)
            offsets = [SVector{3,Int}([rand(-3:3) for _ in 1:3]) for _ in 1:n]
            graph = swap_axes!(offset_representatives!(graph[r], offsets), randperm(3))
@@ -24,8 +22,10 @@ const exename = `$(Base.julia_cmd()) --project=$crystalnetsdir
        end
    end
 
+   @info """The following warnings about guessing bonds are expected."""
    @test reckognize_topology(topological_genome(CrystalNet(parse_chemfile(joinpath(cifs, "Moganite.cif"))))) == "mog"
 end
+
 
 @testset "Executable" begin
     ans = read(`$exename -g "3   1 2  0 0 0   1 2  0 0 1   1 2  0 1 0   1 2  1 0 0"`, String)
