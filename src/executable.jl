@@ -34,20 +34,28 @@ function parse_commandline()
                          \ua0\ua0\ua0* input: use the input residues as clusters. Fail if some atom does not belong to a residue.\n\n
                          \ua0\ua0\ua0* atom: each atom is its own cluster.\n\n
                          \ua0\ua0\ua0* mof: discard the input residues and consider the input as a MOF. Identify organic and inorganic clusters using a simple heuristic based on the atom types.\n\n
-                         \ua0\ua0\ua0* guess: discard the input residues and try clustering mode "mof". If it fails, falls back to "atom".\n\n
-                         \ua0\ua0\ua0* auto: if the input assigns each atom to a residue, equivalent to "input". Otherwise, falls back to "guess". Default option.\n\n
+                         \ua0\ua0\ua0* guess: discard the input residues and try clustering mode "mof". If it fails, fall back to "atom".\n\n
+                         \ua0\ua0\ua0* auto: if the input assigns each atom to a residue, equivalent to "input". Otherwise, fall back to "guess". Default option.\n\n
+                         \n\n
+                         BONDING_MODE options:\n\n
+                         \ua0\ua0\ua0* input: use the bonds explicitly given by the input file. Fail if bonds are not provided by the input.\n\n
+                         \ua0\ua0\ua0* chemfiles: guess bonds using chemfiles built-in bond detection mechanism.
+                         \ua0\ua0\ua0* auto: if the input possesses explicit bonds, use them unless they are suspicious. Otherwise, fall back to "chemfiles". Default option.\n\n
                          \n\n
                          CREATE_MODE options:\n\n
                          \ua0\ua0\ua0* empty: empty archive, unable to reckognize any topological structure.\n\n
-                         \ua0\ua0\ua0* full: RCSR Systre archive. Default option.\n\n
+                         \ua0\ua0\ua0* rcsr: RCSR Systre archive.\n\n
+                         \ua0\ua0\ua0* zeolites: zeolites topologies from the database of zeolite structures.\n\n
+                         \ua0\ua0\ua0* full: combined rcsr and zeolites archives. Default option.\n\n
                          """,
                          preformatted_epilog = false,
                          autofix_names = true,
                          add_help = false,
                          usage = """
                    usage: CrystalNets [-a ARCHIVE_PATH [-u NAME [-f] | -r [-f]]]
-                                      [-c CLUSTERING_MODE | -g] CRYSTAL_FILE     (Form A)
-                          CrystalNets -a ARCHIVE_PATH -n CREATE_MODE [-f]        (Form B)
+                                      [[-c CLUSTERING_MODE] [-b BONDING_MODE]] | -g]
+                                      [--no-export | -e DIR_PATH] CRYSTAL_FILE   (Form A)
+                          CrystalNets -a ARCHIVE_PATH -n [CREATE_MODE] [-f]      (Form B)
                           CrystalNets -a ARCHIVE_PATH -d [-f]                    (Form C)
                    """)
 
@@ -98,6 +106,21 @@ function parse_commandline()
             """
             metavar = "CLUSTERING_MODE"
 
+        "--bond-detect", "-b"
+            help = """Bond detection mode, to be chosen between input, chemfiles and auto.
+            See bottom for more details.
+            """
+            metavar = "BONDING_MODE"
+
+        "--no-export"
+            help = "Do not automatically export the parsed input."
+            action = :store_true
+
+        "--export-to", "-e"
+            help = """Automatically export the parsed input to the directory at DIR_PATH.
+            By default this option is enabled with DIR_PATH=$(tempdir())"""
+            metavar = "DIR_PATH"
+
         "--genome", "-g"
             help = """If set, consider the CRYSTAL_FILE parameter as a topological
             genome rather than the path to a crystal.
@@ -114,10 +137,12 @@ function parse_commandline()
     @add_arg_table! s begin
         "--new-archive", "-n"
             help = """Create an archive at ARCHIVE_PATH. CREATE_MODE can be
-            either empty or full.
+            either empty, full, rcsr or zeolites.
             See bottom for more details.
             """
             metavar = "CREATE_MODE"
+            nargs = '?'
+            constant = "full"
     end
 
     add_arg_group!(s, "Form C: delete an archive")
@@ -151,13 +176,19 @@ function parse_to_str_or_nothing(@nospecialize(x))::Union{Nothing,String,Int}
     catch e
         return parse_error("Unreckognized argument format: $x.")
     end
-    return str
+    return String(strip(str))
+end
+macro parse_to_str_or_nothing(x, name=x)
+    return quote
+        $(esc(name)) = parse_to_str_or_nothing($(esc(:parsed_args))[$(esc(QuoteNode(x)))])
+        $(esc(name)) isa $(esc(Int)) && return $(esc(name))
+        $(esc(name))::$(esc(Union{Nothing,String}))
+    end
 end
 
 
 Base.@ccallable function julia_main()::Cint
     try
-
         parsed_args = parse_commandline()
         if parsed_args isa Int
             return parsed_args
@@ -168,13 +199,28 @@ Base.@ccallable function julia_main()::Cint
 
         force::Bool = parsed_args[:force]
 
-        archive = parse_to_str_or_nothing(parsed_args[:archive])
-        archive isa Int && return archive
-        archive::Union{Nothing,String}
+        if parsed_args[:no_warn]
+            toggle_warning(false)
+        end
+        if parsed_args[:no_export]
+            if !isnothing(parsed_args[:export_to])
+                return parse_error("""Cannot use both arguments "--export-to" and "--no-export".""")
+            end
+            toggle_export(false)
+        end
 
-        new_archive_mode = parse_to_str_or_nothing(parsed_args[:new_archive])
-        new_archive_mode isa Int && return archive
-        new_archive_mode::Union{Nothing,String}
+        @parse_to_str_or_nothing export_to
+        exportto::String = if export_to isa Nothing
+            tempdir()
+        else
+            toggle_export(true)
+            export_to
+        end
+
+        @parse_to_str_or_nothing archive
+
+        @parse_to_str_or_nothing new_archive new_archive_mode
+
         if new_archive_mode isa String
             if parsed_args[:delete_archive]
                 return parse_error("Cannot execute both forms B and C.")
@@ -191,8 +237,16 @@ Base.@ccallable function julia_main()::Cint
                     export_arc(archive, false)
                 elseif new_archive_mode == "empty"
                     export_arc(archive, true)
+                elseif new_archive_mode*".arc" ∈ readdir(arc_location)
+                    flag, arc = parse_arc(arc_location * new_archive_mode *".arc")
+                    if !flag
+                        internal_error("""CrystalNets.jl appears to have a broken installation (the archive version is older than that package's).
+                        Please rebuild CrystalNets.jl with `import Pkg; Pkg.build("CrystalNets")`.
+                        """)
+                    end
+                    export_arc(archive, false, arc)
                 else
-                    return parse_error("""Unknown archive creation mode: $new_archive_mode. Choose between "full" and "empty".""")
+                    return parse_error("""Unknown archive: $new_archive_mode. Choose between "full", "empty", "rcsr" or "zeolites".""")
                 end
             end
             return 0
@@ -207,7 +261,7 @@ Base.@ccallable function julia_main()::Cint
             else
                 if force
                     if !isfile(archive)
-                        @warn "The specified archive does not exist."
+                        ifwarn("The specified archive does not exist.")
                     end
                     try
                         run(`rm -f $archive`)
@@ -230,32 +284,45 @@ Base.@ccallable function julia_main()::Cint
             return 0
         end
 
-        cluster_mode = parse_to_str_or_nothing(parsed_args[:clustering])
-        cluster_mode isa Int && return archive
-        cluster_mode::Union{Nothing,String}
+        @parse_to_str_or_nothing clustering cluster_mode
         clustering::ClusteringMode = begin
             if cluster_mode isa Nothing
-                Automatic
+                AutomaticClustering
             else
                 if cluster_mode == "input"
-                    Input
+                    InputClustering
                 elseif cluster_mode == "atom"
-                    EachVertex
+                    EachVertexClustering
                 elseif cluster_mode == "mof"
-                    MOF
+                    MOFClustering
                 elseif cluster_mode == "guess"
-                    Guess
+                    GuessClustering
                 elseif cluster_mode == "auto"
-                    Automatic
+                    AutomaticClustering
                 else
-                    return parse_error("""Unknown clustering mode: $cluster_mode. Choose between "input", "atom", "mof", "guess" or "auto".""")
+                    return parse_error("""Unknown clustering mode: $cluster_mode. Choose between "input", "atom", "mof", "guess" and "auto".""")
                 end
             end
         end
 
-        new_topology_name = parse_to_str_or_nothing(parsed_args[:update_archive])
-        new_topology_name isa Int && return archive
-        new_topology_name::Union{Nothing,String}
+        @parse_to_str_or_nothing bond_detect
+        bondingmode::BondingMode = begin
+            if bond_detect isa Nothing
+                AutoBonds
+            else
+                if bond_detect == "input"
+                    InputBonds
+                elseif bond_detect == "chemfiles"
+                    ChemfilesBonds
+                elseif bond_detect == "auto"
+                    AutoBonds
+                else
+                    return parse_error("""Unknown bond detection mode: $bond_detect. Choose between "input", "chemfiles" and "auto".""")
+                end
+            end
+        end
+
+        @parse_to_str_or_nothing update_archive new_topology_name
         if new_topology_name isa String && isnothing(archive)
             return parse_error("""Cannot update an archive without specifying its location: use the --archive option to provide a path for the archive.""")
         end
@@ -273,9 +340,7 @@ Base.@ccallable function julia_main()::Cint
             return parse_error("""Cannot consider the input as a topological genome while also using a specified clustering method on its vertices because genomes miss atom type information.""")
         end
 
-        input_file = parse_to_str_or_nothing(parsed_args[:input])
-        input_file isa Int && return archive
-        input_file::Union{Nothing,String}
+        @parse_to_str_or_nothing input input_file
         if input_file isa Nothing
             return parse_error("Missing a CRYSTAL_FILE.")
         end
@@ -305,7 +370,7 @@ Base.@ccallable function julia_main()::Cint
             end
         else
             crystal::Crystal = try
-                parse_chemfile(input_file)
+                parse_chemfile(input_file, exportto, bondingmode, clustering==InputClustering)
             catch e
                 return invalid_input_error("""The input file could not be correctly parsed as as a crystal because of the following error:""",
                                            e, catch_backtrace())
@@ -367,8 +432,8 @@ Base.@ccallable function julia_main()::Cint
             end
         end
 
-        if id isa Nothing
-            println("Unknown topology.")
+        if id == "UNKNOWN"
+            println("UNKNOWN")
             return 1
         else
             println(id)

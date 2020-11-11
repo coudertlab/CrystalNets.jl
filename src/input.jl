@@ -69,9 +69,9 @@ function parse_cif(file)
                 @assert !haskey(all_data, "data")
                 all_data["data"] = l[i+5:j]
             else
-                k = findprev(isequal('\n'), l, i)
-                n = count("\n", l[1:k])
-                throw("Unkown word \"$(l[i:j])\" at line $(n+1), position $(i-k):$(j-k)")
+                k::Int = findprev(isequal('\n'), l, i)
+                n::Int = count("\n", l[1:k])
+                error("Unkown word \"$(l[i:j])\" at line $(n+1), position $(i-k):$(j-k)")
             end
         end
 
@@ -186,9 +186,10 @@ function parse_arc(file)
     curr_key = ""
     counter = 1
     firstline = readline(file)
-    major = CRYSTAL_NETS_VERSION.major
-    minor = CRYSTAL_NETS_VERSION.minor
-    flag = firstline == "Made by CrystalNets.jl v$major.$minor"
+    flag = startswith(firstline, "Made by CrystalNets.jl v")
+    if flag
+        flag = CRYSTAL_NETS_VERSION == VersionNumber(firstline[25:end])
+    end
     for l in eachline(file)
         if length(l) > 3 && l[1:3] == "key"
             @assert isempty(curr_key)
@@ -209,6 +210,24 @@ function parse_arc(file)
         end
     end
     return flag, pairs
+end
+
+"""
+    parse_arcs(file)
+
+Parse a folder containing .arc Systre archives such as the one used by the RCSR.
+Return a pair `(flag, pairs)` with the same convention than `parse_arc`
+"""
+function parse_arcs(path)
+    combine(x, y) = x * ", " * y
+    dict = Dict{String,String}()
+    flag = true
+    for f in readdir(path; sort=true)
+        _flag, _dict = parse_arc(path*f)
+        flag &= _flag
+        mergewith!(combine, dict, _dict)
+    end
+    return flag, dict
 end
 
 function parse_atom_name(name::AbstractString)
@@ -233,10 +252,7 @@ end
 
 
 function set_unique_bond_type!(frame::Frame, types, bond_length, bonded_atoms::Tuple{Symbol, Symbol}, onlykeep, tol)
-    global NOWARN
-    if !(NOWARN::Bool)
-        @info "To avoid guessing bonds, use a file format that contains the bonds."
-    end
+    @ifwarn @info "To avoid guessing bonds, use a file format that contains the bonds."
     n = Int(size(frame))
     pos = Chemfiles.positions(frame)
     mat = Chemfiles.matrix(UnitCell(frame))'
@@ -257,7 +273,6 @@ function set_unique_bond_type!(frame::Frame, types, bond_length, bonded_atoms::T
 end
 
 function try_guess_bonds!(frame::Frame)
-    global NOWARN
     # n = Int(size(frame))
     # types = Vector{Symbol}(undef, n)
     # for i in 1:n
@@ -275,7 +290,7 @@ function try_guess_bonds!(frame::Frame)
     #     end
     #     set_unique_bond_type!(frame, types, 1.63, (:O, :Si), (:O, :Si), 0.1)
     # else
-        if !(NOWARN::Bool)
+        @ifwarn begin
             @warn "Guessing bonds through Chemfiles. This may take a while for big structures and may be inexact."
             @info "To avoid guessing bonds, use a file format that contains the bonds."
         end
@@ -285,7 +300,6 @@ end
 
 
 function attribute_residues(topology, assert_use_existing_residues)
-    global NOWARN
     m = Int(count_residues(topology))
     n = Int(size(topology))
     atoms_in_residues = m == 0 ? 0 : sum(length(atoms(Residue(topology, i))) for i in 0:(m-1))
@@ -298,7 +312,7 @@ function attribute_residues(topology, assert_use_existing_residues)
             To fix this, either assign a residue to each atom or provide another way to detect the vertices.
             """))
         end
-        if !(NOWARN::Bool)
+        @ifwarn begin
             if atoms_in_residues > 0
                 @warn "Some but not all atoms have an associated residue, so we cannot rely on existing residues"
             end
@@ -326,7 +340,8 @@ end
 
 
 function check_collision(pos, mat)
-    n = length(types)
+    _n, n = size(pos)
+    @assert _n == 3
     invmat = inv(mat)
     toremove = Int[]
     for i in 1:n, j in (i+1):n
@@ -337,42 +352,78 @@ function check_collision(pos, mat)
     end
     tokeep = collect(1:n)
     if !isempty(toremove)
-        global NOWARN
-        if !(NOWARN::Bool)
-            @warn "This file contains multiple colliding atoms. All colliding atoms will be removed."
-        end
+        @ifwarn @warn "This file contains multiple colliding atoms. All colliding atoms will be removed."
         unique!(sort!(toremove))
     end
     return toremove
 end
 
 
-function sanity_checks!(pos, types, graph, mat)
+hasHneighbor(types, graph, i) = any(x -> types[x.v] === :H, neighbors(graph,i))
+function check_valence(types, graph)
     n = length(types)
 
+    ## Small atoms valence check
+    invalidatoms = Set{Symbol}()
+    for i in 1:n
+        d = degree(graph, i)
+        t = types[i]
+        if t === :O && d > 2 && (d > 3 || !hasHneighbor(types, graph, i))
+            push!(invalidatoms, :O)
+        elseif t === :C && d > 4
+            push!(invalidatoms, :C)
+        elseif t === :N && d > 3 && (d > 4 || !hasHneighbor(types, graph, i))
+            push!(invalidatoms, :N)
+        end
+    end
+    if !isempty(invalidatoms)
+        s = String.(collect(invalidatoms))
+        @ifwarn @warn "Found $(join(s, ',', " and ")) with too many bonds."
+        return true
+    end
+    return false
+end
+
+
+"""
+    @enum BondingMode
+
+Selection mode for the detection of bonds. The choices are:
+-   `InputBonds`: use the input bonds. Fail if those are not specified.
+-   `ChemfilesBonds`: use chemfiles built-in bond detection mechanism.
+-   `AutoBonds`: if the input specifies bonds, use them unless they look suspicious (too or too
+    large according to a heuristic). Otherwise, fall back to `ChemfilesBonds`.
+"""
+@enum BondingMode begin
+    InputBonds
+    ChemfilesBonds
+    AutoBonds
+end
+
+
+function sanity_checks!(pos, types, graph, mat, bondingmode)
     ## Bond length check
     removeedges = PeriodicEdge3D[]
     for e in edges(graph)
         s, d = e.src, e.dst.v
         bondlength = norm(pos[:,d] .+ (mat * e.dst.ofs) .- pos[:,s])
         if bondlength > 3
-            if !(NOWARN::Bool)
-                @warn "Suspiciously large bond found. Disregarding all bonds from the input file."
-                @info "To force retaining the initial bonds, use --bonds=input"
-            end
+            @ifwarn @warn "Suspiciously large bond found."
             return true
         elseif bondlength < 0.85 && types[s] !== :H && types[d] !== :H
             push!(removeedges, e)
         end
     end
-    if !isempty(removeedges)
-        if !(NOWARN::Bool)
-            @warn "Suspiciously small bond found. Such bonds are probably spurious and will be deleted."
-            @info "To force retaining these bonds, use --bonds=input or --bonds=chemfiles"
+    if bondingmode == AutoBonds
+        @ifwarn begin
+            if !isempty(removeedges)
+                @warn "Suspiciously small bond found. Such bonds are probably spurious and will be deleted."
+                @info "To force retaining these bonds, use --bond-detect=input or --bond-detect=chemfiles"
+            end
         end
-    end
-    for e in removeedges
-        rem_edge!(graph, e)
+        for e in removeedges
+            rem_edge!(graph, e)
+        end
     end
     return false
 end
@@ -386,16 +437,15 @@ information.
 Such format can be .cif or any file format reckognised by Chemfiles.jl that
 contains all the necessary topological information.
 """
-function parse_chemfile(path, assert_use_existing_residues=false; ignore_atoms=[])
-    global NOWARN
+function parse_chemfile(_path, exportto=tempdir(), bondingmode::BondingMode=AutoBonds, assert_use_existing_residues=false ; ignore_atoms=[])
     # Separate the cases unhandled by Chemfiles from the others
-    path = expanduser(path)
+    path = expanduser(_path)
     cell = Cell()
-    if lowercase(last(splitext(path))) == ".cif"
+    frame::Frame = if lowercase(last(splitext(path))) == ".cif"
+        framecif = Frame()
         cif = expand_symmetry(CIF(path))
         a, b, c, α, β, γ = cell_parameters(cif.cell)
-        frame = Frame()
-        set_cell!(frame, UnitCell(a, b, c, α, β, γ))
+        set_cell!(framecif, UnitCell(a, b, c, α, β, γ))
         n = length(cif.ids)
         ignored = 0
         for i in 1:n
@@ -406,50 +456,51 @@ function parse_chemfile(path, assert_use_existing_residues=false; ignore_atoms=[
             end
             pos = cif.cell.mat * cif.pos[:,i]
             atom = parse_atom(string(typ))
-            add_atom!(frame, atom, Vector{Float64}(pos))
+            add_atom!(framecif, atom, Vector{Float64}(pos))
         end
         n -= ignored
         if iszero(cif.bonds)
-            try_guess_bonds!(frame)
+            try_guess_bonds!(framecif)
         else
             for i in 1:n, j in (i+1):n
                 if cif.bonds[i,j]
-                    add_bond!(frame, i-1, j-1)
+                    add_bond!(framecif, i-1, j-1)
                 end
             end
         end
         attributions = Int[]
 
+        framecif
     else # The rest is handled by Chemfiles
 
-        frame = read(Trajectory(path))
-        for i in Int(size(frame))-1:-1:0
-            if Symbol(type(Chemfiles.Atom(frame, i))) ∈ ignore_atoms
-                Chemfiles.remove_atom!(frame, i)
+        frameelse = read(Trajectory(path))
+        for i in Int(size(frameelse))-1:-1:0
+            if Symbol(type(Chemfiles.Atom(frameelse, i))) ∈ ignore_atoms
+                Chemfiles.remove_atom!(frameelse, i)
             end
         end
 
-        toremove = reverse(check_collision(positions(frame), matrix(UnitCell(frame))))
-        for i in toremove
-            Chemfiles.remove_atom!(frame, i-1)
+        toremove = reverse(check_collision(positions(frameelse), matrix(UnitCell(frame))))
+        for j in toremove
+            Chemfiles.remove_atom!(frameelse, j-1)
         end
 
-        topology = Topology(frame)
+        topology = Topology(frameelse)
         n = Int(size(topology))
 
         if bonds_count(topology) == 0
-            try_guess_bonds!(frame)
-            topology = Topology(frame) # safer but useless since the underlying pointer is the same
+            try_guess_bonds!(frameelse)
+            topology = Topology(frameelse) # safer but useless since the underlying pointer is the same
         end
 
         attributions = attribute_residues(topology, assert_use_existing_residues)
+
+        frameelse
     end
 
     cell = Cell(Cell(), SMatrix{3,3,BigFloat}(matrix(UnitCell(frame)))')
     if !all(isfinite, cell.mat) || iszero(det(cell.mat))
-        if !(NOWARN::Bool)
-            @warn "Suspicious unit cell of matrix $(Float64.(cell.mat)). Is the input really periodic? Using a cubic unit cell instead"
-        end
+        @ifwarn @warn "Suspicious unit cell of matrix $(Float64.(cell.mat)). Is the input really periodic? Using a cubic unit cell instead"
         cell = Cell()
     end
 
@@ -461,26 +512,43 @@ function parse_chemfile(path, assert_use_existing_residues=false; ignore_atoms=[
         adjacency[a+1,b+1] = true
         adjacency[b+1,a+1] = true
     end
-    graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, cell.mat, poss))
+    mat = Float64.(cell.mat)
+    graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, mat, poss))
 
-    recompute_bonds = sanity_checks!(poss, types, graph, cell.mat)
-    if recompute_bonds
-        try_guess_bonds!(frame)
-        topology = Topology(frame)
-        adjacency = zeros(Bool, n, n)
-        for (a,b) in eachcol(bonds(topology))
-            adjacency[a+1,b+1] = true
-            adjacency[b+1,a+1] = true
+    if bondingmode != InputBonds
+        bad_valence = check_valence(types, graph)
+        recompute_bonds = bad_valence || sanity_checks!(poss, types, graph, mat, bondingmode)
+        if recompute_bonds
+            @ifwarn begin
+                @warn "Disregarding all bonds from the input file."
+                @info "To force retaining the initial bonds, use --bond-detect=input"
+            end
+            try_guess_bonds!(frame)
+            topology = Topology(frame)
+            adjacency = zeros(Bool, n, n)
+            for (a,b) in eachcol(bonds(topology))
+                adjacency[a+1,b+1] = true
+                adjacency[b+1,a+1] = true
+            end
+            graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, cell.mat, poss))
+            @ifwarn if check_valence(types, graph)
+                @warn "Remaining atoms with invalid valence. Proceeding anyway."
+            end
+            recompute_bonds = sanity_checks!(poss, types, graph, cell.mat, bondingmode)
+            @ifwarn if recompute_bonds
+                 @warn "Remaining bonds of suspicious lengths. Proceeding anyway."
+            end
+            attributions = attribute_residues(topology, assert_use_existing_residues)
         end
-        graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, cell.mat, poss))
-        recompute_bonds = sanity_checks!(poss, types, graph, cell.mat)
-        @assert !recompute_bonds
-        attributions = attribute_residues(topology, assert_use_existing_residues)
     end
 
     if isempty(attributions)
-        return Crystal{Nothing}(cell, types, nothing, poss, graph)
+        crystalnothing = Crystal{Nothing}(cell, types, nothing, poss, graph)
+        ifexport(crystalnothing, splitext(splitdir(path)[2])[1], exportto)
+        return crystalnothing
     else
-        return Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions), poss, graph)
+        crystalclusters = Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions), poss, graph)
+        ifexport(crystalclusters, splitext(splitdir(path)[2])[1], exportto)
+        return crystalclusters
     end
 end

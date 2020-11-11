@@ -125,12 +125,16 @@ function rational_lu(A::SparseMatrixCSC, check::Bool=true, ::Type{Ti}=BigRationa
     # For each column, indices of the non-zeros elements
     @inbounds for col in 2:minmn
         sort!(idx_cols[col-1]; rev=true)
-        # All idx_added_cols[x] are sorted by decreasing order for x < col
+        # All idx_cols[x] are sorted by decreasing order for x < col
+        # @show idx_cols[col]
         for row_j in idx_cols[col]
             row_j >= col && continue
             col_offset[col] += 1
+            # @show idx_cols[row_j]
             for row_i in idx_cols[row_j]
                 row_i <= row_j && break # Because the row_i are sorted in decreasing order
+                # TODO optimize using the fact that the row_i arrive in decreasing order
+                # and the fact that idx_cols[col] is initially sorted in decreasing order
                 row_i ∈ idx_cols[col] && continue
                 push!(idx_cols[col], row_i)
                 push!(J, col)
@@ -169,13 +173,19 @@ end
 
 function forward_substitution!(L::SparseMatrixCSC, b)
     _, n = size(L)
+    _, m = size(b)
     @inbounds for col in 1:n
-        i = getcolptr(L)[col]
-        rowvals(L)[i] == col || checknonsingular(col, Val(true))
-        x = b[col,:] / nonzeros(L)[i]
+        k = getcolptr(L)[col]
+        rowvals(L)[k] == col || checknonsingular(col, Val(true))
+        invnzLk = inv(nonzeros(L)[k])
+        x = invnzLk .* b[col,:]
         b[col,:] .= x
-        @simd for i in (i+1):getcolptr(L)[col+1]-1
-            b[rowvals(L)[i],:] .-= nonzeros(L)[i]*x
+        #=@simd=# for i in (k+1):getcolptr(L)[col+1]-1
+            nzLi = nonzeros(L)[i]
+            rvLi = rowvals(L)[i]
+            @simd for j in 1:m
+                b[rvLi,j] -= nzLi*x[j]
+            end
         end
     end
     nothing
@@ -183,13 +193,19 @@ end
 
 function backward_substitution!(U::SparseMatrixCSC, b)
     _, n = size(U)
+    _, m = size(b)
     @inbounds for col in n:-1:1
-        i = getcolptr(U)[col+1]-1
-        rowvals(U)[i] == col || checknonsingular(col, Val(true))
-        x = b[col,:] / nonzeros(U)[i]
+        k = getcolptr(U)[col+1]-1
+        rowvals(U)[k] == col || checknonsingular(col, Val(true))
+        invnzUk = inv(nonzeros(U)[k])
+        x = invnzUk .* b[col,:]
         b[col,:] .= x
-        @simd for i in (i-1):-1:getcolptr(U)[col]
-            b[rowvals(U)[i],:] .-= nonzeros(U)[i]*x
+        #=@simd=# for i in getcolptr(U)[col]:(k-1)
+            nzUi = nonzeros(U)[i]
+            rvUi = rowvals(U)[i]
+            @simd for j in 1:m
+                b[rvUi,j] -= nzUi*x[j]
+            end
         end
     end
     nothing
@@ -204,7 +220,8 @@ function linsolve!(F::LU{<:Any,<:AbstractSparseMatrix}, B::Base.StridedVecOrMat)
     L = tril!(getfield(F, :factors)[1:m, 1:minmn])
     for i = 1:minmn; L[i,i] = 1; end
     forward_substitution!(L, BB)
-    backward_substitution!(triu!(getfield(F, :factors)[1:minmn, 1:n]), BB)
+    x = triu!(getfield(F, :factors)[1:minmn, 1:n])
+    backward_substitution!(x, BB)
     return BB
 end
 
@@ -228,47 +245,77 @@ end
 
 
 
-function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
-    λs = [norm(x) for x in eachcol(A)]
-    append!(λs, [norm(x) for x in eachcol(Y)])
-    partialsort!(λs, N)
-    for _ in 1:N
-        popfirst!(λs)
+# function _inner_dixon_p!(Z::Matrix{Rational{T}}, h, x̄, sqh, tmp) where T
+#     for j in eachindex(Z)
+#         ua = MPZ.set(h)
+#         ub = @inbounds x̄[j]
+#         va = zero(T)
+#         vb = one(T)
+#         k = 0
+#         while ub >= sqh
+#             k += 1
+#             # cpua = deepcopy(ua)
+#             # cpub = deepcopy(ub)
+#             MPZ.tdiv_qr!(tmp, ua, ua, ub)
+#             ua, ub = ub, ua
+#             # @assert tmp == cpua ÷ cpub
+#             # @assert ua == cpub
+#             # @assert ub == cpua - tmp * cpub
+#             # cpuc = deepcopy(va)
+#             if typemin(Clong) < vb < typemax(Clong)
+#                 MPZ.mul_si!(tmp, vb % Clong)
+#             else
+#                 tmp *= vb
+#             end
+#             flag = signbit(va)
+#             va = abs(va)
+#             if va < typemax(Culong)
+#                 if flag
+#                     MPZ.sub_ui!(tmp, va)
+#                 else
+#                     MPZ.add_ui!(tmp, va)
+#                 end
+#                 va, vb = vb, T(tmp)
+#             else
+#                 va, vb = vb, va + tmp
+#             end
+#             # @assert vb == cpuc + tmp * va
+#         end
+#         uc, vc = if T === BigInt
+#             Base.divgcd(ub, vb)
+#         else
+#             ud, vd = Base.divgcd(ub, vb)
+#             if T !== BigInt
+#                 m = typemin(T)
+#                 M = typemax(T)
+#                 (m < ud < M && m < vd < M) || return false
+#             end
+#             (ud % T, vd % T)
+#         end
+#
+#         @inbounds Z[j] = (-2*isodd(k)+1) * Base.checked_den(uc, vc)
+#         # @show Z[j]
+#         # @assert mod((-1)^isodd(k) * ub, h) == mod(vb * x̄[j], h)
+#     end
+#     return true
+# end
+
+function copyuntil(j, oldZ, ::Type{T}) where T
+    Z = similar(oldZ, T)
+    for i in eachindex(Z)
+        i == j && return Z
+        Z[i] = oldZ[i]
     end
-    δ = @static if VERSION < v"1.6-"
-        (isempty(λs) ? BigFloat(1) : prod(BigFloat, λs))::BigFloat
-    else
-        prod(BigFloat, λs; init=one(BigFloat))
-    end
-    # @show δ
-    # @show p
-    m = ceil(Int, 2*log(δ / (MathConstants.φ - 1))/log(p))
-    @assert m ≥ 1
-    # @show m
-    B = copy(Y)
-    x̄ = BigInt.(linsolve!(C, B))
-    X = copy(x̄)
-    @assert A * Modulo{p,T}.(X) == B
-    h = one(BigInt) # = p^i
-    tmp = BigInt()
-    for i in 1:m-1
-        MPZ.mul_si!(h, p)
-        B .= (B .- A*Integer.(X)) .÷ p
-        X .= Integer.(linsolve!(C, B))
-        @assert A * Modulo{p,T}.(X) == B
-        # x̄ .+= h .* X
-        @inbounds for j in eachindex(x̄)
-            MPZ.mul!(tmp, X[j], h)
-            MPZ.add!(x̄[j], tmp)
-        end
-    end
-    MPZ.mul_si!(h, p) # h = p^m
-    @assert mod.(A * x̄, h) == mod.(Y, h)
-    sqh = MPZ.sqrt(h) # h = p^{m/2}
-    Z = similar(Y, Rational{Int128})
-    for j in eachindex(Z)
+    error("Invalid failure of _inner_dixon_p!, please report this error")
+    return Z # Does not matter
+end
+
+
+function _inner_dixon_p!(indices, Z::Matrix{Rational{T}}, h, x̄, sqh, tmp) where T
+    while !isempty(indices)
+        j = pop!(indices)
         ua = MPZ.set(h)
-        ub = @inbounds x̄[j]
+        ub = deepcopy(@inbounds x̄[j])
         va = Int128(0)
         vb = Int128(1)
         k = 0
@@ -301,13 +348,80 @@ function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
             end
             # @assert vb == cpuc + tmp * va
         end
-        @inbounds Z[j] = (-1)^isodd(k) * Rational{Int128}(ub, vb)
+
+        uv::Tuple{T,T} = if T === BigInt
+            Base.divgcd(ub, vb)
+        else
+            ud, vd = Base.divgcd(ub, vb)
+            m = typemin(T)
+            M = typemax(T)
+            if !(m < ud < M && m < vd < M)
+                push!(indices, j)
+                return false
+            end
+            (ud % T, vd % T)
+        end
+
+        @inbounds Z[j] = (-2*isodd(k)+1) * Base.checked_den(uv[1], uv[2])
         # @show Z[j]
         # @assert mod((-1)^isodd(k) * ub, h) == mod(vb * x̄[j], h)
     end
+    return true
+end
+
+function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
+    λs = [norm(x) for x in eachcol(A)]
+    append!(λs, [norm(x) for x in eachcol(Y)])
+    partialsort!(λs, N)
+    for _ in 1:N
+        popfirst!(λs)
+    end
+    δ::BigFloat = @static if VERSION < v"1.6-"
+        (isempty(λs) ? BigFloat(1) : prod(BigFloat, λs))::BigFloat
+    else
+        prod(BigFloat, λs; init=one(BigFloat))
+    end
+    # @show δ
+    # @show p
+    m = ceil(Int, 2*log(δ / (MathConstants.φ - 1))/log(p))
+    @assert m ≥ 1
+    # @show m
+    B = copy(Y)
+    x̄ = BigInt.(linsolve!(C, B))
+    X = copy(x̄)
+    @assert A * Modulo{p,T}.(X) == B
+    h = one(BigInt) # = p^i
+    tmp = BigInt()
+    for i in 1:m-1
+        MPZ.mul_si!(h, p)
+        B .= (B .- A*Integer.(X)) .÷ p
+        X .= Integer.(linsolve!(C, B))
+        @assert A * Modulo{p,T}.(X) == B
+        # x̄ .+= h .* X
+        @inbounds for j in eachindex(x̄)
+            MPZ.mul!(tmp, X[j], h)
+            MPZ.add!(x̄[j], tmp)
+        end
+    end
+    MPZ.mul_si!(h, p) # h = p^m
+    @assert mod.(A * x̄, h) == mod.(Y, h)
+    sqh = MPZ.sqrt(h) # h = p^{m/2}
+    typeofZ = Union{Matrix{Rational{Int64}},Matrix{Rational{Int128}},Matrix{Rational{BigInt}}}
+    Z::typeofZ = similar(Y, Rational{Int64})
+    indices = collect(reverse(eachindex(Z)))
+    success = _inner_dixon_p!(indices, Z, h, x̄, sqh, tmp)
+    if !success
+        Z = copyuntil(first(indices), Z, Rational{Int128})
+        success = _inner_dixon_p!(indices, Z, h, x̄, sqh, tmp)
+        if !success
+            Z = copyuntil(first(indices), Z, Rational{BigInt})
+            success = _inner_dixon_p!(indices, Z, h, x̄, sqh, tmp)
+            @assert success
+        end
+    end
 
     @assert eltype(Y).(A * big.(Z)) == Y
-    return Z
+    return Z::typeofZ
     # return hcat(zeros(Rational{Int128}, N), Rational{Int128}.(x̄)')
     # Rational{Int64} is not enough for tep for instance.
 end
@@ -322,21 +436,27 @@ Return `X` as a matrix of `Rational{Int128}`.
 """
 function dixon_solve(::Val{N}, A, Y) where N
     # @show time_ns()
-    B = rational_lu(A, false, Modulo{2147483647,Int32})
+    typeofB = Union{
+        LU{Modulo{2147483647,Int32},SparseMatrixCSC{Modulo{2147483647,Int32},Int}},
+        LU{Modulo{2147483629,Int32},SparseMatrixCSC{Modulo{2147483629,Int32},Int}},
+        LU{Modulo{2147483587,Int32},SparseMatrixCSC{Modulo{2147483587,Int32},Int}}
+    }
+    B::typeofB = rational_lu(A, false, Modulo{2147483647,Int32})
+    typeofZ = Union{Matrix{Rational{Int64}},Matrix{Rational{Int128}},Matrix{Rational{BigInt}}}
     if issuccess(B)
-        Z = Rational{Int128}.(dixon_p(Val(N), A, B, Y)')
+        Z = dixon_p(Val(N), A, B, Y)'
     else
         B = rational_lu(A, false, Modulo{2147483629,Int32})
         if issuccess(B)
-            Z = Rational{Int128}.(dixon_p(Val(N), A, B, Y)')
+            Z = dixon_p(Val(N), A, B, Y)'
         else
             B = rational_lu(A, false, Modulo{2147483587,Int32})
             if issuccess(B)
-                Z = Rational{Int128}.(dixon_p(Val(N), A, B, Y)')
-            else
+                Z = dixon_p(Val(N), A, B, Y)'
+            else # The probability of this being required is *extremely* low
                 return rational_solve(Val(N), A, Y)
             end
         end
     end
-    return hcat(zeros(Rational{Int128}, N), Z)
+    return hcat(zeros(eltype(Z), N), Z)::typeofZ
 end

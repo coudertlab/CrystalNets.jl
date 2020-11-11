@@ -2,16 +2,24 @@ using CrystalNets
 using Test, Random
 using PeriodicGraphs
 using StaticArrays
+import Base.Threads
 
 const cifs = joinpath(@__DIR__, "cif")
 const crystalnetsdir = normpath(@__DIR__, "..")
-const exename = `$(Base.julia_cmd()) --project=$crystalnetsdir
-                 $(joinpath(crystalnetsdir, "src", "CrystalNets.jl"))`
+
+@testset "Archive" begin
+    Threads.@threads for (genome, id) in collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
+        (id == "sxt" || id == "llw-z") && continue # special case for these known unstable nets
+        @test reckognize_topology(topological_genome(PeriodicGraph(genome))) == id
+    end
+end
 
 @testset "Module" begin
-    for target in ["pbc", "afy", "apc", "bam", "bcf", "cdp", "cnd", "ecb", "fiv",
-                   "ftd", "ftj", "ins", "kgt", "llw-z", "mot", "moz", "muh", "pbz",
-                   "qom", "sig", "sma", "sod-f", "sod-h", "sxt", "utj", "utp"]
+    Threads.@threads for target in
+        ["pcu", "afy, AFY", "apc, APC", "bam", "bcf", "cdp", "cnd", "ecb", "fiv",
+         "ftd", "ftj", "ins", "kgt", "mot", "moz", "muh", "pbz", "qom", "sig",
+         "sma", "sod-f", "sod-h", "utj", "utp"]
+       @info "Testing $target"
        graph = PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE[target])
        n = PeriodicGraphs.nv(graph)
        for k in 1:50
@@ -22,37 +30,72 @@ const exename = `$(Base.julia_cmd()) --project=$crystalnetsdir
        end
    end
 
+   @test_broken reckognize_topology(topological_genome(PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE["sxt"]))) == "sxt"
+   @test_broken reckognize_topology(topological_genome(PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE["llw-z"]))) == "llw-z"
+
    @info """The following warnings about guessing bonds are expected."""
    @test reckognize_topology(topological_genome(CrystalNet(parse_chemfile(joinpath(cifs, "Moganite.cif"))))) == "mog"
 end
 
 
 @testset "Executable" begin
-    ans = read(`$exename -g "3   1 2  0 0 0   1 2  0 0 1   1 2  0 1 0   1 2  1 0 0"`, String)
-    @test ans == "dia\n"
+    safestdout = deepcopy(stdout)
+    safeARGS = deepcopy(ARGS)
+    piperead, _ = redirect_stdout()
+    empty!(ARGS)
 
+    push!(ARGS, "-g", "3   1 2  0 0 0   1 2  0 0 1   1 2  0 1 0   1 2  1 0 0")
+    @test CrystalNets.julia_main() == 0
+    @test readuntil(piperead, '\n') == "dia"
+
+    empty!(ARGS)
     path = joinpath(cifs, "ABW.cif")
-    ans = read(`$exename $path`, String)
-    @test split(ans, "\n")[end-1] == "sra"
+    push!(ARGS, path)
+    @test CrystalNets.julia_main() == 0
+    @test readuntil(piperead, '\n') == "sra, ABW"
 
+    empty!(ARGS)
+    path = joinpath(cifs, "ABW.cif")
+    push!(ARGS, "-a", CrystalNets.arc_location*"rcsr.arc", path)
+    @test CrystalNets.julia_main() == 0
+    @test readuntil(piperead, '\n') == "sra"
+
+    empty!(ARGS)
     path = joinpath(cifs, "RRO.cif")
-    ans = read(`$exename $path`, String)
-    @test split(ans, "\n")[end-1] == "Unknown topology."
+    push!(ARGS, path)
+    @test CrystalNets.julia_main() == 0
+    @test readuntil(piperead, '\n') == "RRO"
 
+    empty!(ARGS)
+    path = joinpath(cifs, "RRO.cif")
+    push!(ARGS, "-a", CrystalNets.arc_location*"rcsr.arc", path)
+    @test CrystalNets.julia_main() == 1
+    @test readuntil(piperead, '\n') == "UNKNOWN"
+
+    empty!(ARGS)
     path = joinpath(cifs, "HKUST-1.cif")
-    ans = read(`$exename -c mof $path`, String)
-    @test split(ans, "\n")[end-1] == "tbo"
+    push!(ARGS, "-c", "mof", path)
+    @test CrystalNets.julia_main() == 0
+    @test readuntil(piperead, '\n') == "tbo"
 
+    empty!(ARGS)
     path = joinpath(cifs, "Diamond.cif")
-    ans = read(`$exename -c atom $path`, String)
-    @test split(ans, "\n")[end-1] == "dia"
+    push!(ARGS, "-c", "atom", path)
+    @test CrystalNets.julia_main() == 0
+    @test readuntil(piperead, '\n') == "dia"
 
-    help = split(read(`$exename --help`, String), "\n")[1:7]
-    @test startswith(help[1], "usage: CrystalNets")
-    @test occursin("CRYSTAL_FILE", help[2])
-    @test occursin("Form A", help[2])
-    @test occursin("Form B", help[3])
-    @test occursin("Form C", help[4])
-    @test isempty(help[5]) && isempty(help[6])
-    @test help[7] == "Automatic reckognition of crystal net topologies."
+    empty!(ARGS)
+    push!(ARGS, "--help")
+    @test CrystalNets.julia_main() == 0
+    @test startswith(readuntil(piperead, '\n'), "usage: CrystalNets")
+    @test occursin("CRYSTAL_FILE", readuntil(piperead, '\n'))
+    @test occursin("Form B", readuntil(piperead, '\n'))
+    @test occursin("Form C", readuntil(piperead, '\n'))
+    @test isempty(readuntil(piperead, '\n'))
+    @test isempty(readuntil(piperead, '\n'))
+    @test readuntil(piperead, '\n') == "Automatic reckognition of crystal net topologies."
+
+    redirect_stdout(safestdout)
+    empty!(ARGS)
+    append!(ARGS, safeARGS)
 end

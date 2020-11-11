@@ -87,7 +87,7 @@ Missing a CRYSTAL_FILE.
 See --help for usage.
 
 $ julia --project=/the/path/to/CrystalNets/ /the/path/to/CrystalNets/src/CrystalNets.jl -c mof /path/to/HKUST-1.cif
-Clustering of vertices represented represented at /path/to/clusters.pdb
+Clustering of vertices represented at /path/to/clusters.pdb
 tbo
 ```
 

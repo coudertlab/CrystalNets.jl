@@ -106,8 +106,9 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                 end
                 if !isnothing(curr_val)
                     sign = isnothing(curr_sign) ? 1 : 2*curr_sign - 1
-                    if !iszero(ofs[i])
-                        @warn "Existing offset already existing for position $i in {$s}"
+                    @ifwarn begin if !iszero(ofs[i])
+                            @warn "Existing offset already existing for position $i in {$s}"
+                        end
                     end
                     ofs[i] += sign * Rational{Int}(curr_val)
                     curr_val = nothing
@@ -306,10 +307,7 @@ function remove_partial_occupancy(cif::CIF)
     if isempty(toremove) # Nothing to do, we simply alias the CIF to help the compiler (it may be useless)
         return CIF(cif.cifinfo, cif.cell, cif.ids, cif.types, cif.pos, cif.bonds)
     end
-    global NOWARN
-    if !(NOWARN::Bool)
-        @warn "This CIF file contains a site with multiple atoms. Only one atom will be kept per atom site."
-    end
+    @ifwarn @warn "This CIF file contains a site with multiple atoms. Only one atom will be kept per atom site."
     sort!(toremove)
     ids = deleteat!(copy(cif.ids), toremove)
     tokeep = deleteat!(collect(1:n), toremove)
@@ -331,7 +329,7 @@ function prune_collisions(cif::CIF)
     points::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     n = length(points)
     for i in 1:n, j in (i+1):n
-        if periodic_distance(points[i], points[j], cif.cell.mat) < 0.55
+        if periodic_distance(points[i], points[j], Float64.(cif.cell.mat)) < 0.55
             push!(toremove, i)
             push!(toremove, j)
         end
@@ -339,10 +337,7 @@ function prune_collisions(cif::CIF)
     if isempty(toremove) # Nothing to do, we simply alias the CIF to help the compiler (it may be useless)
         return CIF(cif.cifinfo, cif.cell, cif.ids, cif.types, cif.pos, cif.bonds)
     end
-    global NOWARN
-    if !(NOWARN::Bool)
-        @warn "This CIF file contains multiple colliding atoms. All colliding atoms will be removed."
-    end
+    @ifwarn @warn "This CIF file contains multiple colliding atoms. All colliding atoms will be removed."
     unique!(sort!(toremove))
     ids = deleteat!(copy(cif.ids), toremove)
     tokeep = deleteat!(collect(1:n), toremove)
@@ -356,22 +351,22 @@ end
 
 Applies all the symmetry operations listed in the CIF file to the atoms and the bonds.
 """
-function expand_symmetry(cif::CIF)
-    cif = remove_partial_occupancy(cif)
+function expand_symmetry(c::CIF)
+    cif::CIF = remove_partial_occupancy(c)
     n = length(cif.ids)
     oldbonds = [(i,j) for i in 1:n for j in i:n if cif.bonds[i,j]]
     newbonds = Set{Tuple{Int,Int}}(oldbonds)
-    newids = copy(cif.ids)
+    newids::Vector{Int} = copy(cif.ids)
     newpos::Vector{Vector{Float64}} = collect(eachcol(cif.pos))
     ret = Vector{Vector{Int}}
     #=@inbounds=# for equiv in cif.cell.equivalents
         image = zeros(Int, n)
         for i in 1:length(cif.ids)
             v = newpos[i]
-            p = Vector(equiv.mat*v + equiv.ofs)
+            p = Vector(equiv.mat*v .+ equiv.ofs)
             @. p = p - floor(p)
             for j in 1:length(newpos)
-                if periodic_distance(newpos[j], p, cif.cell.mat) < 0.5
+                if periodic_distance(newpos[j], p, Float64.(cif.cell.mat)) < 0.5
                     image[i] = j
                     break
                 end
@@ -393,9 +388,9 @@ function expand_symmetry(cif::CIF)
         bonds[j,i] = true
     end
 
-    cif = CIF(cif.cifinfo, deepcopy(cif.cell), newids, copy(cif.types), reduce(hcat, newpos), bonds)
+    newcif = CIF(cif.cifinfo, deepcopy(cif.cell), newids, copy(cif.types), reduce(hcat, newpos), bonds)
 
-    return prune_collisions(cif)
+    return prune_collisions(newcif)
 end
 
 # function set_unique_bond_type!(cif::CIF, bond_length, bonded_atoms::Tuple{Symbol, Symbol}, onlykeep, tol)
@@ -676,14 +671,11 @@ function trim_crystalnet!(graph, types, l, keep)
 end
 
 function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph3D)
-    global NOWARN
     vmap, graph = trim_topology(graph)
     types = types[vmap]
     dimensions = PeriodicGraphs.dimensionality(graph)
     if haskey(dimensions, 0)
-        if !(NOWARN::Bool)
-            @warn "Removing complex structure of dimension 0, possibly solvent residues."
-        end
+        @ifwarn @warn "Removing complex structure of dimension 0, possibly solvent residues."
         vmap = trim_crystalnet!(graph, types, dimensions[0], false)
         types = types[vmap]
         dimensions = PeriodicGraphs.dimensionality(graph)
@@ -693,9 +685,7 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGr
         return CrystalNet{Rational{Bool}}(cell, types, graph, Matrix{Rational{Bool}}(undef, 3, 0))
     end
     if length(dimensions) > 1 || only(keys(dimensions)) != 3
-        if !(NOWARN::Bool)
-            @warn "Presence of periodic structures with a periodicity different than 3. At the moment, all substructures with periodicity other than 3 will be ignored"
-        end
+        @ifwarn @warn "Presence of periodic structures with a periodicity different than 3. At the moment, all substructures with periodicity other than 3 will be ignored"
         vmap = trim_crystalnet!(graph, types, dimensions[3], true)
         types = types[vmap]
         dimensions = PeriodicGraphs.dimensionality(graph)
@@ -732,41 +722,44 @@ end
     @enum ClusteringMode
 
 Selection mode for the clustering of vertices. The choices are:
--   `Input`: use the input residues as clusters. Fail if some atom does
+-   `InputClustering`: use the input residues as clusters. Fail if some atom does
     not belong to a residue.
--   `EachVertex`: each vertex is its own cluster.
--   `MOF`: discard the input residues and consider the input as a MOF. Identify
+-   `EachVertexClustering`: each vertex is its own cluster.
+-   `MOFClustering`: discard the input residues and consider the input as a MOF. Identify
     organic and inorganic clusters using a simple heuristic based on the atom types.
--   `Guess`: discard the input residues and try to identify the clusters as in `MOF`.
-    If it fails, use `EachVertex`.
--   `Automatic`: if the input assigns each atom to a residue, use these residues
-    as clusters. Otherwise, try to guess the clusters as in `Guess`.
+-   `GuessClustering`: discard the input residues and try to identify the clusters as in `MOFClustering`.
+    If it fails, use `EachVertexClustering`.
+-   `AutomaticClustering`: if the input assigns each atom to a residue, use these residues
+    as clusters. Otherwise, try to guess the clusters as in `GuessClustering`.
 """
 @enum ClusteringMode begin
-    Input
-    EachVertex
-    MOF
-    Guess
-    Automatic
+    InputClustering
+    EachVertexClustering
+    MOFClustering
+    GuessClustering
+    AutomaticClustering
 end
 
 function do_clustering(c::Crystal{T}, mode::ClusteringMode)::Tuple{Clusters, CrystalNet} where T
     n = length(c.types)
-    if mode == Input
+    if mode == InputClustering
         if T === Nothing
             throw(ArgumentError("Cannot use input residues as clusters: the input does not have residues."))
         else
             return Clusters(n), CrystalNet(c)
         end
-    elseif mode == EachVertex
+    elseif mode == EachVertexClustering
         return Clusters(n), CrystalNet(Crystal{Nothing}(c))
-    elseif mode == MOF
+    elseif mode == MOFClustering
         clusters = find_sbus(c)
+        if length(clusters.sbus) <= 1
+            throw(MissingAtomInformation("MOFClustering leads to a single cluster, choose a different clustering mode."))
+        end
         return clusters, CrystalNet(Crystal{Clusters}(c, clusters))
-    elseif mode == Guess
+    elseif mode == GuessClustering
         crystal = Crystal{Nothing}(c)
         try
-            clusters, net = do_clustering(crystal, MOF)
+            clusters, net = do_clustering(crystal, MOFClustering)
             if nv(net.graph) > 1
                 return clusters, net
             end
@@ -775,12 +768,12 @@ function do_clustering(c::Crystal{T}, mode::ClusteringMode)::Tuple{Clusters, Cry
                 rethrow()
             end
         end
-        return do_clustering(crystal, EachVertex)
-    elseif mode == Automatic
+        return do_clustering(crystal, EachVertexClustering)
+    elseif mode == AutomaticClustering
         if T === Clusters
             return Clusters(n), CrystalNet(c)
         else
-            return do_clustering(c, Guess)
+            return do_clustering(c, GuessClustering)
         end
     end
 end

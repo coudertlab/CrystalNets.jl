@@ -26,13 +26,29 @@ import PeriodicGraphs: hash_position
 using StaticArrays
 using LightGraphs
 
-NOWARN = false
+import Logging
+import Logging: Warn, Info, @logmsg
+
+const DOWARN = Base.RefValue{Bool}(false)
+const DOEXPORT = Base.RefValue{Bool}(false)
+
+function toggle_warning(to=nothing)
+    global DOWARN
+    DOWARN[] = to isa Nothing ? !DOWARN[] : to
+end
+function toggle_export(to=nothing)
+    global DOEXPORT
+    DOEXPORT[] = to isa Nothing ? !DOEXPORT[] : to
+end
 
 function __init__()
-    global NOWARN = "--no-warn" ∈ ARGS
+    toggle_warning("--no-warn" ∉ ARGS)
+    toggle_export("--no-export" ∉ ARGS)
+    nothing
 end
 
 include("utils.jl")
+__precompile__(true)
 include("types.jl") # Main internal type definitions used to represent topologies
 include("input.jl") # Crystal file parsing and conversion to an internal type
 include("archive.jl") # Manipulation of the topological archive

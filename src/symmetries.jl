@@ -109,6 +109,7 @@ end
 
 function find_symmetries(net::CrystalNet{Rational{S}}) where S
     T = soft_widen(S)
+    U = widen(T)
     lattice = Matrix{Cdouble}(LinearAlgebra.I, 3, 3) # positions are expressed in this basis
 
     I = sortperm(net.pos)
@@ -148,7 +149,7 @@ function find_symmetries(net::CrystalNet{Rational{S}}) where S
     positions = Matrix{Cdouble}(undef, 3, n)
     den = 1
     for i in 1:n
-        den = lcm(den, lcm((soft_widen(T)∘denominator).(uniquepos[i])))
+        den = lcm(den, lcm((U∘denominator).(uniquepos[i])))
         positions[:,i] .= uniquepos[i]
     end
 
@@ -180,10 +181,10 @@ function find_symmetries(net::CrystalNet{Rational{S}}) where S
         end
         # @assert det(rot) == 1
         tr = SVector{3,Cdouble}(translations[:,i])
-        trans = SVector{3,Rational{S}}(round.(soft_widen(T), den .* tr) .// den)
+        trans = SVector{3,Rational{U}}(round.(U, den .* tr) .// den)
         vmap = check_valid_translation(net, trans, rot)
         if isnothing(vmap)
-            trans = SVector{3,Rational{S}}(net.pos[last(findmin([norm(x .- tr) for x in floatpos]))])
+            trans = SVector{3,Rational{U}}(net.pos[last(findmin([norm(x .- tr) for x in floatpos]))])
             vmap = check_valid_translation(net, trans, rot)
             # if isnothing(vmap)
             #     @show translations[:,i]

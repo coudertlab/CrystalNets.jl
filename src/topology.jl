@@ -3,9 +3,8 @@ function check_dimensionality(c::CrystalNet{T}) where T
     sort!(edgs)
     unique!(edgs)
     mat = reduce(hcat, edgs)
-    rk = rank(mat)
-    if rk < 3
-        throw(ArgumentError("The input net has dimensionality $rk, which is not 3, so it cannot be analyzed."))
+    if !isrank3(mat)
+        throw(ArgumentError("The input net does not have dimensionality 3, so it cannot be analyzed."))
     end
     nothing
 end
@@ -125,7 +124,7 @@ function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
 end
 
 function reduce_with_matrix(c::CrystalNet{<:Rational{T}}, mat) where T
-    U = widen(T)
+    U = soft_widen(widen(T))
     lengths = degree(c.graph)
     cell = Cell(c.cell, c.cell.mat * mat)
     imat = soft_widen(T).(inv(mat)) # The inverse should only have integer coefficients
@@ -159,8 +158,6 @@ function reduce_with_matrix(c::CrystalNet{<:Rational{T}}, mat) where T
         end
     end
     graph = PeriodicGraph3D(edges)
-    @show degree(graph)
-    @show lengths[I_kept]
     @assert degree(graph) == lengths[I_kept]
     return CrystalNet(cell, c.types[I_kept], sortedcol, graph)
 end
@@ -288,7 +285,7 @@ function candidate_key(net::CrystalNet{T}, u, basis, minimal_edgs) where T
             if !flag_bestedgs
                 j = length(edgs)
                 c = cmp(minimal_edgs[j], edgs[j])
-                c < 0 && return nothing
+                c < 0 && return (Int[], Tuple{Int,Int,SVector{3,V}}[])
                 c > 0 && (flag_bestedgs = true)
             end
         end
@@ -296,7 +293,7 @@ function candidate_key(net::CrystalNet{T}, u, basis, minimal_edgs) where T
     @assert allunique(edgs)
     if !flag_bestedgs
         @assert minimal_edgs == edgs
-        return nothing
+        return (Int[], Tuple{Int,Int,SVector{3,V}}[])
     end
     return vmap, edgs
 end
@@ -495,7 +492,7 @@ function find_candidates_onlyneighbors(net::CrystalNet{T}, candidates_v, categor
             a[:,j] .= net.pos[x.v] .+ x.ofs .- posi
             cats[j] = category_map[x.v]
         end
-        if LinearAlgebra.rank(a) >= 3
+        if isrank3(a)
             pair = v => (a, cats)
             lock(fastlock) do
                 push!(initial_candidates, pair)
@@ -695,9 +692,8 @@ function topological_key(net::CrystalNet{T}) where T
     _edgs = [(n + 1, 0, zero(SVector{3,T}))]
     minimal_vmap, minimal_edgs = candidate_key(net, v, minimal_basis, _edgs)
     for (v, basis) in candidates
-        ret = candidate_key(net, v, basis, minimal_edgs)
-        isnothing(ret) && continue
-        vmap, edgs = ret
+        vmap, edgs = candidate_key(net, v, basis, minimal_edgs)
+        isempty(vmap) && continue
         @assert edgs < minimal_edgs
         if edgs < minimal_edgs
             minimal_edgs = edgs
@@ -724,20 +720,19 @@ end
 
 function topological_genome(g::PeriodicGraph3D, skipminimize=true)
     net = CrystalNet(g)
+    if !allunique(net.pos)
+        throw(ArgumentError("""The net is unstable, hence it cannot be analyzed."""))
+    end
     if !skipminimize
         net = minimize(net)
     end
     return last(topological_key(net))
 end
 
-function topological_genome(path::AbstractString)
-    crystal = Crystal(parse_cif(path))
-    return topological_genome(CrystalNet(crystal), false)
-    # return Crystal(crystal.cifinfo, net.cell, collect(1:length(net.types)),
-    #                net.types, reduce(hcat, net.pos), net.graph)
-end
-
 function topological_genome(net::CrystalNet, skipminimize=false)
+    if !allunique(net.pos)
+        throw(ArgumentError("""The net is unstable, hence it cannot be analyzed."""))
+    end
     if !skipminimize
         net = minimize(net)
     end
@@ -760,7 +755,38 @@ function topological_genome(net::CrystalNet, skipminimize=false)
     # return ret
 end
 
-function reckognize_topology(genome::AbstractString)
-    get(CRYSTAL_NETS_ARCHIVE, genome, nothing)
+function reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
+    get(arc, genome, "UNKNOWN")
 end
-reckognize_topology(graph::PeriodicGraph3D) = reckognize_topology(string(graph))
+function reckognize_topology(graph::PeriodicGraph3D, arc=CRYSTAL_NETS_ARCHIVE)
+    reckognize_topology(string(graph), arc)
+end
+
+function reckognize_topologies(path; ignore_atoms=())
+    ret = Dict{String,String}()
+    failed = Dict{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}()
+    newarc = copy(CRYSTAL_NETS_ARCHIVE)
+    @threads for f in readdir(path)
+        name = first(splitext(f))
+        genome::String = try
+            string(topological_genome(CrystalNet(parse_chemfile(path*f; ignore_atoms))))
+        catch e
+            if e isa InterruptException ||
+              (e isa TaskFailedException && e.task.result isa InterruptException)
+                rethrow()
+            end
+            failed[name] = (e, catch_backtrace())
+            ""
+        end
+        if !isempty(genome)
+            id = reckognize_topology(genome, newarc)
+            if id == "UNKNOWN"
+                newarc[genome] = name
+                ret[name] = genome
+            else
+                ret[name] = id
+            end
+        end
+    end
+    return ret, failed
+end

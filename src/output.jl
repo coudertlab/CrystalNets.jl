@@ -202,6 +202,7 @@ end
 
 function export_cgd(file, c::Crystal)
     mkpath(splitdir(file)[1])
+    invmat = Float64.(inv(c.cell.mat))
     open(file, write=true) do f
         println(f, "CRYSTAL\n")
         margin = 1
@@ -212,17 +213,17 @@ function export_cgd(file, c::Crystal)
         println(f, "\tCELL\t", _a, ' ', _b, ' ', _c, ' ', α, ' ', β, ' ', γ, ' ')
         println(f, "\tATOM")
         to_revisit = Int[]
-        for i in 1:length(c.ids)
-            # c.ids[i] ∈ (@view c.ids[to_revisit]) && continue
+        for i in 1:length(c.types)
             push!(to_revisit, i)
-            println(f, "\t\t", i, ' ', degree(c.graph, i), ' ', c.pos[1,i], ' ',
-                    c.pos[2,i], ' ', c.pos[3,i])
+            pos = invmat * c.pos[:,i]
+            println(f, "\t\t", i, ' ', degree(c.graph, i), ' ', pos[1], ' ',
+                    pos[2], ' ', pos[3])
         end
         println(f, "\tEDGE")
         for i in to_revisit
             for e in neighbors(c.graph, i)
                 e.v < i && continue
-                dest = c.pos[:,e.v] .+ e.ofs
+                dest = invmat * c.pos[:,e.v] .+ e.ofs
                 println(f, "\t\t", i, '\t', dest[1], ' ', dest[2], ' ', dest[3])
             end
         end
@@ -252,6 +253,7 @@ function export_cgd(file, g::PeriodicGraph)
         println(f, "END\n")
     end
 end
+export_cgd(file, c::CrystalNet) = export_cgd(file, c.graph)
 
 
 function export_clusters(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tempname()))
@@ -270,7 +272,7 @@ function export_clusters(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tem
         # resid = crystal.clusters.attributions[i]
         atom = Chemfiles.Atom(string(crystal.clusters.classes[crystal.clusters.attributions[i]]))
         Chemfiles.set_type!(atom, string(crystal.types[i]))
-        Chemfiles.add_atom!(frame, atom, collect(Float64.(crystal.cell.mat * (crystal.pos[:,i] .- recenter))))
+        Chemfiles.add_atom!(frame, atom, collect(Float64.(crystal.pos[:,i] .- recenter)))
         # Chemfiles.add_atom!(residues[resid], i)
     end
     for e in edges(crystal.graph)
@@ -291,10 +293,9 @@ end
 Export the current archive to the specified path.
 """
 function export_arc(path, empty=false, arc=CRYSTAL_NETS_ARCHIVE)
-    major = CRYSTAL_NETS_VERSION.major
-    minor = CRYSTAL_NETS_VERSION.minor
+    mkpath(splitdir(path)[1])
     open(path, "w") do f
-        println(f, "Made by CrystalNets.jl v$major.$minor")
+        println(f, "Made by CrystalNets.jl v$CRYSTAL_NETS_VERSION")
         if !empty
             println(f)
             pairs = sort(collect(arc); by=last)
