@@ -38,6 +38,4 @@ empty!(ARGS)
 push!(ARGS, "--help")
 CrystalNets.julia_main()
 
-CrystalNets.reckognize_topologies("/home/liozou/Documents/MOFscripts/cif/aluminophosphates/alpo-cif/"; ignore_atoms=(:N,));
-
 include(joinpath(@__DIR__, "..", "test", "runtests.jl"))
