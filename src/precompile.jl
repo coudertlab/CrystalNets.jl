@@ -167,9 +167,11 @@ function _precompile_()
     Base.precompile(Tuple{typeof(setindex!),Dict{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}},Tuple{ArgumentError, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}},String})
     Base.precompile(Tuple{typeof(string),Int128,String,Vararg{Any, N} where N})
     Base.precompile(Tuple{typeof(vcat),Vector{Expr},Vector{Expr}})
-    let fbody = try __lookup_kwbody__(which(Base.print_within_stacktrace, (IOContext{Base.TTY},String,Vararg{Any, N} where N,))) catch missing end
-        if !ismissing(fbody)
-            precompile(fbody, (Symbol,Bool,typeof(Base.print_within_stacktrace),IOContext{Base.TTY},String,Vararg{Any, N} where N,))
+    @static if VERSION >= v"1.6-"
+        let fbody = try __lookup_kwbody__(which(Base.print_within_stacktrace, (IOContext{Base.TTY},String,Vararg{Any, N} where N,))) catch missing end
+            if !ismissing(fbody)
+                precompile(fbody, (Symbol,Bool,typeof(Base.print_within_stacktrace),IOContext{Base.TTY},String,Vararg{Any, N} where N,))
+            end
         end
     end
     let fbody = try __lookup_kwbody__(which(all, (Function,Vector{String},))) catch missing end
