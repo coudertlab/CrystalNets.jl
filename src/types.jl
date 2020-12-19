@@ -684,16 +684,19 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGr
     if isempty(dimensions)
         return CrystalNet{Rational{Bool}}(cell, types, graph, Matrix{Rational{Bool}}(undef, 3, 0))
     end
+    if !haskey(dimensions, 3)
+        error("The input does not contain a 3D crystal.")
+    end
     if length(dimensions) > 1 || only(keys(dimensions)) != 3
-        @ifwarn @warn "Presence of periodic structures with a periodicity different than 3. At the moment, all substructures with periodicity other than 3 will be ignored"
-        vmap = trim_crystalnet!(graph, types, dimensions[3], true)
+        @ifwarn @warn "Presence of periodic structures with a periodicity different than 3. At the moment, all substructures with periodicity other than 3 will be ignored."
+        vmap = trim_crystalnet!(graph, types, get(dimensions, 3, Vector{Int}[]), true)
         types = types[vmap]
         dimensions = PeriodicGraphs.dimensionality(graph)
     end
+    @assert !isempty(get(dimensions, 3, Vector{Int}[]))
     dim3 = dimensions[3]
-    @assert length(dim3) > 0
     if length(dim3) > 1
-        error("Multiple entertwined tridimensional structures. This is not currently handled")
+        error("Multiple entertwined tridimensional structures. This is not currently handled.")
     end
     @assert sort!(only(dim3)) == collect(1:nv(graph))
     placement = equilibrium(graph)
