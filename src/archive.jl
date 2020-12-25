@@ -44,9 +44,8 @@ function validate_archive(custom_arc)::Dict{String,String}
                 @info "Keys will be converted to the topological genome used by CrystalNets. This may take a while."
                 arc = Dict{String,String}()
                 Threads.@threads for (key, id) in collect(parsed)
-                    PeriodicGraph(key) isa PeriodicGraph3D || continue # TODO should eventually be removed
                     genome::String = try
-                        string(topological_genome(PeriodicGraph3D(key)))
+                        topological_genome(PeriodicGraph(key))
                     catch e
                         if e isa InterruptException ||
                           (e isa TaskFailedException && e.task.result isa InterruptException)
@@ -80,14 +79,13 @@ function validate_archive(custom_arc)::Dict{String,String}
 end
 
 """
-    clean_default_archive!(custom_arc=nothing; validate=true, refresh=true)
+    clean_default_archive!(custom_arc; validate=true, refresh=true)
 
-Erase the default archive used by CrystalNets.jl to reckognize known topologies.
+Erase the default archive used by CrystalNets.jl to reckognize known topologies
+and replace it with a new one from the file located at `custom_arc`.
 
-If no parameter is provided, the new default archive is the RCSR Systre archive.
-Otherwise it is replaced by the file located at `custom_arc`. In this case, the
-`validate` parameter controls whether the new file is checked and converted to a
-format usable by CrystalNets.jl. If unsure, leave it set.
+The `validate` parameter controls whether the new file is checked and converted
+to a format usable by CrystalNets.jl. If unsure, leave it set.
 
 The `refresh` optional parameter controls whether the current archive should be
 replaced by the new default one.
@@ -101,24 +99,21 @@ replaced by the new default one.
     See also `refresh_current_archive!` for similar uses.
 
 !!! warning
-    Using an invalid archive will make CrystalNets.jl unusable. If this happens,
-    simply run `CrystalNets.clean_default_archive!()` to revert to the RCSR Systre
-    default archive.
+    The previous default archive cannot be recovered afterwards, so make sure to
+    keep a copy if necessary. The default archive is the set of ".arc" files located
+    at $arc_location.
 
 See also `add_to_current_archive!`, `change_current_archive!`, `refresh_current_archive!`,
 `set_default_archive!`, `empty_default_archive!`
 """
-function clean_default_archive!(custom_arc=nothing; validate=true, refresh=true)
-    rm(arc_location; force=true)
-    if custom_arc isa Nothing
-        cp(joinpath(@__DIR__, "..", "deps", "RCSR.arc"), arc_location)
+function clean_default_archive!(custom_arc=nothing; validate=true, refresh=true, name="new")
+    rm(arc_location; recursive=true)
+    mkdir(arc_location)
+    if validate
+        arc = validate_archive(custom_arc)
+        export_arc(joinpath(arc_location, name*".arc"), false, arc)
     else
-        if validate
-            arc = validate_archive(custom_arc)
-            export_arc(arc_location, false, arc)
-        else
-            cp(custom_arc, arc_location)
-        end
+        cp(custom_arc, arc_location)
     end
     if refresh
         refresh_current_archive!()
@@ -224,7 +219,7 @@ See also `add_to_current_archive!`, `change_current_archive!`, `clean_default_ar
 `set_default_archive!`, `empty_default_archive!`
 """
 function refresh_current_archive!()
-    _change_current_archive!(last(parse_arc(arc_location)))
+    _change_current_archive!(last(parse_arcs(arc_location)))
 end
 
 
@@ -286,34 +281,59 @@ end
     make_archive(path, destination=nothing)
 
 Make an archive from the files located in the directory given by `path` and export
-it to `destination`, if specified.
+it to `destination`, if specified. Each file of the directory should correspond
+to a unique topology: if a topology is encountered multiple times, it will be assigned
+the name of the latest file that bore it.
 
 The archive can then be used with `change_current_archive!(destination; validate=false)`
 for instance.
+
+See also `reckognize_topologies` if you want to compare the topologies of the files
+in a directory with those of the current archive.
 """
 function make_archive(path, destination)
     arc = Dict{String,String}()
     Threads.@threads for f in readdir(path; join=false)
         name = splitext(f)[1]
         print("Handling "*name*"... ")
-        genome::String = try
-            x = topological_genome(CrystalNet(parse_chemfile(path*f)))
+        flag = false
+        flagerror = Ref{Any}(Tuple{Vector{Int},String}[])
+        genomes::Vector{Tuple{Vector{Int},String}} = try
+            x = topological_genome(CrystalNetGroup(parse_chemfile(path*f)))
             println(name*" done.")
-            string(x)
+            x
         catch e
+            flag = true
+            flagerror[] = e
+            Tuple{Vector{Int},String}[]
+        end
+        for (i, (vmap, genome)) in enumerate(genomes)
+            if startswith(genome, "unstable")
+                flag = true
+                push!(flagerror[]::Vector{Vector{Int}}, (vmap, genome))
+                continue
+            end
+            arc[genome] = length(genomes) == 1 ? name : (name * '_' * string(i))
+        end
+        if flag
+            e = flagerror[]
             if e isa InterruptException ||
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            println(stderr, "Failed for file "*f*" with error:")
-            showerror(stderr, e)
-            Base.display_error(stderr, e, catch_backtrace())
-            println(stderr)
-            "DISREGARD"
+            if e isa Vector{Tuple{Vector{Int},String}}
+                for (vmap, instability) in e
+                    println(stderr, "The component of file ", f, " containing atoms ",
+                                    vmap, " was found to be ", instability, '.')
+                end
+            else
+                println(stderr, "Failed for file ", f, " with error:")
+                showerror(stderr, e)
+                Base.display_error(stderr, e, catch_backtrace())
+                println(stderr)
+            end
         end
-        arc[string(genome)] = name
     end
-    delete!(arc, "DISREGARD")
     if !(destination isa Nothing)
         export_arc(destination, false, arc)
     end

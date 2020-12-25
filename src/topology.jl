@@ -1,19 +1,30 @@
-function check_dimensionality(c::CrystalNet{T}) where T
+struct UnstableNetException <: Exception end
+function Base.showerror(io::IO, e::UnstableNetException)
+    print(io, "The net is unstable, hence it cannot be analyzed.")
+end
+
+function check_dimensionality(c::CrystalNet{D,T}) where {D,T}
     edgs = [c.pos[dst(e)] .+ PeriodicGraphs.ofs(e) .- c.pos[src(e)] for e in edges(c.graph)]
     sort!(edgs)
     unique!(edgs)
     mat = reduce(hcat, edgs)
-    if !isrank3(mat)
-        throw(ArgumentError("The input net does not have dimensionality 3, so it cannot be analyzed."))
+    if D == 3 && !isrank3(mat)
+        throw(ArgumentError("the input net does not have dimensionality 3, so it cannot be analyzed."))
+    elseif D == 2 && !isrank2(mat)
+        throw(ArgumentError("the input net does not have dimensionality 2, so it cannot be analyzed."))
+    elseif D == 1 && !isrank1(mat)
+        throw(ArgumentError("the input net does not have dimensionality 1, so it cannot be analyzed."))
+    else
+        throw(AssertionError("1 ≤ D ≤ 3"))
     end
     nothing
 end
 
-function check_valid_translation(c::CrystalNet{T}, t::SVector{3,<:Rational{<:Integer}}, r=nothing) where T
+function check_valid_translation(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, r=nothing) where {D,T}
     U = soft_widen(T)
     n = length(c.pos)
     vmap = Int[]
-    offsets = SVector{3,Int}[]
+    offsets = SVector{D,Int}[]
     for k in 1:n
         curr_pos = c.pos[k]
         transl = U.(isnothing(r) ? curr_pos : (r * curr_pos)) .+ t
@@ -36,18 +47,18 @@ function check_valid_translation(c::CrystalNet{T}, t::SVector{3,<:Rational{<:Int
         src = vmap[e.src]
         dst = vmap[e.dst.v]
         newofs = (isnothing(r) ? e.dst.ofs : r * e.dst.ofs) .+ offsets[e.dst.v] .- offsets[e.src]
-        has_edge(c.graph, PeriodicGraphs.unsafe_edge{3}(src, dst, newofs)) || return nothing
+        has_edge(c.graph, PeriodicGraphs.unsafe_edge{D}(src, dst, newofs)) || return nothing
     end
     return vmap
 end
 
-function possible_translations(c::CrystalNet{T}) where T
+function possible_translations(c::CrystalNet{D,T}) where {D,T}
     n = length(c.pos)
-    ts = Tuple{Int, Int, Int, SVector{3,T}}[]
+    ts = Tuple{Int, Int, Int, SVector{D,T}}[]
     sortedpos = copy(c.pos)
     origin = popfirst!(sortedpos)
     @assert iszero(origin)
-    sort!(SVector{3,widen(soft_widen(widen(T)))}.(sortedpos), by=norm)
+    sort!(SVector{D,widen(soft_widen(widen(T)))}.(sortedpos), by=norm)
     for t in sortedpos
         @assert t == back_to_unit.(t)
         max_den, i_max_den = findmax(denominator.(t))
@@ -66,14 +77,97 @@ function find_first_valid_translations(c::CrystalNet)
     return nothing
 end
 
-function find_all_valid_translations(c::CrystalNet{T}) where T
-    ret = NTuple{3, Vector{Tuple{Int, Int, SVector{3,T}}}}(([], [], []))
+function find_all_valid_translations(c::CrystalNet{D,T}) where {D,T}
+    ret = NTuple{D, Vector{Tuple{Int, Int, SVector{D,T}}}}(ntuple(_->[], Val(D)))
     for (nz, i_max_den, max_den, t) in possible_translations(c)
         !isnothing(check_valid_translation(c, t)) && push!(ret[nz+1], (i_max_den, max_den, t))
     end
     return ret
 end
 
+
+function minimal_volume_matrix(translations::Tuple{T}) where T
+    nz0 = translations[]
+    denmax = 1//1
+    imax = 0
+    for j in 1:length(nz0)
+        _, den, _ = nz0[j]
+        if den > denmax
+            imax = j
+            denmax = den
+        end
+    end
+    if imax == 0
+        push!(nz0, (1, 1, [1]))
+        imax = length(nz0)
+    end
+    _nz0 = [nz0[imax]]
+    empty!(nz0)
+    append!(nz0, _nz0)
+
+    n = length(all)
+    detmin = 1//1
+    best = 0
+    @inbounds for i in 1:n
+        d = nz0[i][3][]
+        d == 0 && continue
+        if d < detmin
+            detmin = d
+            best = i
+        end
+    end
+    @assert !iszero(best)
+    ret = hcat(nz0[best][3])
+    if ret[] < 0
+        ret = hcat(.-nz0[best][3])
+    end
+    return ret
+end
+
+function minimal_volume_matrix(translations::Tuple{T,T}) where T
+    nz0, nz1 = translations
+    denmax = [1//1, 1//1]
+    imax = [0, 0]
+    for j in 1:length(nz1)
+        i, den, _ = nz1[j]
+        if den > denmax[i]
+            imax[i] = j
+            denmax[j] = den
+        end
+    end
+    for j in 1:2
+        if imax[j] == 0
+            push!(nz1, (j, 1, [j==1, j==2]))
+            imax[j] = length(nz1)
+        end
+    end
+    _nz1 = [nz1[i] for i in imax]
+    empty!(nz1)
+    append!(nz1, _nz1)
+
+    # TODO optimize
+    all = vcat(nz0, nz1)
+    n = length(all)
+    detmin = 1//1
+    best = (0, 0)
+    @inbounds for i in 1:n-1
+        for j in i+1:n
+            d = abs(det(hcat(all[i][3], all[j][3])))
+            d == 0 && continue
+            if d < detmin
+                detmin = d
+                best = (i, j)
+            end
+        end
+    end
+    @assert !any(iszero.(best))
+    i, j = best
+    ret = hcat(all[i][3], all[j][3])
+    if det(ret) < 0
+        ret = hcat(all[i][3], .-all[j][3])
+    end
+    return ret
+end
 
 function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
     nz0, nz1, nz2 = translations
@@ -100,15 +194,15 @@ function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
     # TODO optimize
     all = vcat(nz0, nz1, nz2)
     n = length(all)
-    detmax = 1//1
+    detmin = 1//1
     best = (0, 0, 0)
     @inbounds for i in 1:n-2
         for j in i+1:n-1
             for k in j+1:n
                 d = abs(det(hcat(all[i][3], all[j][3], all[k][3])))
                 d == 0 && continue
-                if d < detmax
-                    detmax = d
+                if d < detmin
+                    detmin = d
                     best = (i, j, k)
                 end
             end
@@ -123,10 +217,16 @@ function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
     return ret
 end
 
-function reduce_with_matrix(c::CrystalNet{<:Rational{T}}, mat) where T
+function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
     U = soft_widen(widen(T))
     lengths = degree(c.graph)
-    cell = Cell(c.cell, c.cell.mat * mat)
+    if D == 3
+        cell = Cell(c.cell, c.cell.mat * mat)
+    else
+        _mat = SizedMatrix{3,3,BigFloat}(LinearAlgebra.I)
+        _mat[1:D,1:D] .= mat
+        cell = Cell(c.cell, c.cell.mat * _mat)
+    end
     imat = soft_widen(T).(inv(mat)) # The inverse should only have integer coefficients
     poscol = (U.(imat),) .* c.pos
 
@@ -138,7 +238,7 @@ function reduce_with_matrix(c::CrystalNet{<:Rational{T}}, mat) where T
     i = popfirst!(I_sort)
     @assert iszero(offset[i])
     I_kept = Int[i]
-    sortedcol = SVector{3,Rational{U}}[poscol[i]]
+    sortedcol = SVector{D,Rational{U}}[poscol[i]]
     for i in I_sort
         x = poscol[i]
         if x != sortedcol[end]
@@ -146,7 +246,7 @@ function reduce_with_matrix(c::CrystalNet{<:Rational{T}}, mat) where T
             push!(sortedcol, x)
         end
     end
-    edges = PeriodicEdge3D[]
+    edges = PeriodicEdge{D}[]
     for i in 1:length(I_kept)
         ofs_i = offset[I_kept[i]]
         for neigh in neighbors(c.graph, I_kept[i])
@@ -157,7 +257,7 @@ function reduce_with_matrix(c::CrystalNet{<:Rational{T}}, mat) where T
             push!(edges, (i, j, ofs_x - ofs_i .+ imat*neigh.ofs))
         end
     end
-    graph = PeriodicGraph3D(edges)
+    graph = PeriodicGraph{D}(edges)
     @assert degree(graph) == lengths[I_kept]
     return CrystalNet(cell, c.types[I_kept], sortedcol, graph)
 end
@@ -173,20 +273,20 @@ function minimize(net::CrystalNet)
 end
 
 function findfirstbasis(offsets)
-    newbasis = nf3D(offsets)
+    newbasis = normal_basis_rational(offsets)
     invbasis = inv(newbasis)
     intcoords = [Int.(invbasis * x) for x in offsets]
     return newbasis, intcoords
 end
 
-function findbasis(edges::Vector{Tuple{Int,Int,SVector{3,T}}}) where T
+function findbasis(edges::Vector{Tuple{Int,Int,SVector{D,T}}}) where {D,T}
     m = length(edges)
-    positivetrans = SVector{3,T}[]
+    positivetrans = SVector{D,T}[]
     map_to_ofs = Vector{Int}(undef, m)
     tmp_map = Int[]
     for i in 1:m
         trans = last(edges[i])
-        c = cmp(trans, zero(SVector{3,Int}))
+        c = cmp(trans, zero(SVector{D,Int}))
         if iszero(c)
             map_to_ofs[i] = 0
         elseif c < 0
@@ -199,8 +299,8 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{3,T}}}) where T
     end
 
     I_sort = sortperm(positivetrans)
-    uniques = SVector{3,T}[]
-    last_trans = zero(SVector{3,T})
+    uniques = SVector{D,T}[]
+    last_trans = zero(SVector{D,T})
 
     for j in 1:length(positivetrans)
         i = tmp_map[I_sort[j]]
@@ -214,14 +314,14 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{3,T}}}) where T
 
     basis, unique_coords = findfirstbasis(uniques)
 
-    newedges = Vector{PeriodicEdge3D}(undef, m)
+    newedges = Vector{PeriodicEdge{D}}(undef, m)
     for j in 1:m
         i = map_to_ofs[j]
         src, dst, _ = edges[j]
         if i == 0
-            newedges[j] = PeriodicEdge3D(src, dst, zero(SVector{3,Int}))
+            newedges[j] = PeriodicEdge{D}(src, dst, zero(SVector{D,Int}))
         else
-            newedges[j] = PeriodicEdge3D(src, dst, sign(i) .* unique_coords[abs(i)])
+            newedges[j] = PeriodicEdge{D}(src, dst, sign(i) .* unique_coords[abs(i)])
         end
     end
 
@@ -231,28 +331,28 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{3,T}}}) where T
 end
 
 
-function candidate_key(net::CrystalNet{T}, u, basis, minimal_edgs) where T
+function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
     V = widen(widen(T))
     n = nv(net.graph)
     h = 2 # Next node to assign
     origin = net.pos[u]
-    newpos = Vector{SVector{3,V}}(undef, n) # Positions of the kept representatives
-    newpos[1] = zero(SVector{3,V})
-    offsets = Vector{SVector{3,Int}}(undef, n)
+    newpos = Vector{SVector{D,V}}(undef, n) # Positions of the kept representatives
+    newpos[1] = zero(SVector{D,V})
+    offsets = Vector{SVector{D,Int}}(undef, n)
     # Offsets of the new representatives with respect to the original one, in the original basis
-    offsets[1] = zero(SVector{3,Int})
+    offsets[1] = zero(SVector{D,Int})
     vmap = Vector{Int}(undef, n) # Bijection from the old to the new node number
     vmap[1] = u
     rev_vmap = zeros(Int, n) # inverse of vmap
     rev_vmap[u] = 1
     flag_bestedgs = false # Marks whether the current list of edges is lexicographically
     # below the best known one. If not by the end of the algorithm, return false
-    edgs = Tuple{Int,Int,SVector{3,V}}[]
+    edgs = Tuple{Int,Int,SVector{D,V}}[]
     mat = V.(inv(widen(V).(basis)))
     for t in 1:n # t is the node being processed
         neighs = neighbors(net.graph, vmap[t])
         ofst = offsets[t]
-        pairs = Vector{Tuple{SVector{3,V},Int}}(undef, length(neighs))
+        pairs = Vector{Tuple{SVector{D,V},Int}}(undef, length(neighs))
         for (i,x) in enumerate(neighs)
             pairs[i] = (V.(mat*(net.pos[x.v] .+ x.ofs .- origin .+ ofst)), x.v)
         end
@@ -274,8 +374,8 @@ function candidate_key(net::CrystalNet{T}, u, basis, minimal_edgs) where T
                 vmap[h] = v
                 rev_vmap[v] = h
                 newpos[h] = coordinate
-                offsets[h] = SVector{3,Int}(bigbasis * coordinate .+ origin .- net.pos[v])
-                push!(edgs, (t, h, zero(SVector{3,T})))
+                offsets[h] = SVector{D,Int}(bigbasis * coordinate .+ origin .- net.pos[v])
+                push!(edgs, (t, h, zero(SVector{D,T})))
                 h += 1
             else
                 realofs = coordinate .- newpos[idx]
@@ -285,7 +385,7 @@ function candidate_key(net::CrystalNet{T}, u, basis, minimal_edgs) where T
             if !flag_bestedgs
                 j = length(edgs)
                 c = cmp(minimal_edgs[j], edgs[j])
-                c < 0 && return (Int[], Tuple{Int,Int,SVector{3,V}}[])
+                c < 0 && return (Int[], Tuple{Int,Int,SVector{D,V}}[])
                 c > 0 && (flag_bestedgs = true)
             end
         end
@@ -293,7 +393,7 @@ function candidate_key(net::CrystalNet{T}, u, basis, minimal_edgs) where T
     @assert allunique(edgs)
     if !flag_bestedgs
         @assert minimal_edgs == edgs
-        return (Int[], Tuple{Int,Int,SVector{3,V}}[])
+        return (Int[], Tuple{Int,Int,SVector{D,V}}[])
     end
     return vmap, edgs
 end
@@ -310,61 +410,67 @@ Also returns the map from vertices to an identifier such that all vertices with
 the same identifier are symmetric images of one another, as well as a list of
 unique representative for each symmetry class.
 """
-function partition_by_coordination_sequence(graph, vmaps=Vector{Int}[])
+function partition_by_coordination_sequence(graph, vmaps=nothing)
     # First, union-find on the symmetries to avoid computing useless coordination sequences
     n = nv(graph)
     unionfind = collect(1:n)
-    for vmap in vmaps
-        for (i,j) in enumerate(vmap)
-            i == j && continue
-            if i > j
-                i, j = j, i
-            end
-            repri = i
-            while repri != unionfind[repri]
-                repri = unionfind[repri]
-            end
-            reprj = j
-            while reprj != unionfind[reprj]
-                reprj = unionfind[reprj]
-            end
-            repri == reprj && continue
-            if repri < reprj
-                unionfind[j] = repri
-            else
-                unionfind[i] = reprj
+    if vmaps isa Nothing || isempty(vmaps) # Absence of symmetry
+        unique_reprs = Vector{Int}[Int[i] for i in 1:n]
+        cat_map = Int[i for i in 1:n]
+        categories = Vector{Int}[[i] for i in 1:n]
+    else
+        for vmap in vmaps
+            for (i,j) in enumerate(vmap)
+                i == j && continue
+                if i > j
+                    i, j = j, i
+                end
+                repri = i
+                while repri != unionfind[repri]
+                    repri = unionfind[repri]
+                end
+                reprj = j
+                while reprj != unionfind[reprj]
+                    reprj = unionfind[reprj]
+                end
+                repri == reprj && continue
+                if repri < reprj
+                    unionfind[j] = repri
+                else
+                    unionfind[i] = reprj
+                end
             end
         end
-    end
 
-    cat_map = zeros(Int, n)
-    unique_reprs = Vector{Int}[]
-    categories = Vector{Int}[]
-    for i in 1:n
-        repri = i
-        if repri != unionfind[repri]
-            repri = unionfind[repri]
-            while repri != unionfind[repri]
+        cat_map = zeros(Int, n)
+        unique_reprs = Vector{Int}[]
+        categories = Vector{Int}[]
+        for i in 1:n
+            repri = i
+            if repri != unionfind[repri]
                 repri = unionfind[repri]
+                while repri != unionfind[repri]
+                    repri = unionfind[repri]
+                end
+                descent = i
+                while descent != unionfind[descent]
+                    tmp = unionfind[descent]
+                    unionfind[descent] = repri
+                    descent = tmp
+                end
+                @assert descent == repri
             end
-            descent = i
-            while descent != unionfind[descent]
-                tmp = unionfind[descent]
-                unionfind[descent] = repri
-                descent = tmp
+            cat = cat_map[repri]
+            if iszero(cat)
+                push!(unique_reprs, [i])
+                push!(categories, [i])
+                cat = length(categories)
+                cat_map[repri] = cat
+            else
+                push!(categories[cat], i)
             end
-            @assert descent == repri
+            cat_map[i] = cat
         end
-        cat = cat_map[repri]
-        if iszero(cat)
-            push!(unique_reprs, [i])
-            push!(categories, [i])
-            cat = length(categories)
-            cat_map[repri] = cat
-        else
-            push!(categories[cat], i)
-        end
-        cat_map[i] = cat
     end
 
     PeriodicGraphs.graph_width!(graph) # setup for the computation of coordination sequences
@@ -413,26 +519,34 @@ Find a set of pairs (v, basis) that are candidates for finding the key with
 candidate_key(net, v, basis).
 The returned set is independent of the representation of the graph used in net.
 """
-function find_candidates(net::CrystalNet{T}) where T
-    rotations, vmaps, hasmirror = find_symmetries(net)
-    @assert length(rotations) == length(vmaps)
-    categories, symmetry_map, unique_reprs = partition_by_coordination_sequence(net.graph, vmaps)
+function find_candidates(net::CrystalNet{D,T}) where {D,T}
+    L = D*D
+    U = soft_widen(T)
+    if D == 3
+        rotations, vmaps, _ = find_symmetries(net)
+        @assert length(rotations) == length(vmaps)
+        categories, symmetry_map, unique_reprs = partition_by_coordination_sequence(net.graph, vmaps)
+    else
+        categories, symmetry_map, unique_reprs = partition_by_coordination_sequence(net.graph)
+    end
+
     category_map = Vector{Int}(undef, nv(net.graph))
     for (i, cat) in enumerate(categories)
         for j in cat
             category_map[j] = i
         end
     end
-    @assert sort.(categories) == sort.(first(partition_by_coordination_sequence(net.graph, [])))
-    candidates = Dict{Int,Vector{SMatrix{3,3,soft_widen(T),9}}}()
+    @assert sort.(categories) == sort.(first(partition_by_coordination_sequence(net.graph)))
+    candidates = Dict{Int,Vector{SMatrix{D,D,U,L}}}()
     for reprs in unique_reprs
         # First, we try to look for triplet of edges all starting from the same vertex within a category
-        degree(net.graph, first(reprs)) <= 3 && continue
+        degree(net.graph, first(reprs)) <= D && continue
         candidates = find_candidates_onlyneighbors(net, reprs, category_map)
         !isempty(candidates) && break
     end
-    if isempty(candidates)
-        # If we arrive at this point, it means that all vertices only have coplanar neighbors.
+    if D >= 3 && isempty(candidates)
+        # If we arrive at this point, it means that all vertices only have coplanar neighbors
+        # (in the case D == 3, it should be impossible for D < 3).
         # Then we look for all triplets of edges two of which start from a vertex
         # and one does not, stopping and the first pair of categories for which this
         # set of candidates is non-empty.
@@ -445,14 +559,23 @@ function find_candidates(net::CrystalNet{T}) where T
     end
     if isempty(candidates)
         if !allunique(net.pos)
-            throw(ArgumentError("""The net is unstable, hence it cannot be analyzed."""))
+            throw(UnstableNetException())
         else
             check_dimensionality(net)
             error("Internal error: no candidate found.")
         end
     end
-    @assert !isempty(candidates)
-    return extract_through_symmetry(candidates, vmaps, rotations), category_map
+    if D == 3
+        return extract_through_symmetry(candidates, vmaps, rotations), category_map
+    else
+        flattened_candidates = Pair{Int,SMatrix{D,D,U,L}}[]
+        for (i, mats) in candidates
+            for mat in mats
+                push!(flattened_candidates, i => SMatrix{D,D,U,L}(mat))
+            end
+        end
+        return flattened_candidates, category_map
+    end
 end
 
 function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}, vmaps, rotations) where T
@@ -479,7 +602,7 @@ function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}
     return unique_candidates
 end
 
-function find_candidates_onlyneighbors(net::CrystalNet{T}, candidates_v, category_map) where T
+function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, category_map) where T
     U = soft_widen(T)
     deg = degree(net.graph, first(candidates_v)) # The degree is the same for all vertices of the same category
     initial_candidates = Pair{Int,Tuple{Matrix{U},Vector{Int}}}[]
@@ -501,9 +624,9 @@ function find_candidates_onlyneighbors(net::CrystalNet{T}, candidates_v, categor
     end
 
     candidates = Dict{Int,Vector{SMatrix{3,3,U,9}}}()
+    isempty(initial_candidates) && return candidates
     current_cats::SizedVector{3,Int} = SizedVector{3,Int}(fill(length(category_map), 3))
     current_ordertype::Int = 1
-    isempty(initial_candidates) && return candidates
 
     @threads for (v, (mat, cats)) in initial_candidates
         _, n = size(mat)
@@ -512,12 +635,12 @@ function find_candidates_onlyneighbors(net::CrystalNet{T}, candidates_v, categor
         ordertype = current_ordertype
         mincats = copy(current_cats)
         unlock(fastlock)
-        for _i in 1:n, _j in (_i+1):n, _k in (_j+1):n
+        for _i in 1:(n-2), _j in (_i+1):(n-1), _k in (_j+1):n
             m = SMatrix{3,3,widen(T),9}(mat[:,[_i,_j,_k]])
             issingular(m) && continue
             orders = SVector{3,Int}[]
             subcats = cats[SVector{3,Int}(_i, _j, _k)]
-            reorder = begin
+            reorder = SVector{3,Int}(begin
                 cmp23 = subcats[2] >= subcats[3]
                 cmp13 = subcats[1] >= subcats[3]
                 if subcats[1] >= subcats[2]
@@ -525,8 +648,8 @@ function find_candidates_onlyneighbors(net::CrystalNet{T}, candidates_v, categor
                 else
                     cmp23 ? (cmp13 ? (3,1,2) : (1,3,2)) : (1,2,3)
                 end
-            end
-            subcats = subcats[SVector{3,Int}(reorder)]
+            end)
+            subcats = subcats[reorder]
             if subcats[1] == subcats[3]
                 (ordertype != 1 || mincats[1] < subcats[1]) && continue
                 if mincats[1] > subcats[1]
@@ -585,8 +708,155 @@ function find_candidates_onlyneighbors(net::CrystalNet{T}, candidates_v, categor
     return candidates
 end
 
+function find_candidates_onlyneighbors(net::CrystalNet2D{T}, candidates_v, category_map) where T
+    U = soft_widen(T)
+    deg = degree(net.graph, first(candidates_v)) # The degree is the same for all vertices of the same category
+    initial_candidates = Pair{Int,Tuple{Matrix{U},Vector{Int}}}[]
+    fastlock = SpinLock()
+    @threads for v in candidates_v
+        a = Matrix{U}(undef, 2, deg)
+        cats = Vector{Int}(undef, deg)
+        posi = net.pos[v]
+        for (j, x) in enumerate(neighbors(net.graph, v))
+            a[:,j] .= net.pos[x.v] .+ x.ofs .- posi
+            cats[j] = category_map[x.v]
+        end
+        if isrank2(a)
+            pair = v => (a, cats)
+            lock(fastlock) do
+                push!(initial_candidates, pair)
+            end
+        end
+    end
 
-function find_candidates_fallback(net::CrystalNet{T}, reprs, othercats, category_map) where T
+    candidates = Dict{Int,Vector{SMatrix{2,2,U,4}}}()
+    isempty(initial_candidates) && return candidates
+    current_cats::SizedVector{2,Int} = SizedVector{2,Int}(fill(length(category_map), 2))
+    current_ordertype::Int = 1
+
+    @threads for (v, (mat, cats)) in initial_candidates
+        _, n = size(mat)
+        matv = SMatrix{2,2,U,4}[]
+        lock(fastlock)
+        ordertype = current_ordertype
+        mincats = copy(current_cats)
+        unlock(fastlock)
+        for _i in 1:(n-1), _j in (_i+1):n
+            m = SMatrix{2,2,widen(T),4}(mat[:,[_i,_j]])
+            issingular(m) && continue
+            orders = SVector{2,Int}[]
+            subcats = cats[SVector{2,Int}(_i, _j)]
+            reorder = SVector{2,Int}(subcats[1] >= subcats[2] ? (2,1) : (1,2))
+            subcats = subcats[reorder]
+            if subcats[1] == subcats[2]
+                (ordertype != 1 || mincats[1] < subcats[1]) && continue
+                if mincats[1] > subcats[1]
+                    empty!(matv)
+                    mincats = subcats
+                end
+                orders = SVector{2,Int}[(1,2), (2,1)]
+            else
+                ordertype == 2 && mincats < subcats && continue
+                if ordertype != 2 || mincats > subcats
+                    empty!(matv)
+                    ordertype = 2
+                    mincats = subcats
+                end
+                orders = SVector{2,Int}[reorder]
+            end
+            mats = [m[:,o] for o in orders]
+            append!(matv, mats)
+        end
+        if ordertype < current_ordertype || (ordertype == current_ordertype
+                                             && mincats > current_cats)
+            continue # fast-path to avoid unecessary locking
+        end
+
+        lock(fastlock)
+        if ordertype < current_ordertype || (ordertype == current_ordertype
+                                             && mincats > current_cats)
+            unlock(fastlock)
+            continue
+        end
+        if ordertype > current_ordertype || mincats < current_cats
+            empty!(candidates)
+            current_ordertype = ordertype
+            current_cats = mincats
+        end
+        candidates[v] = matv
+        unlock(fastlock)
+    end
+
+    return candidates
+end
+
+function find_candidates_onlyneighbors(net::CrystalNet1D{T}, candidates_v, category_map) where T
+    U = soft_widen(T)
+    deg = degree(net.graph, first(candidates_v)) # The degree is the same for all vertices of the same category
+    initial_candidates = Pair{Int,Tuple{Vector{U},Vector{Int}}}[]
+    fastlock = SpinLock()
+    @threads for v in candidates_v
+        a = Vector{U}(undef, deg)
+        cats = Vector{Int}(undef, deg)
+        posi = net.pos[v][]
+        for (j, x) in enumerate(neighbors(net.graph, v))
+            diff = net.pos[x.v][] + x.ofs[] - posi
+            @assert !iszero(diff)
+            a[j] = diff
+            cats[j] = category_map[x.v]
+        end
+        pair = v => (a, cats)
+        lock(fastlock) do
+            push!(initial_candidates, pair)
+        end
+    end
+
+    candidates = Dict{Int,Vector{SMatrix{1,1,U,1}}}()
+    isempty(initial_candidates) && return candidates
+    current_cat::Int = length(category_map)
+    current_ordertype::Int = 1
+
+    @threads for (v, (mat, cats)) in initial_candidates
+        _, n = size(mat)
+        matv = SMatrix{1,1,U,1}[]
+        lock(fastlock)
+        ordertype = current_ordertype
+        mincat = current_cat
+        unlock(fastlock)
+        for i in 1:n
+            cat = cats[i]
+            mincat < cat && continue
+            if mincat > subcat
+                empty!(matv)
+                mincat = subcat
+            end
+            mats = [m[:,o] for o in orders]
+            append!(matv, [mat[:,[i]]])
+        end
+        if ordertype < current_ordertype || (ordertype == current_ordertype
+                                             && mincat > current_cat)
+            continue # fast-path to avoid unecessary locking
+        end
+
+        lock(fastlock)
+        if ordertype < current_ordertype || (ordertype == current_ordertype
+                                             && mincat > current_cat)
+            unlock(fastlock)
+            continue
+        end
+        if ordertype > current_ordertype || mincat < current_cat
+            empty!(candidates)
+            current_ordertype = ordertype
+            current_cat = mincat
+        end
+        candidates[v] = matv
+        unlock(fastlock)
+    end
+
+    return candidates
+end
+
+function find_candidates_fallback(net::CrystalNet{3,T}, reprs, othercats, category_map) where T
     U = soft_widen(T)
     candidates = Dict{Int,Vector{SMatrix{3,3,U,9}}}(u => [] for u in reprs)
     n = length(category_map)
@@ -656,7 +926,7 @@ function find_candidates_fallback(net::CrystalNet{T}, reprs, othercats, category
     return Dict{Int,Vector{SMatrix{3,3,U,9}}}()
 end
 
-# function parallel_topological_key(net::CrystalNet{T}) where T
+# function parallel_topological_key(net::CrystalNet{D,T}) where {D,T}
 #     candidates = find_candidates(net)
 #     # @show length(candidates)
 #     numthreads = min(nthreads(), length(candidates))
@@ -681,15 +951,15 @@ end
 #     return minimal_basis[j], minimal_vmap[j], minimal_graph[j]
 # end
 
-function topological_key(net::CrystalNet{T}) where T
+function topological_key(net::CrystalNet{D,T}) where {D,T}
     if isempty(net.pos)
-        throw(ArgumentError("The net is empty. This probably indicates that the input is not 3-dimensional."))
+        throw(ArgumentError("the net is empty."))
     end
-    # @assert allunique(net.pos) # FIXME make a more precise check for net stability. Currently fails for sxt
+    @assert allunique(net.pos) # FIXME make a more precise check for net stability. Currently fails for sxt
     candidates, category_map = find_candidates(net)
     v, minimal_basis = popfirst!(candidates)
     n = nv(net.graph)
-    _edgs = [(n + 1, 0, zero(SVector{3,T}))]
+    _edgs = [(n + 1, 0, zero(SVector{D,T}))]
     minimal_vmap, minimal_edgs = candidate_key(net, v, minimal_basis, _edgs)
     for (v, basis) in candidates
         vmap, edgs = candidate_key(net, v, basis, minimal_edgs)
@@ -703,14 +973,8 @@ function topological_key(net::CrystalNet{T}) where T
     end
 
     newbasis, coords = findbasis(minimal_edgs)
-    # @show abs(det(newbasis))
-    if abs(det(newbasis)) != 1
-        # @warn "The input structure does not appear to be connected. Analyzing the first component only."
-        # see for instance "3 1 2 2 0 0 1 2 0 2 0 1 2 0 0 2 1 2 0 0 0"
-        # TODO check that only a disconnected input can yield this.
-    end
 
-    return minimal_basis * newbasis, minimal_vmap, PeriodicGraph3D(n, coords)
+    return minimal_basis * newbasis, minimal_vmap, PeriodicGraph{D}(n, coords)
 end
 
 function find_new_representation(pos, basis, vmap, graph)
@@ -718,27 +982,23 @@ function find_new_representation(pos, basis, vmap, graph)
 end
 
 
-function topological_genome(g::PeriodicGraph3D, skipminimize=true)
-    net = CrystalNet(g)
+function topological_genome(net::CrystalNet, skipminimize=false)::String
     if !allunique(net.pos)
-        throw(ArgumentError("""The net is unstable, hence it cannot be analyzed."""))
+        throw(UnstableNetException())
     end
     if !skipminimize
         net = minimize(net)
     end
-    return last(topological_key(net))
-end
-
-function topological_genome(net::CrystalNet, skipminimize=false)
-    if !allunique(net.pos)
-        throw(ArgumentError("""The net is unstable, hence it cannot be analyzed."""))
+    genome::String = try
+        string(last(topological_key(net)))
+    catch e
+        if !(e isa UnstableNetException)
+            rethrow()
+        end
+        "unstable ($(ndims(net))D)"
     end
-    if !skipminimize
-        net = minimize(net)
-    end
-    basis, vmap, graph = topological_key(net)
 
-    return graph
+    return genome
 
     # return CrystalNet(graph) # TODO remove this temporary bandaid
     # # FIXME CrystalNet(graph).graph != graph so this is invalid !
@@ -755,12 +1015,55 @@ function topological_genome(net::CrystalNet, skipminimize=false)
     # return ret
 end
 
+function topological_genome(g::PeriodicGraph, skipminimize=true)
+    net = CrystalNet(g)
+    return topological_genome(net, skipminimize)
+end
+
+function _loop_group!(ex, id, net, group)
+    for j in 1:length(ex.args)
+        arg = ex.args[j]
+        if arg isa Symbol
+            if arg === :id
+                ex.args[j] = id
+            elseif arg === :net
+                ex.args[j] = net
+            elseif arg === :group
+                ex.args[j] = group
+            end
+        elseif arg isa Expr
+            _loop_group!(arg, id, net, group)
+        end
+    end
+    nothing
+end
+macro loop_group(ex)
+    ret = Expr(:block)
+    for i in 1:3
+        id = Symbol("id", i)
+        net = Symbol("net", i)
+        D = Symbol("D", i)
+        group = :(group.$D)
+        newex = deepcopy(ex)
+        _loop_group!(newex, id, net, group)
+        push!(ret.args, esc(newex))
+    end
+    return ret
+end
+
+function topological_genome(group::CrystalNetGroup, skipminimize=false)
+    ret = Tuple{Vector{Int},String}[]
+    @loop_group for (id, net) in group
+        push!(ret, (id, topological_genome(net, skipminimize)))
+    end
+    return ret
+end
+
 function reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
+    startswith(genome, "unstable") && return genome
     get(arc, genome, "UNKNOWN")
 end
-function reckognize_topology(graph::PeriodicGraph3D, arc=CRYSTAL_NETS_ARCHIVE)
-    reckognize_topology(string(graph), arc)
-end
+
 
 function reckognize_topologies(path; ignore_atoms=())
     ret = Dict{String,String}()
@@ -768,23 +1071,26 @@ function reckognize_topologies(path; ignore_atoms=())
     newarc = copy(CRYSTAL_NETS_ARCHIVE)
     @threads for f in readdir(path)
         name = first(splitext(f))
-        genome::String = try
-            string(topological_genome(CrystalNet(parse_chemfile(path*f; ignore_atoms))))
+        genomes::Vector{Tuple{Vector{Int},String}} = try
+            topological_genome(CrystalNetGroup(parse_chemfile(path*f; ignore_atoms)))
         catch e
             if e isa InterruptException ||
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
             failed[name] = (e, catch_backtrace())
-            ""
+            Tuple{Vector{Int},String}[]
         end
-        if !isempty(genome)
-            id = reckognize_topology(genome, newarc)
-            if id == "UNKNOWN"
-                newarc[genome] = name
-                ret[name] = genome
-            else
-                ret[name] = id
+        if !isempty(genomes)
+            for (i, (_, genome)) in enumerate(genomes)
+                newname = length(genomes) == 1 ? name : name * '_' * string(i)
+                id = reckognize_topology(genome, newarc)
+                if id == "UNKNOWN"
+                    newarc[genome] = newname
+                    ret[newname] = genome
+                else
+                    ret[newname] = id
+                end
             end
         end
     end

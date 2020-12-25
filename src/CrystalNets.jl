@@ -22,7 +22,7 @@ import LinearAlgebra: det, norm, rank
 using Base.Threads
 
 using PeriodicGraphs
-import PeriodicGraphs: hash_position
+import PeriodicGraphs: hash_position, change_dimension
 using StaticArrays
 using LightGraphs
 

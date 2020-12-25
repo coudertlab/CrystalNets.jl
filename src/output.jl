@@ -19,6 +19,7 @@ function export_vtf(file, c::Union{Crystal{Nothing},CrystalNet}, repeatedges=1, 
     n = length(c.types)
     if c isa CrystalNet
         @assert length(c.pos) == n
+        c = CrystalNet3D(c)
     else
         @assert size(c.pos)[2] == n
     end
@@ -89,9 +90,9 @@ function export_vtf(file, c::Union{Crystal{Nothing},CrystalNet}, repeatedges=1, 
     end
 end
 
-function export_vtf(file, cif::CIF, repeatedges=1)
-    export_vtf(file, CrystalNet(cif), repeatedges, true)
-end
+# function export_vtf(file, cif::CIF, repeatedges=1)
+#     export_vtf(file, CrystalNet(cif), repeatedges, true)
+# end
 
 function export_cif(file, c::Union{Crystal, CIF})
     mkpath(splitdir(file)[1])
@@ -253,7 +254,7 @@ function export_cgd(file, g::PeriodicGraph)
         println(f, "END\n")
     end
 end
-export_cgd(file, c::CrystalNet) = export_cgd(file, c.graph)
+export_cgd(file, c::CrystalNet) = export_cgd(file, change_dimension(PeriodicGraph3D, c.graph))
 
 
 function export_clusters(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tempname()))

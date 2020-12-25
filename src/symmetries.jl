@@ -87,7 +87,7 @@ function Base.getproperty(ds::SpglibDataset, name::Symbol)
     end
 end
 
-function get_spglib_dataset(net::CrystalNet)
+function get_spglib_dataset(net::CrystalNet3D)
     lattice = Matrix{Cdouble}(net.cell.mat') # transpose to account for row-major operations
     n = nv(net.graph)
     positions = Matrix{Cdouble}(undef, 3, n)
@@ -107,7 +107,7 @@ function get_spglib_dataset(net::CrystalNet)
 end
 
 
-function find_symmetries(net::CrystalNet{Rational{S}}) where S
+function find_symmetries(net::CrystalNet3D{Rational{S}}) where S
     T = soft_widen(S)
     U = widen(T)
     lattice = Matrix{Cdouble}(LinearAlgebra.I, 3, 3) # positions are expressed in this basis

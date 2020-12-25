@@ -62,13 +62,23 @@ soft_widen(::Type{Int8}) = Int16
 soft_widen(::Type{Rational{T}}) where {T} = Rational{soft_widen(T)}
 
 """
-    issingular(x::SMatrix{3,3,T,9}) where T<:Rational
+    issingular(x::SMatrix{N,N,T}) where {N,T<:Rational}
 
-Test whether a 3x3 matrix is singular. The input matrix must have a wide enough
-type to avoid avorflows. If an overflow happens however, it is detected and results
+Test whether a NxN matrix is singular. The input matrix must have a wide enough
+type to avoid overflows. If an overflow happens however, it is detected and results
 in an error (rather than silently corrupting the result).
 """
-function issingular(x::SMatrix{3,3,T,9})::Bool where T<:Rational
+function issingular(x::SMatrix{N,N,T}) where {N,T<:Rational}
+    try
+        return iszero(det(x))
+    catch e
+        @assert e isa OverflowError
+        return iszero(det(SMatrix{N,N,widen(T)}(x)))
+    end
+end
+
+function issingular(x::SMatrix{3,3,T})::Bool where T<:Rational
+@inbounds begin
     (i, j, k) = iszero(x[1,1]) ? (iszero(x[1,2]) ? (3,1,2)  : (2,1,3)) : (1,2,3)
     iszero(x[1,i]) && return true
     U = widen(T)
@@ -87,6 +97,29 @@ function issingular(x::SMatrix{3,3,T,9})::Bool where T<:Rational
     end
     # This can overflow so the input matrix should already have a wide enough type
 end
+end
+
+function issingular(x::SMatrix{2,2,T})::Bool where T<:Rational
+@inbounds begin
+    if iszero(x[1,1])
+        (iszero(x[1,2]) || iszero(x[2,1])) && return true
+        return false
+    end
+    U = widen(T)
+    x12 = x[1,2] // U(x[1,1])
+    return x[2,2] == try
+        x[2,1] * x12
+    catch e
+        @assert e isa OverflowError
+        widemul(x[2,1], x12)
+    end
+    # This can overflow so the input matrix should already have a wide enough type
+end
+end
+
+function issingular(x::SMatrix{1,1,T})::Bool where T<:Rational
+    iszero(@inbounds x[1,1])
+end
 
 function isrank3(x::AbstractMatrix{T}) where T<:Rational
     _n, n = size(x)
@@ -99,20 +132,52 @@ function isrank3(x::AbstractMatrix{T}) where T<:Rational
         u1 = popfirst!(cols)
     end
     n = length(cols)
-    k = iszero(u1[1]) ? iszero(u1[2]) ? 3 : 2 : 1
+    k = iszero(@inbounds u1[1]) ? iszero(@inbounds u1[2]) ? 3 : 2 : 1
     i = 1
-    while i < n
+    @inbounds while i < n
         u2 = cols[i]
         widen(u2[k]//u1[k])*u1 == u2 || break
         i+=1
     end
     i == n && return false
-    for j in i+1:n
+    @inbounds for j in i+1:n
         a = SMatrix{3,3,T,9}(hcat(u1, u2, cols[j]))
         issingular(a) || return true
     end
     return false
 end
+
+function isrank2(x::AbstractMatrix{T}) where T<:Rational
+    _n, n = size(x)
+    @assert _n == 2
+    n < 2 && return false
+    cols = collect(eachcol(x))
+    u1 = popfirst!(cols)
+    u2 = u1
+    while iszero(u1) && !isempty(cols)
+        u1 = popfirst!(cols)
+    end
+    n = length(cols)
+    k = iszero(@inbounds u1[1]) ? 2 : 1
+    i = 1
+    @inbounds while i < n
+        u2 = cols[i]
+        widen(u2[k]//u1[k])*u1 == u2 || break
+        i+=1
+    end
+    i == n && return false
+    return true
+end
+
+function isrank1(x::AbstractMatrix{T}) where T<:Rational
+    _n, n = size(x)
+    @assert _n == 1
+    @inbounds for y in eachcol(x)
+        iszero(y[1]) || return true
+    end
+    return false
+end
+
 
 """
     back_to_unit(r::Rational)
@@ -181,10 +246,10 @@ function nextword(l, i)
     end
     if instatus
         if inmultiline
-            throw("Invalid syntax: opening multiline field at position $start is not closed")
+            error("Invalid syntax: opening multiline field at position $start is not closed")
         end
         if inquote
-            throw("Invalid syntax: opening quote $quotesymb at position $start is not closed")
+            error("Invalid syntax: opening quote $quotesymb at position $start is not closed")
         end
     end
     return (start, n, n)

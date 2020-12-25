@@ -167,6 +167,15 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
     return Clusters(sbus, sbu_classes, attributions, offsets)
 end
 
+
+struct MissingAtomInformation <: Exception
+    msg::String
+end
+function Base.showerror(io::IO, e::MissingAtomInformation)
+    print(io, "CrystalNets clustering error: ", e.msg)
+end
+
+
 """
     find_sbus_naive(crystal)
 
@@ -184,16 +193,12 @@ function find_sbus_naive(crystal)
         elseif typ ∈ (:O, :Cd, :Co, :Cu, :Ni, :Sc, :W, :Zn, :Zr, :N)
             classes[i] = 2
         else
-            error("Unknown atom type")
+            throw(MissingAtomInformation("unknown atom type: $typ."))
         end
     end
     return regroup_sbus(crystal.graph, classes)
 end
 
-
-struct MissingAtomInformation <: Exception
-    msg::String
-end
 
 
 """
@@ -215,15 +220,15 @@ function find_sbus(crystal)
             if !haskey(elements, atom_name)
                 if atom_name === Symbol("")
                     throw(MissingAtomInformation("""
-                    The input is a periodic graph with no atom information, it cannot be reckognized as a MOF.
+                    the input is a periodic graph with no atom information, it cannot be reckognized as a MOF.
                     """))
                 elseif atom_name === Symbol("_")
                     throw(MissingAtomInformation("""
-                    The input file format does not contain enough information on the atoms to distinguish the organic and inorganic SBUs.
+                    the input file format does not contain enough information on the atoms to distinguish the organic and inorganic SBUs.
                     Please use a file format containing at least the atom types and in order to use MOF reckognition.
                     """))
                 else
-                    throw(MissingAtomInformation("Unknown atom name: $atom_name"))
+                    throw(MissingAtomInformation("unknown atom name: $atom_name"))
                 end
             end
             category = elements[atom_name]
@@ -235,7 +240,7 @@ function find_sbus(crystal)
                 classes[i] = 3 # Class 3 is temporary and contains unclassified elements
                 push!(inv_classes[3], i)
             else
-                throw(MissingAtomInformation("Unhandled atom type: $atom_name"))
+                throw(MissingAtomInformation("unhandled atom type: $atom_name"))
             end
         end
     end
