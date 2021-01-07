@@ -1,4 +1,7 @@
-struct UnstableNetException <: Exception end
+struct UnstableNetException <: Exception
+    g::String
+end
+UnstableNetException(net::CrystalNet) = UnstableNetException(string("unstable ", net.graph))
 function Base.showerror(io::IO, e::UnstableNetException)
     print(io, "The net is unstable, hence it cannot be analyzed.")
 end
@@ -58,7 +61,7 @@ function possible_translations(c::CrystalNet{D,T}) where {D,T}
     sortedpos = copy(c.pos)
     origin = popfirst!(sortedpos)
     @assert iszero(origin)
-    sort!(SVector{D,widen(soft_widen(widen(T)))}.(sortedpos), by=norm)
+    sort!(SVector{D,soft_widen(widen(widen(T)))}.(sortedpos), by=norm)
     for t in sortedpos
         @assert t == back_to_unit.(t)
         max_den, i_max_den = findmax(denominator.(t))
@@ -87,7 +90,7 @@ end
 
 
 function minimal_volume_matrix(translations::Tuple{T}) where T
-    nz0 = translations[]
+    nz0 = translations[1]
     denmax = 1//1
     imax = 0
     for j in 1:length(nz0)
@@ -105,11 +108,11 @@ function minimal_volume_matrix(translations::Tuple{T}) where T
     empty!(nz0)
     append!(nz0, _nz0)
 
-    n = length(all)
+    n = length(nz0)
     detmin = 1//1
     best = 0
     @inbounds for i in 1:n
-        d = nz0[i][3][]
+        d = nz0[i][3][1]
         d == 0 && continue
         if d < detmin
             detmin = d
@@ -118,7 +121,7 @@ function minimal_volume_matrix(translations::Tuple{T}) where T
     end
     @assert !iszero(best)
     ret = hcat(nz0[best][3])
-    if ret[] < 0
+    if ret[1] < 0
         ret = hcat(.-nz0[best][3])
     end
     return ret
@@ -218,7 +221,7 @@ function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
 end
 
 function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
-    U = soft_widen(widen(T))
+    U = widen(T)
     lengths = degree(c.graph)
     if D == 3
         cell = Cell(c.cell, c.cell.mat * mat)
@@ -332,7 +335,7 @@ end
 
 
 function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
-    V = widen(widen(T))
+    V = soft_widen(widen(T))
     n = nv(net.graph)
     h = 2 # Next node to assign
     origin = net.pos[u]
@@ -559,7 +562,7 @@ function find_candidates(net::CrystalNet{D,T}) where {D,T}
     end
     if isempty(candidates)
         if !allunique(net.pos)
-            throw(UnstableNetException())
+            throw(UnstableNetException(net))
         else
             check_dimensionality(net)
             error("Internal error: no candidate found.")
@@ -636,7 +639,7 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
         mincats = copy(current_cats)
         unlock(fastlock)
         for _i in 1:(n-2), _j in (_i+1):(n-1), _k in (_j+1):n
-            m = SMatrix{3,3,widen(T),9}(mat[:,[_i,_j,_k]])
+            m = SMatrix{3,3,U,9}(mat[:,[_i,_j,_k]])
             issingular(m) && continue
             orders = SVector{3,Int}[]
             subcats = cats[SVector{3,Int}(_i, _j, _k)]
@@ -742,7 +745,7 @@ function find_candidates_onlyneighbors(net::CrystalNet2D{T}, candidates_v, categ
         mincats = copy(current_cats)
         unlock(fastlock)
         for _i in 1:(n-1), _j in (_i+1):n
-            m = SMatrix{2,2,widen(T),4}(mat[:,[_i,_j]])
+            m = SMatrix{2,2,U,4}(mat[:,[_i,_j]])
             issingular(m) && continue
             orders = SVector{2,Int}[]
             subcats = cats[SVector{2,Int}(_i, _j)]
@@ -817,7 +820,7 @@ function find_candidates_onlyneighbors(net::CrystalNet1D{T}, candidates_v, categ
     current_ordertype::Int = 1
 
     @threads for (v, (mat, cats)) in initial_candidates
-        _, n = size(mat)
+        n = length(mat)
         matv = SMatrix{1,1,U,1}[]
         lock(fastlock)
         ordertype = current_ordertype
@@ -826,12 +829,11 @@ function find_candidates_onlyneighbors(net::CrystalNet1D{T}, candidates_v, categ
         for i in 1:n
             cat = cats[i]
             mincat < cat && continue
-            if mincat > subcat
+            if mincat > cat
                 empty!(matv)
-                mincat = subcat
+                mincat = cat
             end
-            mats = [m[:,o] for o in orders]
-            append!(matv, [mat[:,[i]]])
+            append!(matv, [mat[[i]]])
         end
         if ordertype < current_ordertype || (ordertype == current_ordertype
                                              && mincat > current_cat)
@@ -886,7 +888,7 @@ function find_candidates_fallback(net::CrystalNet{3,T}, reprs, othercats, catego
                         posv = net.pos[v]
                         for x3 in neighbors(net.graph, v)
                             vec3 = net.pos[x3.v] .+ x3.ofs .- posv
-                            mat = SMatrix{3,3,widen(T),9}(hcat(vec1, vec2, vec3))
+                            mat = SMatrix{3,3,U,9}(hcat(vec1, vec2, vec3))
                             issingular(mat) && continue
                             current_cats[3] = category_map[x3.v]
                             current_cats > mincats && continue
@@ -982,20 +984,31 @@ function find_new_representation(pos, basis, vmap, graph)
 end
 
 
-function topological_genome(net::CrystalNet, skipminimize=false)::String
+function topological_genome(net::CrystalNet{D,T}, skipminimize=false)::String where {D,T}
     if !allunique(net.pos)
-        throw(UnstableNetException())
+        return UnstableNetException(net).g
     end
     if !skipminimize
-        net = minimize(net)
+        try
+            net = minimize(net)
+        catch e
+            if T !== BigInt && (e isa OverflowError || e isa InexactError)
+                return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), false)
+            end
+            rethrow()
+        end
     end
     genome::String = try
         string(last(topological_key(net)))
     catch e
-        if !(e isa UnstableNetException)
+        if T !== BigInt && (e isa OverflowError || e isa InexactError)
+            return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), true)
+        end
+        if e isa UnstableNetException
+            e.g
+        else
             rethrow()
         end
-        "unstable ($(ndims(net))D)"
     end
 
     return genome
@@ -1060,7 +1073,7 @@ function topological_genome(group::CrystalNetGroup, skipminimize=false)
 end
 
 function reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
-    startswith(genome, "unstable") && return genome
+    (startswith(genome, "unstable") || genome == "non-periodic") && return genome
     get(arc, genome, "UNKNOWN")
 end
 
@@ -1078,19 +1091,21 @@ function reckognize_topologies(path; ignore_atoms=())
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            failed[name] = (e, catch_backtrace())
-            Tuple{Vector{Int},String}[]
+            if e isa NonPeriodicInputException
+                [(Int[], "non-periodic")]
+            else
+                failed[name] = (e, catch_backtrace())
+                Tuple{Vector{Int},String}[]
+            end
         end
-        if !isempty(genomes)
-            for (i, (_, genome)) in enumerate(genomes)
-                newname = length(genomes) == 1 ? name : name * '_' * string(i)
-                id = reckognize_topology(genome, newarc)
-                if id == "UNKNOWN"
-                    newarc[genome] = newname
-                    ret[newname] = genome
-                else
-                    ret[newname] = id
-                end
+        for (i, (_, genome)) in enumerate(genomes)
+            newname = length(genomes) == 1 ? name : name * '_' * string(i)
+            id = reckognize_topology(genome, newarc)
+            if id == "UNKNOWN"
+                newarc[genome] = newname
+                ret[newname] = genome
+            else
+                ret[newname] = id
             end
         end
     end

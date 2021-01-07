@@ -419,14 +419,13 @@ end
     edges_from_bonds(bonds, mat, pos)
 
 Given an n×n adjacency matrix `bonds`, the 3×3 matrix of the cell `mat` and the
-3×n matrix `pos` whose columns correspond to the positions of the atoms, extract
-the list of PeriodicEdge3D corresponding to the bonds.
+Vector{SVector{3,Float64}} `pos` whose elements are the positions of the
+atoms, extract the list of PeriodicEdge3D corresponding to the bonds.
 Since the adjacency matrix wraps bonds across the boundaries of the cell, the edges
 are extracted so that the closest representatives are chosen to form bonds.
 """
 function edges_from_bonds(bonds, mat, pos)
-    @assert size(pos)[1] == 3
-    n = size(pos)[2]
+    n = length(pos)
     edges = PeriodicEdge3D[]
     ref_dst = norm(mat*[1, 1, 1])
     for i in 1:n, k in (i+1):n
@@ -434,8 +433,7 @@ function edges_from_bonds(bonds, mat, pos)
         offset::Vector{SVector{3, Int}} = []
         old_dst = ref_dst
         for ofsx in -1:1, ofsy in -1:1, ofsz in -1:1
-            # dst = norm(mat*(pos[:,i] .- (pos[:,k] .+ [ofsx, ofsy, ofsz])))
-            dst = norm(pos[:,i] .- (pos[:,k] .+ (mat * [ofsx, ofsy, ofsz])))
+            dst = norm(pos[i] .- (pos[k] .+ (mat * [ofsx, ofsy, ofsz])))
             if abs2(dst - old_dst) < 1e-3
                 push!(offset, (ofsx, ofsy, ofsz))
                 old_dst = (dst + old_dst)/2
@@ -508,31 +506,6 @@ function Crystal{Clusters}(c::Crystal, clusters::Clusters)
     Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph)
 end
 
-# function Crystal(cif::CIF)
-#     c::CIF = expand_symmetry(cif)
-#     if iszero(cif.bonds)
-#         # The CIF files does not contain any bond, so we have to guess
-#         atoms::Vector{Symbol} = unique!(sort(c1[].types))
-#         if atoms == [:O, :Si] || atoms == [:Si] # zeolite
-#             @info "Interpreting .cif file as a zeolite"
-#             set_unique_bond_type!(c, 3.1, (:Si, :Si), (:Si,), 0.1)
-#         elseif atoms == [:C] || atoms == [:C, :H]
-#             set_unique_bond_type!(c, 1.54, (:C, :C), (:C,), 0.3)
-#         elseif atoms == [:Cl, :Na] # toy example
-#             set_unique_bond_type!(c, 2.82, (:Cl, :Na), (:Cl, :Na), 0.2)
-#         else
-#             error("Missing bonds on CIF object $(cif.cifinfo["data"])")
-#         end
-#     end
-#     @assert !iszero(c.bonds)
-#     bondedatoms::Vector{Int} = [i for i in 1:length(c.ids) if count(c.bonds[:,i]) > 1]
-#     c = keep_atoms(c, bondedatoms) # Only keep atoms that have at least one bond
-#     n = length(c.ids)
-#     clusters = Clusters(n)
-#     edges = edges_from_bonds(c.bonds, c.cell.mat, c.pos)
-#     @assert !isempty(edges)
-#     Crystal(c.cell, [c.types[x] for x in c.ids], clusters, c.pos, PeriodicGraph3D(n, edges))
-# end
 
 trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(coalesce_sbus(c))
 function trimmed_crystal(c::Crystal{Nothing})
@@ -581,7 +554,11 @@ end
     trim_topology(graph::PeriodicGraph)
 
 Return a pair `(vmap, newgraph)` extracted from the input by removing vertices
-of valence lower or equal to 1, and by replacing vertices of valence 2 by edges.
+of valence lower or equal to 1, and by replacing vertices of valence 2 by edges,
+until convergence.
+The only exceptions are vertices only bonded to their representatives of another
+cell: those will not be replaced by edges even if their valence is 2, since this
+latter case indicates an irreducible trivial 1-dimensional topology.
 
 `vmap` maps the vertices of `newgraph` to their counterpart in `graph`.
 """
@@ -590,6 +567,7 @@ function trim_topology(graph::PeriodicGraph{N}) where N
     remove_idx = Int[]
     flag = any(<=(2), degree(newgraph))
     vmap = collect(1:nv(graph))
+    ignorecounter = 0
     while flag # we alternate cycles when we remove valence 1 and valence 2
         # until no such vertex remains
         flag = any(<=(1), degree(newgraph))
@@ -606,13 +584,18 @@ function trim_topology(graph::PeriodicGraph{N}) where N
             empty!(remove_idx)
             flag = any(isone, degree(newgraph))
         end
-        flag = any(==(2), degree(newgraph))
+        flag = count(==(2), degree(newgraph)) > ignorecounter
 
         while flag
             n = nv(newgraph)
+            ignorecounter = 0
             for i in 1:n
                 if degree(newgraph, i) == 2
                     neigh1, neigh2 = neighbors(newgraph, i)
+                    if neigh1.v == i
+                        ignorecounter += 1
+                        continue
+                    end
                     add_edge!(newgraph, PeriodicEdge{N}(neigh1.v, neigh2.v, neigh2.ofs .- neigh1.ofs))
                     push!(remove_idx, i)
                 end
@@ -621,9 +604,9 @@ function trim_topology(graph::PeriodicGraph{N}) where N
             vmap = vmap[map]
             #pos = pos[vmap]
             empty!(remove_idx)
-            flag = any(==(2), degree(newgraph))
+            flag = count(==(2), degree(newgraph)) > ignorecounter
         end
-        flag = any(<=(2), degree(newgraph))
+        flag = any(<=(1), degree(newgraph))
     end
     return vmap, newgraph
 end
@@ -647,6 +630,25 @@ struct CrystalNet{D,T<:Real}
     pos::Vector{SVector{D,T}}
     graph::PeriodicGraph{D}
 end
+
+CrystalNet{D,T}(net::CrystalNet{D,T}) where {D,T} = net
+function CrystalNet{D,T}(net::CrystalNet{N}) where {D,T,N}
+    n = length(net.types)
+    newpos = Vector{SVector{D,T}}(undef, n)
+    for i in 1:n
+        if N < D
+            _pos = zero(MVector{D,T})
+            _pos[1:N] = net.pos[i]
+            pos = SVector{D,T}(_pos)
+        else
+            pos = SVector{D,T}(net.pos[i][1:D])
+        end
+        newpos[i] = pos
+    end
+    CrystalNet{D,T}(net.cell, net.types, newpos,
+                    PeriodicGraphs.change_dimension(PeriodicGraph{D}, net.graph))
+end
+CrystalNet{D}(net::CrystalNet{R,T}) where {D,R,T} = CrystalNet{D,T}(net)
 
 const CrystalNet1D = CrystalNet{1}
 const CrystalNet2D = CrystalNet{2}
@@ -723,6 +725,9 @@ macro separategroups(D, groups, ex)
     end
 end
 
+struct NonPeriodicInputException <: Exception end
+Base.showerror(io::IO, ::NonPeriodicInputException) = print(io, "Non-periodic input")
+
 function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph)
     initialvmap, graph = trim_topology(PeriodicGraphs.change_dimension(PeriodicGraph3D, graph))
     types = types[initialvmap]
@@ -736,10 +741,7 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
         dimensions = PeriodicGraphs.dimensionality(graph)
         initialvmap = initialvmap[vmap0]
     end
-    if isempty(dimensions)
-        error(ArgumentError("Non-periodic input"))
-    end
-
+    isempty(dimensions) && throw(NonPeriodicInputException())
 
     groups = CrystalNetGroup()
 
@@ -753,6 +755,15 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
             graphD = deepcopy(graph)
             catdimD::Vector{Int} = reduce(vcat, dimD; init=Int[])
             vmapD = trim_crystalnet!(graphD, types, catdimD, true)
+            invvmapD = zeros(Int, length(types))
+            for i in eachindex(vmapD)
+                invvmapD[vmapD[i]] = i
+            end
+            for l in dimD
+                for i in eachindex(l)
+                    l[i] = invvmapD[l[i]]
+                end
+            end
             typesD = types[vmapD]
             vmapD = initialvmap[vmapD]
         end
@@ -787,7 +798,7 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGr
         entertwinedD = length(group) > 1
     end
     if entertwinedD
-        error(ArgumentError("Multiple entertwined $D-dimensional structures. This is not currently handled."))
+        error(ArgumentError("Multiple entertwined $D-dimensional structures. This should not happen: to separate the structures, use CrystalNetGroup instead of CrystalNet."))
     end
     @separategroups D group begin
         return last(only(group))
@@ -798,6 +809,8 @@ function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol}, graph::Periodi
     g = change_dimension(PeriodicGraph{D}, graph)
     return CrystalNet{D}(cell, types, g)
 end
+
+
 
 macro tryinttype(D, inttype, m, M, cell, types, graph, placement)
     quote
@@ -911,15 +924,3 @@ function CrystalNet(g::Union{PeriodicGraph,AbstractString,AbstractVector{Periodi
     types = [Symbol("") for _ in 1:n]
     return CrystalNet(cell, types, graph)
 end
-
-
-# function CrystalNet(cif::CIF)
-#     @assert isempty(cif.cell.equivalents) # FIXME we only handle P1 representations
-#     n = length(cif.ids)
-#     @assert size(cif.pos)[1] == 3
-#     @assert size(cif.pos)[2] == n
-#
-#     edges = edges_from_bonds(cif.bonds, cif.cell.mat, cif.pos)
-#     pos = SVector{3,Rational{Int}}[rationalize.(Int,x) for x in eachcol(cif.pos)]
-#     return CrystalNet(cif.cell, [cif.types[x] for x in cif.ids], pos, PeriodicGraph3D(edges))
-# end

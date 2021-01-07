@@ -291,16 +291,16 @@ for instance.
 See also `reckognize_topologies` if you want to compare the topologies of the files
 in a directory with those of the current archive.
 """
-function make_archive(path, destination)
+function make_archive(path, destination, verbose=false)
     arc = Dict{String,String}()
     Threads.@threads for f in readdir(path; join=false)
         name = splitext(f)[1]
-        print("Handling "*name*"... ")
+        verbose && print("Handling "*name*"... ")
         flag = false
         flagerror = Ref{Any}(Tuple{Vector{Int},String}[])
         genomes::Vector{Tuple{Vector{Int},String}} = try
             x = topological_genome(CrystalNetGroup(parse_chemfile(path*f)))
-            println(name*" done.")
+            verbose && println(name*" done.")
             x
         catch e
             flag = true
@@ -308,7 +308,7 @@ function make_archive(path, destination)
             Tuple{Vector{Int},String}[]
         end
         for (i, (vmap, genome)) in enumerate(genomes)
-            if startswith(genome, "unstable")
+            if startswith(genome, "unstable") || genome == "non-periodic"
                 flag = true
                 push!(flagerror[]::Vector{Vector{Int}}, (vmap, genome))
                 continue
