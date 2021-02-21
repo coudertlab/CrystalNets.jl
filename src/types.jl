@@ -41,7 +41,7 @@ function find_refid(eqs)
                 push!(refid, "")
             elseif k === Tokenize.Tokens.ENDMARKER
                 not_at_the_end = false
-            else
+            elseif k !== Tokenize.Tokens.WHITESPACE
                 error("Input string {$eq} is not a valid symmetry equivalent")
             end
         end
