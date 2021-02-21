@@ -129,6 +129,10 @@ const elements = Dict{Symbol,String}( # populated using PeriodicTable.jl
 
 Given a classification of vertices into classes, separate the vertices into clusters
 of contiguous vertices belonging to the same class.
+Class 0 is treated separately: each atom belonging to class 0 is considered to be actually of
+class 1, but all its neighbors of classes different than 1 are considered themselves contiguous.
+This is specifically used to merge several inorganic SBUs into one if they share a common
+neighboring atom.
 """
 function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer})
     n = length(classes)
@@ -138,17 +142,17 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
     offsets = zeros(SVector{3,Int}, n)
     for i in 1:n
         iszero(attributions[i]) || continue
-        class = classes[i]
+        class = max(1, classes[i])
         push!(sbus, [PeriodicVertex3D(i)])
         push!(sbu_classes, class)
         attr = length(sbus)
         attributions[i] = attr
         Q = PeriodicVertex3D[PeriodicVertex3D(i)]
         for u in Q
-            @assert attributions[u.v] == attr
+            @assert attributions[u.v] == attr || (class != 1 && classes[u.v] == 0)
             for neigh in neighbors(graph, u.v)
                 x = neigh.v
-                if classes[x] == class
+                if classes[x] == class || (class == 1 && classes[x] == 0)
                     attrx = attributions[x]
                     if iszero(attrx)
                         ofs = neigh.ofs .+ u.ofs
@@ -160,10 +164,14 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
                     else
                         @assert attrx == attr
                     end
+                elseif class != 1 && classes[x] == 0
+                    ofs = neigh.ofs .+ u.ofs
+                    push!(Q, PeriodicVertex3D(x, ofs))
                 end
             end
         end
     end
+
     return Clusters(sbus, sbu_classes, attributions, offsets)
 end
 
@@ -292,7 +300,17 @@ function find_sbus(crystal)
             classes[unclassified[j]] = new_class
         end
     end
-    global clas = classes
+    # As a last pass, we set a class of 0 for each atom of an organic SBU (class 1)
+    # that is bonded to an inorganic SBU (class 2).
+    for i in 1:n
+        classes[i] == 1 || continue
+        for x in neighbors(crystal.graph, i)
+            if classes[x.v] == 2
+                classes[i] = 0
+                break
+            end
+        end
+    end
     return regroup_sbus(crystal.graph, classes)
 end
 
