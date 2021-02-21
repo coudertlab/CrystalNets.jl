@@ -242,7 +242,7 @@ Base.@ccallable function julia_main()::Cint
                     if !flag
                         internal_error("""CrystalNets.jl appears to have a broken installation (the archive version is older than that package's).
                         Please rebuild CrystalNets.jl with `import Pkg; Pkg.build("CrystalNets")`.
-                        """)
+                        """, AssertionError("flag"), catch_backtrace())
                     end
                     export_arc(archive, false, arc)
                 else

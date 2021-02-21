@@ -216,7 +216,7 @@ function nextword(l, i)
         else
             if l[i] == '#'
                 i = findnext(isequal('\n'), l, i)
-                i == nothing && return (0, 0, 0)
+                i === nothing && return (0, 0, 0)
             else
                 start = i
                 break

@@ -14,7 +14,7 @@ function find_ratbasis(list::AbstractVector{<:StaticVector{N,<:Rational{T}}}) wh
     i = 1
     @inbounds while i <= n
         l = list[i]
-        if !iszero()
+        if !iszero(l)
             ratbasis[:,1] .= l
             i += 1
             break

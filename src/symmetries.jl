@@ -88,7 +88,7 @@ function Base.getproperty(ds::SpglibDataset, name::Symbol)
 end
 
 function get_spglib_dataset(net::CrystalNet3D)
-    lattice = Matrix{Cdouble}(net.cell.mat') # transpose to account for row-major operations
+    lattice = Matrix{Cdouble}(adjoint(net.cell.mat)) # transpose to account for row-major operations
     n = nv(net.graph)
     positions = Matrix{Cdouble}(undef, 3, n)
     types = Vector{Cint}(undef, n)

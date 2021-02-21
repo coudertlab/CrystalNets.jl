@@ -92,7 +92,7 @@ function inv(x::Modulo{p,T}) where {p,T}
     return Modulo{p,T}(v)
 end
 
-function /(x::Modulo{p}, y::Modulo{p}) where {p,T}
+function /(x::Modulo{p}, y::Modulo{p}) where {p}
     return x * inv(y)
 end
 

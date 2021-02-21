@@ -239,7 +239,7 @@ function rational_solve(::Val{N}, A, Y) where N
         error("Singular exception while equilibrating. Is the graph connected?")
     end
     Z = linsolve!(B, Rational{BigInt}.(Y))
-    return hcat(zeros(Rational{Int128}, N), Rational{Int128}.(Z)')
+    return hcat(zeros(Rational{Int128}, N), adjoint(Rational{Int128}.(Z)))
     # Rational{Int64} is not enough for tep for instance.
 end
 

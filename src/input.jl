@@ -246,7 +246,7 @@ function parse_atom_name(name::AbstractString)
     else
         firstsep::Int
         if firstsep != 1 && !any(isuppercase, @view name[nextind(name, firstsep):end])
-            return String(name[1:prevind(firstsep)])
+            return String(name[1:prevind(name, firstsep)])
         else
             return String(name)
         end
