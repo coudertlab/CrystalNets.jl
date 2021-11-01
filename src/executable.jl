@@ -71,8 +71,9 @@ function parse_commandline()
 
         "--archive", "-a"
             help = """Specify the path to an archive used to reckognize topologies.
-            If unspecified while using Form A, defaults to the RCSR Systre archive
-            (available at http://rcsr.net/systre).
+            If unspecified while using Form A, defaults to a combination of the RCSR
+            Systre archive (available at http://rcsr.net/systre) and the known zeolite
+            topologies (registered at http://www.iza-structure.org/).
             """
             metavar = "ARCHIVE_PATH"
 
@@ -89,14 +90,14 @@ function parse_commandline()
             help = """Give a name to the topology of the crystal and add it to the
             archive at ARCHIVE_PATH. If the topology is already known to the archive,
             this will do nothing unless --force is passed on. The returned name is
-            the previous binding, if present, or nothing otherwise.
+            the previous binding, if present, or "UNKNOWN" otherwise.
             """
             metavar = "NAME"
 
         "--remove-from-archive", "-r"
             help = """Remove the topology from the archive at ARCHIVE_PATH. If the
             topology is absent, this will error unless --force is passed on. The
-            returned name is the previous binding, if present, or nothing otherwise.
+            returned name is the previous binding, if present, or "UNKNOWN" otherwise.
             """
             action = :store_true
 

@@ -22,6 +22,16 @@ else
 end
 const REVERSE_CRYSTAL_NETS_ARCHIVE = Dict{String,String}(last(x) => first(x) for x in CRYSTAL_NETS_ARCHIVE)
 
+function _reset_archive!()
+    global CRYSTAL_NETS_ARCHIVE
+    global REVERSE_CRYSTAL_NETS_ARCHIVE
+    global arc_location
+    empty!(CRYSTAL_NETS_ARCHIVE)
+    merge!(CRYSTAL_NETS_ARCHIVE, last(parse_arcs(arc_location)))
+    empty!(REVERSE_CRYSTAL_NETS_ARCHIVE)
+    merge!(REVERSE_CRYSTAL_NETS_ARCHIVE, Dict{String,String}(last(x) => first(x) for x in CRYSTAL_NETS_ARCHIVE))
+    nothing
+end
 
 function validate_archive(custom_arc)::Dict{String,String}
     arc = try

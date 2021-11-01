@@ -569,7 +569,7 @@ end
 
 
 """
-       parse_chemfiles(path)
+       parse_chemfile(path)
 
 Parse a file given in any reckognised chemical format and extract the topological
 information.
