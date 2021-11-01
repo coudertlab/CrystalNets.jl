@@ -24,7 +24,7 @@ using Base.Threads
 using PeriodicGraphs
 import PeriodicGraphs: hash_position, change_dimension
 using StaticArrays
-using LightGraphs
+using Graphs
 
 import Logging
 import Logging: Warn, Info, @logmsg

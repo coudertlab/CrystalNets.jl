@@ -58,9 +58,9 @@ function _precompile_()
     # Tokenize
     Base.precompile(Tuple{typeof(Base._collect),UnitRange{Int},Tokenize.Lexers.Lexer{IOBuffer, Tokenize.Tokens.Token},Base.HasEltype,Base.SizeUnknown})
 
-    # LightGraphs
-    Base.precompile(Tuple{typeof(LightGraphs.floyd_warshall_shortest_paths),LightGraphs.SimpleGraph{Int},LightGraphs.DefaultDistance})
-    Base.precompile(Tuple{Type{LightGraphs.SimpleGraph},Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int}}})
+    # Graphs
+    Base.precompile(Tuple{typeof(Graphs.floyd_warshall_shortest_paths),Graphs.SimpleGraph{Int},Graphs.DefaultDistance})
+    Base.precompile(Tuple{Type{Graphs.SimpleGraph},Vector{Graphs.SimpleGraphs.SimpleEdge{Int}}})
 
     # PeriodicGraphs
     Base.precompile(Tuple{Type{Dict{PeriodicEdge3D, Nothing}}})

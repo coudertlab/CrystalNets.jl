@@ -1,5 +1,5 @@
 using Statistics: mean
-import LightGraphs: SimpleEdge
+import Graphs: SimpleEdge
 
 const elements = Dict{Symbol,String}( # populated using PeriodicTable.jl
     :H => "diatomic nonmetal",
