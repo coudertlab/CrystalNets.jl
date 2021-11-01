@@ -270,17 +270,9 @@ The distance is the shortest between all equivalents of u and v.
 function periodic_distance(u, v, mat)
     dst = 0.0
     x = similar(u)
-    uu = copy(u)
-    vv = copy(v)
     #=@inbounds=# for i in 1:3
-        diff = u[i] - v[i]
-        if diff > 0.5
-            x[i] = diff - 1
-        elseif - diff > 0.5
-            x[i] = diff + 1
-        else
-            x[i] = diff
-        end
+        diff = u[i] - v[i] + 0.5
+        x[i] = diff - floor(diff) - 0.5
     end
     return norm(mat*x)
 end
@@ -297,25 +289,52 @@ function remove_partial_occupancy(cif::CIF)
     n = length(perm)
     last_triplet = points[perm[1]] .+ (1,1,1)
     last_position = 0
-    toremove = Int[]
+    toalias = Vector{Int}[]
+    inalias = false
     for i in 1:n
         j = perm[i]
         thispoint = points[j]
         if norm(thispoint .- last_triplet) < 4e-4
-            push!(toremove, max(last_position, j)) # keep the first that appears
+            if inalias
+                push!(toalias[end], j)
+            else
+                push!(toalias, [last_position, j])
+                inalias = true
+            end
         else
+            inalias = false
             last_position = j
             last_triplet = thispoint
         end
     end
-    if isempty(toremove) # Nothing to do, we simply alias the CIF to help the compiler (it may be useless)
+    if isempty(toalias) # Nothing to do, we simply alias the CIF to help the compiler (it may be useless)
         return CIF(cif.cifinfo, cif.cell, cif.ids, cif.types, cif.pos, cif.bonds)
     end
-    @ifwarn @warn "This CIF file contains a site with multiple atoms. Only one atom will be kept per atom site."
+    @ifwarn @warn "This CIF file contains at least one site with multiple atoms. Only one atom will be kept per atom site."
+    occupancies = parse.(Float64, get(cif.cifinfo, "atom_site_occupancy", 
+                                      ["1.0" for _ in 1:length(cif.types)])::Vector{String})
+    toremove = Int[]
+    bonds = copy(cif.bonds)
+    for alias in toalias
+        m = length(alias)
+        occup = @view occupancies[alias]
+        max_occupancy = maximum(occup)
+        with_max_occupancy = [alias[i] for i in 1:m if occup[i] == max_occupancy]
+        representative = minimum(with_max_occupancy)
+        addtoremove = Int[]
+        for a in alias
+            a == representative && continue
+            push!(addtoremove, a)
+            bonds[representative,:] .|= bonds[a,:]
+            bonds[:,representative] .|= bonds[:,a]
+        end
+        bonds[representative,representative] = false
+        append!(toremove, addtoremove)
+    end
     sort!(toremove)
     ids = deleteat!(copy(cif.ids), toremove)
     tokeep = deleteat!(collect(1:n), toremove)
-    bonds = cif.bonds[tokeep, tokeep]
+    bonds = bonds[tokeep, tokeep]
     pos = cif.pos[:,tokeep]
     @assert allunique(collect(eachcol(pos)))
     return CIF(cif.cifinfo, cif.cell, ids, cif.types, pos, bonds)
@@ -362,15 +381,15 @@ function expand_symmetry(c::CIF)
     newbonds = Set{Tuple{Int,Int}}(oldbonds)
     newids::Vector{Int} = copy(cif.ids)
     newpos::Vector{Vector{Float64}} = collect(eachcol(cif.pos))
-    ret = Vector{Vector{Int}}
+    smallmat = Float64.(cif.cell.mat)
     #=@inbounds=# for equiv in cif.cell.equivalents
         image = zeros(Int, n)
         for i in 1:length(cif.ids)
             v = newpos[i]
             p = Vector(equiv.mat*v .+ equiv.ofs)
-            @. p = p - floor(p)
+            p .-= floor.(p)
             for j in 1:length(newpos)
-                if periodic_distance(newpos[j], p, Float64.(cif.cell.mat)) < 0.5
+                if periodic_distance(newpos[j], p, smallmat) < 0.5
                     image[i] = j
                     break
                 end
