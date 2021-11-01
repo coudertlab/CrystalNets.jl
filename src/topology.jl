@@ -72,7 +72,7 @@ function possible_translations(c::CrystalNet{D,T}) where {D,T}
     return sort!(ts; by=(x->(x[1], x[2], x[3])))
 end
 
-# TODO remove?
+# TODO: remove?
 function find_first_valid_translations(c::CrystalNet)
     for (nz, i_max_den, max_den, t) in possible_translations(c)
         !isnothing(check_valid_translation(c, t)) && return (nz, i_max_den, max_den, t)
@@ -984,16 +984,19 @@ function find_new_representation(pos, basis, vmap, graph)
 end
 
 
-function topological_genome(net::CrystalNet{D,T}, skipminimize=false)::String where {D,T}
+function topological_genome(net::CrystalNet{D,T}, skipminimize=false; forgettypes=true)::String where {D,T}
     if !allunique(net.pos)
         return UnstableNetException(net).g
+    end
+    if forgettypes
+        net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos, net.graph)
     end
     if !skipminimize
         try
             net = minimize(net)
         catch e
             if T !== BigInt && (e isa OverflowError || e isa InexactError)
-                return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), false)
+                return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), false; forgettypes=false)
             end
             rethrow()
         end
@@ -1002,7 +1005,7 @@ function topological_genome(net::CrystalNet{D,T}, skipminimize=false)::String wh
         string(last(topological_key(net)))
     catch e
         if T !== BigInt && (e isa OverflowError || e isa InexactError)
-            return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), true)
+            return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), true; forgettypes=false)
         end
         if e isa UnstableNetException
             e.g
@@ -1028,9 +1031,9 @@ function topological_genome(net::CrystalNet{D,T}, skipminimize=false)::String wh
     # return ret
 end
 
-function topological_genome(g::PeriodicGraph, skipminimize=true)
+function topological_genome(g::PeriodicGraph, skipminimize=true; forgettypes=true)
     net = CrystalNet(g)
-    return topological_genome(net, skipminimize)
+    return topological_genome(net, skipminimize; forgettypes)
 end
 
 function _loop_group!(ex, id, net, group)
@@ -1064,10 +1067,10 @@ macro loop_group(ex)
     return ret
 end
 
-function topological_genome(group::CrystalNetGroup, skipminimize=false)
+function topological_genome(group::CrystalNetGroup, skipminimize=false; forgettypes=true)
     ret = Tuple{Vector{Int},String}[]
     @loop_group for (id, net) in group
-        push!(ret, (id, topological_genome(net, skipminimize)))
+        push!(ret, (id, topological_genome(net, skipminimize; forgettypes)))
     end
     return ret
 end
@@ -1078,14 +1081,14 @@ function reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
 end
 
 
-function reckognize_topologies(path; ignore_atoms=())
+function reckognize_topologies(path; ignore_atoms=(), forgettypes=true)
     ret = Dict{String,String}()
     failed = Dict{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}()
     newarc = copy(CRYSTAL_NETS_ARCHIVE)
     @threads for f in readdir(path)
         name = first(splitext(f))
         genomes::Vector{Tuple{Vector{Int},String}} = try
-            topological_genome(CrystalNetGroup(parse_chemfile(path*f; ignore_atoms)))
+            topological_genome(CrystalNetGroup(parse_chemfile(path*f; ignore_atoms)); forgettypes)
         catch e
             if e isa InterruptException ||
               (e isa TaskFailedException && e.task.result isa InterruptException)

@@ -16,7 +16,7 @@ julia> reckognize_topology(topological_genome(CrystalNet(parse_chemfile(FILE))))
 """
 module CrystalNets
 
-export CrystalNet, topological_genome, parse_chemfile, reckognize_topology
+export CrystalNet, CrystalNetGroup, topological_genome, parse_chemfile, reckognize_topology
 
 import LinearAlgebra: det, norm, rank
 using Base.Threads
