@@ -289,7 +289,7 @@ function try_guess_bonds!(frame::Frame, types)
         @ifwarn @warn "Guessing bonds. The structure seems to be made of only carbons (and possibly hydrogens): using an interatomic distance of 1.54±0.3 Å to assign edges between C atoms."
         set_unique_bond_type!(frame, types, 1.54, (:C, :C), (:C,), 0.3)
     elseif unique_types == [:O, :Si] || unique_types == [:Si]
-        @ifwarn @warn "Guessing bonds. The structure seems to be a zeolite: using an interatomic distance of 3.1±0.3 Å to assign edges between Si atoms."
+        @ifwarn @warn "Guessing bonds. The structure seems to be a zeolite: using an interatomic distance of 1.63±0.15 Å to assign edges between Si and O atoms."
         set_unique_bond_type!(frame, types, 1.63, (:O, :Si), (:O, :Si), 0.15)
     else
         @ifwarn begin
@@ -485,39 +485,25 @@ end
 
 #hasHneighbor(types, graph, i) = any(x -> types[x.v] === :H, neighbors(graph,i))
 function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}) where {N,dofix}
+    # Small atoms valence check
     n = length(types)
-    ## Small atoms valence check
     invalidatoms = Set{Symbol}()
-    uniquetypes = unique!(sort(types))
-    if :H ∈ uniquetypes || :Na ∈ uniquetypes
-        for i in 1:n
-            t = types[i]
-            if t === :H || t === :Na
-                @reduce_valence 1
-            end
-        end
-    end
-    if :O ∈ uniquetypes
-        for i in 1:n
-            t = types[i]
-            if t === :O
-                @reduce_valence 2
-            end
-        end
-    end
-    if :N ∈ uniquetypes || :C ∈ uniquetypes
-        for i in 1:n
-            t = types[i]
-            if t === :N
-                @reduce_valence 2 4
-            elseif t === :C # sp1 carbon is not a common occurence
-                @reduce_valence 3 4
-            end
+    monovalent = Set{Symbol}([:H, :Li, :Na, :K, :F, :Br, :Cl, :I])
+    for i in 1:n
+        t = types[i]
+        if t ∈ monovalent
+            @reduce_valence 1
+        elseif t === :O
+            @reduce_valence 2
+        elseif t === :N
+            @reduce_valence 2 4
+        elseif t === :C  # sp1 carbon is not a common occurence
+            @reduce_valence 3 4
         end
     end
     if !isempty(invalidatoms)
         s = String.(collect(invalidatoms))
-        @ifwarn @warn (dofix ? "After fix, f" : "F")*"ound $(join(s, ',', " and ")) with invalid number of bonds."
+        @ifwarn @warn (dofix ? "After attempted fix, f" : "F")*"ound $(join(s, ", ", " and ")) with invalid number of bonds."
         return true
     end
     return false
