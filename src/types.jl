@@ -232,7 +232,7 @@ struct CIF
     ids::Vector{Int}
     types::Vector{Symbol}
     pos::Matrix{Float64}
-    bonds::Matrix{Bool}
+    bonds::Matrix{Float32}
 end
 
 
@@ -325,10 +325,10 @@ function remove_partial_occupancy(cif::CIF)
         for a in alias
             a == representative && continue
             push!(addtoremove, a)
-            bonds[representative,:] .|= bonds[a,:]
-            bonds[:,representative] .|= bonds[:,a]
+            bonds[representative,:] .= min.((@view bonds[a,:]), @view bonds[representative,:])
+            bonds[:,representative] .= min.((@view bonds[:,a]), @view bonds[:,representative])
         end
-        bonds[representative,representative] = false
+        bonds[representative,representative] = Inf32
         append!(toremove, addtoremove)
     end
     sort!(toremove)
@@ -351,8 +351,9 @@ function prune_collisions(cif::CIF)
     toremove = Int[]
     points::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     n = length(points)
+    smallmat = Float64.(cif.cell.mat)
     for i in 1:n, j in (i+1):n
-        if periodic_distance(points[i], points[j], Float64.(cif.cell.mat)) < 0.55
+        if periodic_distance(points[i], points[j], smallmat) < 0.55
             push!(toremove, i)
             push!(toremove, j)
         end
@@ -376,9 +377,24 @@ Applies all the symmetry operations listed in the CIF file to the atoms and the 
 """
 function expand_symmetry(c::CIF)
     cif::CIF = remove_partial_occupancy(c)
+    if isempty(cif.cell.equivalents)
+        return prune_collisions(CIF(cif.cifinfo, deepcopy(cif.cell), cif.ids,
+                                    cif.types, cif.pos, cif.bonds))
+    end
     n = length(cif.ids)
-    oldbonds = [(i,j) for i in 1:n for j in i:n if cif.bonds[i,j]]
-    newbonds = Set{Tuple{Int,Int}}(oldbonds)
+    _oldbonds = Dict((i,j) => cif.bonds[i,j] for i in 1:n for j in (i+1):n if cif.bonds[i,j] < Inf32)
+    knownbondlengths = !any(iszero, values(_oldbonds))
+    if !isempty(_oldbonds) && !knownbondlengths
+        # This means that the bonds are determined as symmetric images of bonds of the
+        # asymetric unit, which may or may not be the convention used in the CIF files.
+        # Most CIF files having geom_bond_atom_site_labels should have geom_bond_distance anyway.
+        @ifwarn @warn "Expanding CIF symmetry without knowing the bond lengths: the resulting bonds might be erroneous"
+    end
+    newbonds = Set{Tuple{Int,Int}}(keys(_oldbonds))
+    oldbonds = copy(_oldbonds)
+    for ((i,j), bond) in _oldbonds
+        oldbonds[(j,i)] = bond
+    end
     newids::Vector{Int} = copy(cif.ids)
     newpos::Vector{Vector{Float64}} = collect(eachcol(cif.pos))
     smallmat = Float64.(cif.cell.mat)
@@ -389,7 +405,7 @@ function expand_symmetry(c::CIF)
             p = Vector(equiv.mat*v .+ equiv.ofs)
             p .-= floor.(p)
             for j in 1:length(newpos)
-                if periodic_distance(newpos[j], p, smallmat) < 0.5
+                if periodic_distance(newpos[j], p, smallmat) < 0.3
                     image[i] = j
                     break
                 end
@@ -400,55 +416,49 @@ function expand_symmetry(c::CIF)
                 image[i] = length(newpos)
             end
         end
-        for (i,j) in oldbonds
-            push!(newbonds, minmax(image[i], image[j]))
+        if !knownbondlengths
+            for (i,j) in keys(oldbonds)
+                push!(newbonds, minmax(image[i], image[j]))
+            end
         end
     end
     m = length(newids)
-    bonds = zeros(Bool, m, m)
-    for (i,j) in newbonds
-        bonds[i,j] = true
-        bonds[j,i] = true
+    bonds = fill(Inf32, m, m)
+    if knownbondlengths
+        for i in 1:m
+            for j in (i+1):m
+                bondlength = get(oldbonds, (newids[i], newids[j]), Inf32)
+                bondlength < Inf32 || continue
+                if abs(periodic_distance(newpos[i], newpos[j], smallmat) - bondlength) < 0.3
+                    bonds[i,j] = bonds[j,i] = bondlength
+                end
+            end
+        end
+    else
+        for (i,j) in newbonds
+            bonds[i,j] = bonds[j,i] = zero(Float32)
+        end
     end
 
     newcif = CIF(cif.cifinfo, deepcopy(cif.cell), newids, copy(cif.types), reduce(hcat, newpos), bonds)
-
     return prune_collisions(newcif)
 end
 
-# function set_unique_bond_type!(cif::CIF, bond_length, bonded_atoms::Tuple{Symbol, Symbol}, onlykeep, tol)
-#     @assert iszero(cif.bonds)
-#     indices = [i for i in 1:length(cif.ids) if cif.types[cif.ids[i]] ∈ onlykeep]
-#     #=@inbounds=# for _i in 1:length(indices)
-#     i = indices[_i]
-#     cif.bonds[i,i] = false
-#         Threads.@threads for _j in i+1:length(indices)
-#             j = indices[_j]
-#             if minmax(cif.types[cif.ids[i]], cif.types[cif.ids[j]]) == bonded_atoms
-#                 bonded = abs2(periodic_distance(cif.pos[:,i], cif.pos[:,j], cif.cell.mat) - bond_length) <= tol
-#                 cif.bonds[i,j] = bonded
-#                 cif.bonds[j,i] = bonded
-#             end
-#         end
-#     end
-#     nothing
-# end
-
 """
-    edges_from_bonds(bonds, mat, pos)
+    edges_from_bonds(adjacency, mat, pos)
 
-Given an n×n adjacency matrix `bonds`, the 3×3 matrix of the cell `mat` and the
+Given an n×n adjacency matrix `adjacency`, the 3×3 matrix of the cell `mat` and the
 Vector{SVector{3,Float64}} `pos` whose elements are the positions of the
 atoms, extract the list of PeriodicEdge3D corresponding to the bonds.
 Since the adjacency matrix wraps bonds across the boundaries of the cell, the edges
 are extracted so that the closest representatives are chosen to form bonds.
 """
-function edges_from_bonds(bonds, mat, pos)
+function edges_from_bonds(adjacency, mat, pos)
     n = length(pos)
     edges = PeriodicEdge3D[]
     ref_dst = norm(mat*[1, 1, 1])
     for i in 1:n, k in (i+1):n
-        bonds[k,i] || continue
+        adjacency[k,i] || continue
         offset::Vector{SVector{3, Int}} = []
         old_dst = ref_dst
         for ofsx in -1:1, ofsy in -1:1, ofsz in -1:1
@@ -902,7 +912,7 @@ function do_clustering(c::Crystal{T}, mode::ClusteringMode)::Tuple{Clusters, Cry
     n = length(c.types)
     if mode == InputClustering
         if T === Nothing
-            throw(ArgumentError("cannot use input residues as clusters: the input does not have residues."))
+            throw(ArgumentError("Cannot use input residues as clusters: the input does not have residues."))
         else
             return Clusters(n), CrystalNet(c)
         end

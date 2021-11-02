@@ -152,16 +152,19 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     invids = sortperm(types)
     types = types[invids]
     ids = invperm(invids)
-    bonds = falses(natoms, natoms)
+    bonds = fill(Inf32, natoms, natoms)
     if haskey(parsed, "geom_bond_atom_site_label_1") &&
        haskey(parsed, "geom_bond_atom_site_label_2")
         bond_a = pop!(parsed, "geom_bond_atom_site_label_1")
         bond_b = pop!(parsed, "geom_bond_atom_site_label_2")
+        dists = haskey(parsed, "geom_bond_distance") ? 
+                    parse.(Float32, pop!(parsed, "geom_bond_distance")) :
+                    fill(zero(Float32), length(bond_a))
         for i in 1:length(bond_a)
             try
                 x = correspondence[bond_a[i]]
                 y = correspondence[bond_b[i]]
-                bonds[x,y] = bonds[y,x] = 1
+                bonds[x,y] = bonds[y,x] = dists[i]
             catch e
                 if e isa KeyError
                     @ifwarn @warn "Atom $(e.key) will be ignored since it has no placement in the CIF file."
@@ -587,18 +590,17 @@ function parse_chemfile(_path, exportto=tempdir(), bondingmode::BondingMode=Auto
             add_atom!(framecif, atom, Vector{Float64}(pos))
         end
         n -= ignored
-        if iszero(cif.bonds)
+        if all(==(Inf32), cif.bonds)
             guessed_bonds = true
             try_guess_bonds!(framecif, types)
         else
             for i in 1:n, j in (i+1):n
-                if cif.bonds[i,j]
+                if cif.bonds[i,j] < Inf32
                     add_bond!(framecif, i-1, j-1)
                 end
             end
         end
         attributions = Int[]
-
 
         framecif
     else # The rest is handled by Chemfiles

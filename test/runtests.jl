@@ -4,6 +4,8 @@ using PeriodicGraphs
 using StaticArrays
 import Base.Threads
 
+CrystalNets.toggle_export(false)
+
 function _finddirs()
     curr = last(splitdir(@__DIR__))
     root = curr == "CrystalNets" ? normpath(@__DIR__) : normpath(@__DIR__, "..")
@@ -157,6 +159,20 @@ end
     result, written = capture_out(out)
     @test result == 0
     @test written == ["dia"]
+
+    empty!(ARGS)
+    path = joinpath(cifs, "ALPO-3.10.7.163.001.cif")
+    push!(ARGS, "-c", "guess", "-b", "input", path)
+    result, written = capture_out(out)
+    @test result == 0
+    @test written == ["gme, GME"]
+
+    empty!(ARGS)
+    path = joinpath(cifs, "ALPO-3.10.7.163.001.cif")
+    push!(ARGS, "-c", "guess", "-b", "chemfiles", path)
+    result, written = capture_out(out)
+    @test result == 0
+    @test written == ["gme, GME"]
 
     empty!(ARGS)
     push!(ARGS, "--help")

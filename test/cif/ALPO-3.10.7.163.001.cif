@@ -1,0 +1,64 @@
+data_3.10.7.163.001
+_audit_creation_date              2020-01-31
+_audit_creation_method            'Materials Studio'
+_symmetry_space_group_name_H-M    'P-31C'
+_symmetry_Int_Tables_number       163
+_symmetry_cell_setting            trigonal
+loop_
+_symmetry_equiv_pos_as_xyz
+  x,y,z
+  -y,x-y,z
+  -x+y,-x,z
+  -y,-x,-z+1/2
+  -x+y,y,-z+1/2
+  x,x-y,-z+1/2
+  -x,-y,-z
+  y,-x+y,-z
+  x-y,x,-z
+  y,x,z+1/2
+  x-y,-y,z+1/2
+  -x,-x+y,z+1/2
+_cell_length_a                    13.8077
+_cell_length_b                    13.8077
+_cell_length_c                    9.9138
+_cell_angle_alpha                 90.0000
+_cell_angle_beta                  90.0000
+_cell_angle_gamma                 120.0000
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_U_iso_or_equiv
+_atom_site_adp_type
+_atom_site_occupancy
+Al1    Al    0.44090   0.10690   0.08520   0.01560  Uiso   1.00
+O1     O     0.77100   0.20000   0.04980   0.01290  Uiso   1.00
+O2     O     0.55750   0.41580   0.06460   0.01290  Uiso   1.00
+O3     O     0.41140   0.07580   0.25400   0.01290  Uiso   1.00
+O4     O     0.35970   0.33890  -0.01510   0.01290  Uiso   1.00
+P1     P    -0.43430  -0.10000   0.59590   0.01560  Uiso   0.7
+Si1    Si   -0.43430  -0.10000   0.59590   0.01560  Uiso   0.3
+
+loop_
+_geom_bond_atom_site_label_1
+_geom_bond_atom_site_label_2
+_geom_bond_distance
+_geom_bond_site_symmetry_2
+_ccdc_geom_bond_type
+Al1    O3      1.725   .     S
+Al1    O1      1.808   3_665 S
+Al1    O2      1.799   2_655 S
+Al1    O4      1.758   8     S
+O1     Al1     1.808   2_655 S
+O1     P1      1.491   11_654 D
+O2     Al1     1.799   3_665 S
+O2     P1      1.530   12_554 S
+O3     P1      1.523   7_556 S
+O4     Al1     1.758   9     S
+O4     P1      1.530   12_554 S
+P1     O1      1.491   11_455 D
+P1     O2      1.530   12    S
+P1     O3      1.523   7_556 S
+P1     O4      1.530   12    S
