@@ -44,6 +44,10 @@ end
 function __init__()
     toggle_warning("--no-warn" ∉ ARGS)
     toggle_export("--no-export" ∉ ARGS)
+    if abspath(PROGRAM_FILE) == @__FILE__
+        ret_code = CrystalNets.julia_main()
+        exit(ret_code)
+    end
     nothing
 end
 
@@ -61,6 +65,4 @@ include("precompile.jl")
 
 end # module CrystalNets
 
-if abspath(PROGRAM_FILE) == @__FILE__
-    CrystalNets.julia_main()
-end
+nothing
