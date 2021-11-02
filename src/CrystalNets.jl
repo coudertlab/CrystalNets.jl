@@ -27,7 +27,6 @@ using StaticArrays
 using Graphs
 
 import Logging
-import Logging: Warn, Info, @logmsg
 
 const DOWARN = Base.RefValue{Bool}(false)
 const DOEXPORT = Base.RefValue{Bool}(false)

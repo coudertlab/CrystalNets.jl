@@ -1,11 +1,19 @@
 ## Common utility functions
 
-# function _custom_metafmt(level::Logging.LogLevel, _module, group, id, file, line)
-#     color = Logging.default_logcolor(level)
-#     prefix = (level == Warn ? "Warning" : string(level))*':'
-#     return color, prefix, ""
+# function no_metadata_metafmt(args...; kwargs...)
+#     color, prefix, suffix = Logging.default_metafmt(args...; kwargs...)
+#     if prefix == "Warning"
+#         return color, prefix, ""
+#     end
+#     return color, prefix, suffix
 # end
-# Logging.global_logger(Logging.ConsoleLogger(stderr, Logging.Info, _custom_metafmt, true, 0, Dict{Any,Int}()))
+function no_metadata_metafmt(level::Logging.LogLevel, _module, group, id, file, line)
+    @nospecialize
+    color = Logging.default_logcolor(level)
+    prefix = string(level == Logging.Warn ? "Warning" : string(level), ':')
+    return color, prefix, ""
+end
+const minimal_logger = Logging.ConsoleLogger(; meta_formatter=no_metadata_metafmt)
 
 # function ifwarn(msg, ::Val{T}) where T
 #     global DOWARN
@@ -21,7 +29,9 @@
 macro ifwarn(ex)
     return quote
         if (DOWARN[]::Bool)
-            $(esc(ex))
+            with_logger(minimal_logger) do
+                $(esc(ex))
+            end
         end
     end
 end
@@ -32,11 +42,8 @@ function ifexport(c, _name=nothing, path=tempdir())
         name::String = _name isa Nothing ? tempname(path; cleanup=false)*".vtf" : begin
             i = 0
             x = "crystal_"*_name*'_'*string(i)*".vtf"
-            names = readdir(path; join=false, sort=true)
-            j = searchsortedfirst(names, x)
-            while j <= length(names) && names[j] == x
+            while isfile(joinpath(path, x))
                 i += 1
-                j += 1
                 x = "crystal_"*_name*'_'*string(i)*".vtf"
             end
             x
