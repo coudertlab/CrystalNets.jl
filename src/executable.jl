@@ -39,7 +39,7 @@ function parse_commandline()
                          \n\n
                          BONDING_MODE options:\n\n
                          \ua0\ua0\ua0* input: use the bonds explicitly given by the input file. Fail if bonds are not provided by the input.\n\n
-                         \ua0\ua0\ua0* chemfiles: guess bonds using chemfiles built-in bond detection mechanism.
+                         \ua0\ua0\ua0* chemfiles: guess bonds using chemfiles built-in bond detection mechanism.\n\n
                          \ua0\ua0\ua0* auto: if the input possesses explicit bonds, use them unless they are suspicious. Otherwise, fall back to "chemfiles". Default option.\n\n
                          \n\n
                          CREATE_MODE options:\n\n
@@ -53,13 +53,13 @@ function parse_commandline()
                          add_help = false,
                          usage = """
                    usage: CrystalNets [-a ARCHIVE_PATH [-u NAME [-f] | -r [-f]]]
-                                      [[-c CLUSTERING_MODE] [-b BONDING_MODE]] | -g]
+                                      [[-c CLUSTERING_MODE] [-b BONDING_MODE] | -g]
                                       [--no-export | -e DIR_PATH] CRYSTAL_FILE   (Form A)
                           CrystalNets -a ARCHIVE_PATH -n [CREATE_MODE] [-f]      (Form B)
                           CrystalNets -a ARCHIVE_PATH -d [-f]                    (Form C)
                    """)
 
-    add_arg_group!(s, "Options common two all forms")
+    add_arg_group!(s, "Options common to all forms")
     @add_arg_table! s begin
         "--help", "-h"
             help = "Show this help message and exit."
@@ -86,20 +86,10 @@ function parse_commandline()
 
     add_arg_group!(s, "Form A: give the name of the topology of a net")
     @add_arg_table! s begin
-        "--update-archive", "-u"
-            help = """Give a name to the topology of the crystal and add it to the
-            archive at ARCHIVE_PATH. If the topology is already known to the archive,
-            this will do nothing unless --force is passed on. The returned name is
-            the previous binding, if present, or "UNKNOWN" otherwise.
-            """
-            metavar = "NAME"
-
-        "--remove-from-archive", "-r"
-            help = """Remove the topology from the archive at ARCHIVE_PATH. If the
-            topology is absent, this will error unless --force is passed on. The
-            returned name is the previous binding, if present, or "UNKNOWN" otherwise.
-            """
-            action = :store_true
+        "input"
+            help = "Path to the crystal to be analyzed"
+            required = false
+            metavar = "CRYSTAL_FILE"
 
         "--clustering", "-c"
             help = """Clustering mode, to be chosen between input, atom, mof, guess and auto.
@@ -128,10 +118,20 @@ function parse_commandline()
             """
             action = :store_true
 
-        "input"
-            help = "Path to the crystal to be analyzed"
-            required = false
-            metavar = "CRYSTAL_FILE"
+        "--update-archive", "-u"
+            help = """Give a name to the topology of the crystal and add it to the
+            archive at ARCHIVE_PATH. If the topology is already known to the archive,
+            this will do nothing unless --force is passed on. The returned name is
+            the previous binding, if present, or "UNKNOWN" otherwise.
+            """
+            metavar = "NAME"
+
+        "--remove-from-archive", "-r"
+            help = """Remove the topology from the archive at ARCHIVE_PATH. If the
+            topology is absent, this will error unless --force is passed on. The
+            returned name is the previous binding, if present, or "UNKNOWN" otherwise.
+            """
+            action = :store_true
     end
 
     add_arg_group!(s, "Form B: create a new archive")
@@ -415,7 +415,7 @@ Base.@ccallable function julia_main()::Cint
                 try
                     add_to_current_archive!(new_topology_name, genome)
                 catch
-                    @info """The archive was not updated because either the name or the genome is already present."""
+                    @ifwarn @info """The archive was not updated because either the name or the genome is already present."""
                     flag = false
                 end
                 if flag
