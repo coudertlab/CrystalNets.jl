@@ -338,5 +338,8 @@ function coalesce_sbus(crystal::Crystal{Clusters})
         atts == attd && continue
         push!(edgs, PeriodicEdge3D(atts, attd, of .+ clusters.offsets[s] .- clusters.offsets[d]))
     end
+    if isempty(edgs)
+        throw(MissingAtomInformation("Coalescence of SBUs into new nodes leads to an edgeless graph: the clustering is probably wrong and the structure is not connected."))
+    end
     return Crystal{Nothing}(crystal.cell, types, nothing, pos, PeriodicGraph3D(n, edgs))
 end

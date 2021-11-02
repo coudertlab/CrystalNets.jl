@@ -44,6 +44,10 @@ function __init__()
     toggle_warning("--no-warn" ∉ ARGS)
     toggle_export("--no-export" ∉ ARGS)
     if abspath(PROGRAM_FILE) == @__FILE__
+        global DOWARN
+        if DOWARN[]
+            @info "Proceed to a full installation (see README.md) for better performance"
+        end
         ret_code = CrystalNets.julia_main()
         exit(ret_code)
     end

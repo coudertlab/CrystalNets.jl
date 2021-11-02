@@ -13,7 +13,7 @@ function _finddirs()
 end
 
 const known_unstable_nets = ("sxt", "llw-z") # special case for these known unstable nets
-
+#=
 @testset "Archive" begin
     @info "Checking that all known topologies are reckognized (this can take a few minutes)."
     tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)
@@ -69,36 +69,38 @@ end
         @test b
     end
 
-    println(stderr, '\n')
-    @info """The following warnings about guessing bonds are expected."""
-    println(stderr)
     cifs, crystalnetsdir = _finddirs()
-    @test reckognize_topology(topological_genome(CrystalNet(parse_chemfile(joinpath(cifs, "Moganite.cif"))))) == "mog"
+    @test reckognize_topology(topological_genome(CrystalNet(
+        redirect_stderr(devnull) do; parse_chemfile(joinpath(cifs, "Moganite.cif")) end))) == "mog"
 end
+=#
 
 
-@testset "Executable" begin
-    function capture_out(name)
-        result = open(name, "w") do out
+function capture_out(name)
+    result = open(name, "w") do out
+        redirect_stderr(devnull) do
             redirect_stdout(CrystalNets.julia_main, out)
         end
-        written = readlines(name)
-        return result, written
     end
+    written = readlines(name)
+    return result, written
+end
 
-    function __reset_archive!(safeARCHIVE, safeREVERSE)
-        empty!(CrystalNets.CRYSTAL_NETS_ARCHIVE)
-        empty!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
-        merge!(CrystalNets.CRYSTAL_NETS_ARCHIVE, safeARCHIVE)
-        merge!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE, safeREVERSE)
-        nothing
-    end
+const safeARCHIVE = deepcopy(CrystalNets.CRYSTAL_NETS_ARCHIVE)
+const safeREVERSE = deepcopy(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
+function __reset_archive!(safeARCHIVE, safeREVERSE)
+    empty!(CrystalNets.CRYSTAL_NETS_ARCHIVE)
+    empty!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
+    merge!(CrystalNets.CRYSTAL_NETS_ARCHIVE, safeARCHIVE)
+    merge!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE, safeREVERSE)
+    nothing
+end
 
+#=
+@testset "Executable" begin
     cifs, crystalnetsdir = _finddirs()
     safeARGS = deepcopy(ARGS)
-    safeARCHIVE = deepcopy(CrystalNets.CRYSTAL_NETS_ARCHIVE)
-    safeREVERSE = deepcopy(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
-    
+
     out = tempname()
     empty!(ARGS)
 
@@ -175,8 +177,34 @@ end
     @test written == ["gme, GME"]
 
     empty!(ARGS)
-    push!(ARGS, "--help")
+    path = joinpath(cifs, "ALPO-3.1.1.37.001.cif")
+    push!(ARGS, "-c", "guess", "-b", "input", path)
     result, written = capture_out(out)
+    @test result == 1 # Unknown topology with the input bonds
+
+    empty!(ARGS)
+    path = joinpath(cifs, "ALPO-3.1.1.37.001.cif")
+    push!(ARGS, "-c", "guess", "-b", "auto", path)
+    result, written = capture_out(out)
+    @test result == 0
+    @test written == ["afi, AFI"]
+
+    empty!(ARGS)
+    append!(ARGS, safeARGS)
+    if splitdir(@__DIR__) != "test" # if used with include("runtests.jl")
+        CrystalNets._reset_archive!()
+    end
+end=#
+
+@testset "Executable help" begin
+    safeARGS = deepcopy(ARGS)
+    out = tempname()
+    empty!(ARGS)
+    push!(ARGS, "--help")
+    @error "FOO"
+    result, written = capture_out(out)
+    @error "BAR"
+    @test_broken false
     @test result == 0
     @test startswith(popfirst!(written), "usage: CrystalNets")
     @test !isempty(popfirst!(written))
@@ -189,8 +217,4 @@ end
 
     empty!(ARGS)
     append!(ARGS, safeARGS)
-
-    if splitdir(@__DIR__) != "test" # if used with include("runtests.jl")
-        CrystalNets._reset_archive!()
-    end
 end

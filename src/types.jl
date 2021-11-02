@@ -382,7 +382,7 @@ function expand_symmetry(c::CIF)
                                     cif.types, cif.pos, cif.bonds))
     end
     n = length(cif.ids)
-    _oldbonds = Dict((i,j) => cif.bonds[i,j] for i in 1:n for j in (i+1):n if cif.bonds[i,j] < Inf32)
+    _oldbonds = Dict((cif.ids[i],cif.ids[j]) => cif.bonds[i,j] for i in 1:n for j in (i+1):n if cif.bonds[i,j] < Inf32)
     knownbondlengths = !any(iszero, values(_oldbonds))
     if !isempty(_oldbonds) && !knownbondlengths
         # This means that the bonds are determined as symmetric images of bonds of the
@@ -405,7 +405,7 @@ function expand_symmetry(c::CIF)
             p = Vector(equiv.mat*v .+ equiv.ofs)
             p .-= floor.(p)
             for j in 1:length(newpos)
-                if periodic_distance(newpos[j], p, smallmat) < 0.3
+                if periodic_distance(newpos[j], p, smallmat) < 0.55
                     image[i] = j
                     break
                 end
@@ -429,7 +429,7 @@ function expand_symmetry(c::CIF)
             for j in (i+1):m
                 bondlength = get(oldbonds, (newids[i], newids[j]), Inf32)
                 bondlength < Inf32 || continue
-                if abs(periodic_distance(newpos[i], newpos[j], smallmat) - bondlength) < 0.3
+                if abs(periodic_distance(newpos[i], newpos[j], smallmat) - bondlength) < 0.55
                     bonds[i,j] = bonds[j,i] = bondlength
                 end
             end
