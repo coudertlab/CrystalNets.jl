@@ -160,7 +160,7 @@ function parse_commandline()
                               e, catch_backtrace())
     end
     if ret[:help]
-        ArgParse.show_help(s)
+        ArgParse.show_help(s; exit_when_done=false)
         return 0
     end
 

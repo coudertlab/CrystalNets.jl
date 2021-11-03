@@ -13,7 +13,28 @@ function _finddirs()
 end
 
 const known_unstable_nets = ("sxt", "llw-z") # special case for these known unstable nets
-#=
+
+function capture_out(name)
+    result = open(name, "w") do out
+        redirect_stderr(devnull) do
+            redirect_stdout(CrystalNets.julia_main, out)
+        end
+    end
+    written = readlines(name)
+    return result, written
+end
+
+const safeARCHIVE = deepcopy(CrystalNets.CRYSTAL_NETS_ARCHIVE)
+const safeREVERSE = deepcopy(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
+function __reset_archive!(safeARCHIVE, safeREVERSE)
+    empty!(CrystalNets.CRYSTAL_NETS_ARCHIVE)
+    empty!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
+    merge!(CrystalNets.CRYSTAL_NETS_ARCHIVE, safeARCHIVE)
+    merge!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE, safeREVERSE)
+    nothing
+end
+
+
 @testset "Archive" begin
     @info "Checking that all known topologies are reckognized (this can take a few minutes)."
     tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)
@@ -73,30 +94,7 @@ end
     @test reckognize_topology(topological_genome(CrystalNet(
         redirect_stderr(devnull) do; parse_chemfile(joinpath(cifs, "Moganite.cif")) end))) == "mog"
 end
-=#
 
-
-function capture_out(name)
-    result = open(name, "w") do out
-        redirect_stderr(devnull) do
-            redirect_stdout(CrystalNets.julia_main, out)
-        end
-    end
-    written = readlines(name)
-    return result, written
-end
-
-const safeARCHIVE = deepcopy(CrystalNets.CRYSTAL_NETS_ARCHIVE)
-const safeREVERSE = deepcopy(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
-function __reset_archive!(safeARCHIVE, safeREVERSE)
-    empty!(CrystalNets.CRYSTAL_NETS_ARCHIVE)
-    empty!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
-    merge!(CrystalNets.CRYSTAL_NETS_ARCHIVE, safeARCHIVE)
-    merge!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE, safeREVERSE)
-    nothing
-end
-
-#=
 @testset "Executable" begin
     cifs, crystalnetsdir = _finddirs()
     safeARGS = deepcopy(ARGS)
@@ -184,27 +182,40 @@ end
 
     empty!(ARGS)
     path = joinpath(cifs, "ALPO-3.1.1.37.001.cif")
-    push!(ARGS, "-c", "guess", "-b", "auto", path)
+    push!(ARGS, "-b", "auto", path)
     result, written = capture_out(out)
     @test result == 0
     @test written == ["afi, AFI"]
+
+    # Test automatic removal of solvent residues and sites with multiple atoms
+    empty!(ARGS)
+    path = joinpath(cifs, "ALPO-3.1.1.128.001.cif")
+    push!(ARGS, path, "-b", "input")
+    result, written = capture_out(out)
+    @test result == 0
+    @test written == ["sas, SAS"]
+
+    empty!(ARGS)
+    path = joinpath(cifs, "ALPO-3.1.2.20.002.cif")
+    push!(ARGS, path)
+    result, written = capture_out(out)
+    @test result == 0
+    @test written == ["gis, GIS"]
+    
 
     empty!(ARGS)
     append!(ARGS, safeARGS)
     if splitdir(@__DIR__) != "test" # if used with include("runtests.jl")
         CrystalNets._reset_archive!()
     end
-end=#
+end
 
 @testset "Executable help" begin
     safeARGS = deepcopy(ARGS)
     out = tempname()
     empty!(ARGS)
     push!(ARGS, "--help")
-    @error "FOO"
     result, written = capture_out(out)
-    @error "BAR"
-    @test_broken false
     @test result == 0
     @test startswith(popfirst!(written), "usage: CrystalNets")
     @test !isempty(popfirst!(written))
