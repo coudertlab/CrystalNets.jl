@@ -571,7 +571,7 @@ function parse_chemfile(_path, exportto=tempdir(), bondingmode::BondingMode=Auto
     cell = Cell()
     guessed_bonds = false
     frame::Frame = if lowercase(last(splitext(path))) == ".cif"
-        global framecif = Frame()
+        framecif = Frame()
         cif = expand_symmetry(CIF(path))
         a, b, c, α, β, γ = cell_parameters(cif.cell)
         set_cell!(framecif, UnitCell(a, b, c, α, β, γ))

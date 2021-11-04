@@ -764,6 +764,8 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
 
     if haskey(dimensions, 0)
         @ifwarn @warn "Removing complex structure of dimension 0, possibly solvent residues."
+        # Note that the above warning will not appear for small solvent molecules, because
+        # those will have been removed by trim_topology beforehand.
         dim0::Vector{Int} = reduce(vcat, @inbounds dimensions[0]; init=Int[])
         vmap0 = trim_crystalnet!(graph, types, dim0, false)
         types = types[vmap0]
@@ -827,7 +829,7 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGr
         entertwinedD = length(group) > 1
     end
     if entertwinedD
-        error(ArgumentError("Multiple entertwined $D-dimensional structures. This should not happen: to separate the structures, use CrystalNetGroup instead of CrystalNet."))
+        error(ArgumentError("Multiple entertwined $D-dimensional structures. Cannot handle this as a single CrystalNet, use CrystalNetGroup instead."))
     end
     @separategroups D group begin
         return last(only(group))

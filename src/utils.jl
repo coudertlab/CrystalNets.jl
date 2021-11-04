@@ -49,12 +49,12 @@ function ifexport(c, _name=nothing, path=tempdir())
             x
         end
         truepath = joinpath(path, name)
-        @ifwarn @info "Automatic export of input is enabled: saving file at $truepath"
+        println("Automatic export of input is enabled: saving file at $truepath")
         try
             export_vtf(truepath, c, 6)
         catch e
             if e isa SystemError
-                @ifwarn @info "Failed to export because of the following error: $e"
+                @error "Failed to export because of the following error: $e"
             end
         end
     end
