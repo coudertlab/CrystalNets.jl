@@ -1077,7 +1077,7 @@ end
 
 function reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
     (startswith(genome, "unstable") || genome == "non-periodic") && return genome
-    get(arc, genome, "UNKNOWN")
+    get(arc, genome, "UNKNOWN "*genome)
 end
 
 
@@ -1085,10 +1085,11 @@ function reckognize_topologies(path; ignore_atoms=(), forgettypes=true)
     ret = Dict{String,String}()
     failed = Dict{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}()
     newarc = copy(CRYSTAL_NETS_ARCHIVE)
-    @threads for f in readdir(path)
+    #=@threads=# for f in readdir(path)
         name = first(splitext(f))
+        println(name)
         genomes::Vector{Tuple{Vector{Int},String}} = try
-            topological_genome(CrystalNetGroup(parse_chemfile(path*f; ignore_atoms)); forgettypes)
+            topological_genome(CrystalNetGroup(parse_chemfile(joinpath(path, f); ignore_atoms)); forgettypes)
         catch e
             if e isa InterruptException ||
               (e isa TaskFailedException && e.task.result isa InterruptException)
@@ -1097,6 +1098,7 @@ function reckognize_topologies(path; ignore_atoms=(), forgettypes=true)
             if e isa NonPeriodicInputException
                 [(Int[], "non-periodic")]
             else
+                e isa ArgumentError && startswith(e.msg, "Cannot use input bonds since there are none.") && continue
                 failed[name] = (e, catch_backtrace())
                 Tuple{Vector{Int},String}[]
             end
@@ -1104,12 +1106,10 @@ function reckognize_topologies(path; ignore_atoms=(), forgettypes=true)
         for (i, (_, genome)) in enumerate(genomes)
             newname = length(genomes) == 1 ? name : name * '_' * string(i)
             id = reckognize_topology(genome, newarc)
-            if id == "UNKNOWN"
+            if startswith(id, "UNKNOWN")
                 newarc[genome] = newname
-                ret[newname] = genome
-            else
-                ret[newname] = id
             end
+            ret[newname] = id
         end
     end
     return ret, failed

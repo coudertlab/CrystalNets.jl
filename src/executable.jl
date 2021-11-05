@@ -2,29 +2,28 @@
 
 using ArgParse
 
+function invalid_input_error(msg, e, stacktrace)
+    println(stderr, msg)
+    Base.display_error(stderr, e, stacktrace)
+    return 2
+end
 
 function parse_error(msg)
     println(stderr, msg)
     println(stderr, "See --help for usage.")
-    return 5
-end
-
-function invalid_input_error(msg, e, stacktrace)
-    println(stderr, msg)
-    Base.display_error(stderr, e, stacktrace)
-    return 4
+    return 3
 end
 
 function internal_error(msg, e, stacktrace)
     println(stderr, msg)
     Base.display_error(stderr, e, stacktrace)
-    return 3
+    return 4
 end
 
 function unhandled_error(msg, e, stacktrace)
     println(stderr, msg)
     Base.display_error(stderr, e, stacktrace)
-    return 2
+    return 5
 end
 
 function parse_commandline()
@@ -122,14 +121,16 @@ function parse_commandline()
             help = """Give a name to the topology of the crystal and add it to the
             archive at ARCHIVE_PATH. If the topology is already known to the archive,
             this will do nothing unless --force is passed on. The returned name is
-            the previous binding, if present, or "UNKNOWN" otherwise.
+            the previous binding, if present, or "UNKNOWN" followed by the topological
+            genome otherwise.
             """
             metavar = "NAME"
 
         "--remove-from-archive", "-r"
             help = """Remove the topology from the archive at ARCHIVE_PATH. If the
             topology is absent, this will error unless --force is passed on. The
-            returned name is the previous binding, if present, or "UNKNOWN" otherwise.
+            returned name is the previous binding, if present, or "UNKNOWN" followed
+            by the topological genome otherwise.
             """
             action = :store_true
     end
@@ -433,13 +434,11 @@ Base.@ccallable function julia_main()::Cint
             end
         end
 
-        if id == "UNKNOWN"
-            println("UNKNOWN")
+        println(id)
+        if startswith(id, "UNKNOWN")
             return 1
-        else
-            println(id)
-            return 0
         end
+        return 0
 
     catch e
         return unhandled_error("CrystalNets encountered an unhandled exception:",

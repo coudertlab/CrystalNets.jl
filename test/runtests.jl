@@ -134,7 +134,7 @@ end
     push!(ARGS, "-a", CrystalNets.arc_location*"rcsr.arc", path)
     result, written = capture_out(out)
     @test result == 1
-    @test written == ["UNKNOWN"]
+    @test startswith(only(written), "UNKNOWN")
     __reset_archive!(safeARCHIVE, safeREVERSE)
 
     empty!(ARGS)
@@ -190,7 +190,7 @@ end
     # Test automatic removal of solvent residues and sites with multiple atoms
     empty!(ARGS)
     path = joinpath(cifs, "ALPO-3.1.1.128.001.cif")
-    push!(ARGS, path, "-b", "input")
+    push!(ARGS, path)
     result, written = capture_out(out)
     @test result == 0
     @test written == ["sas, SAS"]
@@ -201,18 +201,7 @@ end
     result, written = capture_out(out)
     @test result == 0
     @test written == ["gis, GIS"]
-    
 
-    empty!(ARGS)
-    append!(ARGS, safeARGS)
-    if splitdir(@__DIR__) != "test" # if used with include("runtests.jl")
-        CrystalNets._reset_archive!()
-    end
-end
-
-@testset "Executable help" begin
-    safeARGS = deepcopy(ARGS)
-    out = tempname()
     empty!(ARGS)
     push!(ARGS, "--help")
     result, written = capture_out(out)
@@ -228,4 +217,7 @@ end
 
     empty!(ARGS)
     append!(ARGS, safeARGS)
+    if splitdir(@__DIR__) != "test" # if used with include("runtests.jl")
+        CrystalNets._reset_archive!()
+    end
 end
