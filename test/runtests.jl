@@ -35,7 +35,7 @@ function __reset_archive!(safeARCHIVE, safeREVERSE)
 end
 
 
-@testset "Archive" begin
+#=@testset "Archive" begin
     @info "Checking that all known topologies are reckognized (this can take a few minutes)."
     tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)
                                if x ∉ known_unstable_nets])
@@ -93,7 +93,7 @@ end
     cifs, crystalnetsdir = _finddirs()
     @test reckognize_topology(topological_genome(CrystalNet(
         redirect_stderr(devnull) do; parse_chemfile(joinpath(cifs, "Moganite.cif")) end))) == "mog"
-end
+end=#
 
 @testset "Executable" begin
     cifs, crystalnetsdir = _finddirs()

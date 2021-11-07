@@ -55,6 +55,8 @@ function ifexport(c, _name=nothing, path=tempdir())
         catch e
             if e isa SystemError
                 @error "Failed to export because of the following error: $e"
+            else
+                rethrow()
             end
         end
     end

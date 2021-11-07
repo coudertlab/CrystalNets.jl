@@ -17,11 +17,9 @@ end
 function export_vtf(file, c::Union{Crystal{Nothing},CrystalNet}, repeatedges=1, colorname=false)
     mkpath(splitdir(file)[1])
     n = length(c.types)
+    @assert length(c.pos) == n
     if c isa CrystalNet
-        @assert length(c.pos) == n
         c = CrystalNet3D(c)
-    else
-        @assert size(c.pos)[2] == n
     end
     invcorres = [PeriodicVertex3D(i) for i in 1:n]
     corres = Dict{PeriodicVertex3D,Int}([invcorres[i]=>i for i in 1:n])
@@ -84,7 +82,7 @@ function export_vtf(file, c::Union{Crystal{Nothing},CrystalNet}, repeatedges=1, 
         for x in invcorres
             coord = c isa CrystalNet ?
                 c.cell.mat * (widen.(c.pos[x.v]) .+ x.ofs) :
-                c.pos[:,x.v] + c.cell.mat * x.ofs
+                c.pos[x.v] + c.cell.mat * x.ofs
             println(f, join(round.(Float64.(coord); digits=15), ' '))
         end
     end
@@ -216,7 +214,7 @@ function export_cgd(file, c::Crystal)
         to_revisit = Int[]
         for i in 1:length(c.types)
             push!(to_revisit, i)
-            pos = invmat * c.pos[:,i]
+            pos = invmat * c.pos[i]
             println(f, "\t\t", i, ' ', degree(c.graph, i), ' ', pos[1], ' ',
                     pos[2], ' ', pos[3])
         end
@@ -224,7 +222,7 @@ function export_cgd(file, c::Crystal)
         for i in to_revisit
             for e in neighbors(c.graph, i)
                 e.v < i && continue
-                dest = invmat * c.pos[:,e.v] .+ e.ofs
+                dest = invmat * c.pos[e.v] .+ e.ofs
                 println(f, "\t\t", i, '\t', dest[1], ' ', dest[2], ' ', dest[3])
             end
         end

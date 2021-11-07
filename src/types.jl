@@ -396,7 +396,7 @@ function expand_symmetry(c::CIF)
         oldbonds[(j,i)] = bond
     end
     newids::Vector{Int} = copy(cif.ids)
-    newpos::Vector{Vector{Float64}} = collect(eachcol(cif.pos))
+    newpos::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     smallmat = Float64.(cif.cell.mat)
     #=@inbounds=# for equiv in cif.cell.equivalents
         image = zeros(Int, n)
@@ -518,7 +518,7 @@ struct Crystal{T<:Union{Nothing,Clusters}}
     cell::Cell
     types::Vector{Symbol}
     clusters::T
-    pos::Matrix{Float64}
+    pos::Vector{SVector{3,Float64}}
     graph::PeriodicGraph3D
 end
 
@@ -539,7 +539,7 @@ end
 trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(coalesce_sbus(c))
 function trimmed_crystal(c::Crystal{Nothing})
     vmap, graph = trim_topology(c.graph)
-    return Crystal(c.cell, c.types[vmap], nothing, c.pos[:,vmap], graph)
+    return Crystal(c.cell, c.types[vmap], nothing, c.pos[vmap], graph)
 end
 
 ## CrystalNet
