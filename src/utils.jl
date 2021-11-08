@@ -48,7 +48,7 @@ function ifexport(c, _name=nothing, path=tempdir())
             end
             x
         end
-        truepath = joinpath(path, name)
+        truepath = replace(joinpath(path, name), ('\\' => "/"))
         println("Automatic export of input is enabled: saving file at $truepath")
         try
             export_vtf(truepath, c, 6)

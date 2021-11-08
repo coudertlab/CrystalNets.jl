@@ -14,7 +14,7 @@ function export_dataline(f, x)
     println(f, inbetween*x)
 end
 
-function export_vtf(file, c::Union{Crystal{Nothing},CrystalNet}, repeatedges=1, colorname=false)
+function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=1, colorname=false)
     mkpath(splitdir(file)[1])
     n = length(c.types)
     @assert length(c.pos) == n
@@ -80,9 +80,7 @@ function export_vtf(file, c::Union{Crystal{Nothing},CrystalNet}, repeatedges=1, 
 
         println(f, "ordered")
         for x in invcorres
-            coord = c isa CrystalNet ?
-                c.cell.mat * (widen.(c.pos[x.v]) .+ x.ofs) :
-                c.pos[x.v] + c.cell.mat * x.ofs
+            coord = c.cell.mat * (widen.(c.pos[x.v]) .+ x.ofs)
             println(f, join(round.(Float64.(coord); digits=15), ' '))
         end
     end
@@ -201,7 +199,6 @@ end
 
 function export_cgd(file, c::Crystal)
     mkpath(splitdir(file)[1])
-    invmat = Float64.(inv(c.cell.mat))
     open(file, write=true) do f
         println(f, "CRYSTAL\n")
         margin = 1
@@ -214,7 +211,7 @@ function export_cgd(file, c::Crystal)
         to_revisit = Int[]
         for i in 1:length(c.types)
             push!(to_revisit, i)
-            pos = invmat * c.pos[i]
+            pos = c.pos[i]
             println(f, "\t\t", i, ' ', degree(c.graph, i), ' ', pos[1], ' ',
                     pos[2], ' ', pos[3])
         end
@@ -222,7 +219,7 @@ function export_cgd(file, c::Crystal)
         for i in to_revisit
             for e in neighbors(c.graph, i)
                 e.v < i && continue
-                dest = invmat * c.pos[e.v] .+ e.ofs
+                dest = c.pos[e.v] .+ e.ofs
                 println(f, "\t\t", i, '\t', dest[1], ' ', dest[2], ' ', dest[3])
             end
         end

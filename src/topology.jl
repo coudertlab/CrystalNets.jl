@@ -1075,9 +1075,14 @@ function topological_genome(group::CrystalNetGroup, skipminimize=false; forgetty
     return ret
 end
 
+
 function reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
     (startswith(genome, "unstable") || genome == "non-periodic") && return genome
     get(arc, genome, "UNKNOWN "*genome)
+end
+
+function reckognize_topology(genomes::Vector{Tuple{Vector{Int},String}}, arc=CRYSTAL_NETS_ARCHIVE)
+    return [(src, reckognize_topology(genome, arc)) for (src, genome) in genomes]
 end
 
 
@@ -1087,7 +1092,6 @@ function reckognize_topologies(path; ignore_atoms=(), forgettypes=true)
     newarc = copy(CRYSTAL_NETS_ARCHIVE)
     #=@threads=# for f in readdir(path)
         name = first(splitext(f))
-        println(name)
         genomes::Vector{Tuple{Vector{Int},String}} = try
             topological_genome(CrystalNetGroup(parse_chemfile(joinpath(path, f); ignore_atoms)); forgettypes)
         catch e

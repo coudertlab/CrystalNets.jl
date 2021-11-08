@@ -139,7 +139,7 @@ function guess_bonds(pos, types, mat)
             posj = pos[j]
             d1 = periodic_distance(posi, posj, mat)
             d2 = radius_i + radius_j
-            if d1 < cutoff && 0.03 < d1 < 0.6*d2
+            if d1 < cutoff && 0.5 < d1 < 0.65*d2
                 push!(bonds, (i,j))
             end
         end

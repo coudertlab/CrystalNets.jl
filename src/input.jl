@@ -324,7 +324,7 @@ function attribute_residues(residues, n, assert_use_existing_residues)
     end
     attributions = zeros(Int, n)
     for i_residue in 1:m
-        for atom in atoms(residues[i])
+        for atom in atoms(residues[i_residue])
             attributions[atom+1] = i_residue
         end
     end
@@ -342,21 +342,27 @@ end
 
 
 function check_collision(pos, mat)
-    _n, n = size(pos)
-    @assert _n == 3
-    invmat = inv(mat)
+    n = length(pos)
     toremove = Int[]
-    for i in 1:n, j in (i+1):n
-        if periodic_distance(invmat*pos[:,i], invmat*pos[:,j], mat) < 0.55
-            push!(toremove, i)
-            push!(toremove, j)
+    for i in 1:n
+        posi = pos[i]
+        flagi = false
+        for j in (i+1):n
+            if periodic_distance(posi, pos[j], mat) < 0.55
+                push!(toremove, j)
+                if !flagi
+                    push!(toremove, i)
+                    flagi = true
+                end
+            end
         end
     end
     if !isempty(toremove)
         @ifwarn @warn "This file contains multiple colliding atoms. All colliding atoms will be removed."
         unique!(sort!(toremove))
     end
-    return toremove
+
+    return sort!(toremove)
 end
 
 
@@ -530,7 +536,7 @@ function sanity_checks!(graph, pos, types, mat, bondingmode)
     removeedges = PeriodicEdge3D[]
     for e in edges(graph)
         s, d = e.src, e.dst.v
-        bondlength = norm(pos[d] .+ (mat * e.dst.ofs) .- pos[s])
+        bondlength = norm(mat *(pos[d] .+ e.dst.ofs .- pos[s]))
         if (bondlength < 0.85 && types[s] !== :H && types[d] !== :H)
             push!(removeedges, e)
         elseif bondlength > 3
@@ -578,7 +584,7 @@ function parse_as_cif(cif, bondingmode, assert_use_existing_residues, ignore_ato
         
         bonds = guess_bonds(pos, types, Float64.(cif.cell.mat))
     else
-        bonds = Tuple{Int,Int}()
+        bonds = Tuple{Int,Int}[]
         _i = 1 # correction to i based on ignored atoms
         current_ignored_i = get(ignored, 1, 0)
         for i in 1:n
@@ -619,14 +625,15 @@ function parse_as_chemfile(frame, bondingmode, assert_use_existing_residues, ign
         end
     end
 
-    toremove = check_collision(positions(frame), matrix(UnitCell(frame)))
+    cell = Cell(Cell(), SMatrix{3,3,BigFloat}(matrix(UnitCell(frame)))')
+    pos::Vector{SVector{3,Float64}} = Ref(inv(cell.mat)) .* eachcol(positions(frame))
+
+    toremove = check_collision(pos, cell.mat)
     deleteat!(types, toremove)
     for j in reverse(toremove)
         Chemfiles.remove_atom!(frame, j-1)
     end
 
-    cell = Cell(Cell(), SMatrix{3,3,BigFloat}(matrix(UnitCell(frame)))')
-    pos::Vector{SVector{3,Float64}} = collect(eachcol(positions(frame)))
     n = length(pos)
     guessed_bonds = false
     topology = Topology(frame)
@@ -637,7 +644,7 @@ function parse_as_chemfile(frame, bondingmode, assert_use_existing_residues, ign
             add_bond!(frame, u-1, v-1)
         end
     else
-        bonds = [(a+1, b+1) for (a,b) in eachcol(bonds(topology))]
+        bonds = [(a+1, b+1) for (a,b) in eachcol(Chemfiles.bonds(topology))]
     end
 
     topology = Topology(frame) # Just a precaution since frame was possibly modified
@@ -693,13 +700,12 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, b
         end
     end
 
-    absolute_pos = Ref(mat) .* pos
     if isempty(attributions)
-        crystalnothing = Crystal{Nothing}(cell, types, nothing, absolute_pos, graph)
+        crystalnothing = Crystal{Nothing}(cell, types, nothing, pos, graph)
         ifexport(crystalnothing, name, exportto)
         return crystalnothing
     else
-        crystalclusters = Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions), absolute_pos, graph)
+        crystalclusters = Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions), pos, graph)
         ifexport(crystalclusters, name, exportto)
         return crystalclusters
     end

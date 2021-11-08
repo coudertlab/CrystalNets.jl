@@ -248,18 +248,6 @@ function keep_atoms(cif::CIF, kept)
 end
 
 
-function periodic_distance(u, v)
-    dst = 0.0
-    #=@inbounds=# for i in 1:3
-        x = abs2(u[i] - v[i])
-        if x > 0.25
-            x = (1 - sqrt(x))^2
-        end
-        dst += x
-    end
-    return sqrt(dst)
-end
-
 """
     periodic_distance(u, v, mat)
 
@@ -287,6 +275,7 @@ function remove_partial_occupancy(cif::CIF)
     points::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     perm = sortperm(points)
     n = length(perm)
+    minimal_length = cbrt(norm(cif.cell.mat))*4e-4 # TODO: find an appropriate value
     last_triplet = points[perm[1]] .+ (1,1,1)
     last_position = 0
     toalias = Vector{Int}[]
@@ -294,7 +283,7 @@ function remove_partial_occupancy(cif::CIF)
     for i in 1:n
         j = perm[i]
         thispoint = points[j]
-        if norm(thispoint .- last_triplet) < 4e-4
+        if norm(thispoint .- last_triplet) < 4e-4 # TODO: replace with minimal_length
             if inalias
                 push!(toalias[end], j)
             else
@@ -448,7 +437,7 @@ end
     edges_from_bonds(adjacency, mat, pos)
 
 Given an n×n adjacency matrix `adjacency`, the 3×3 matrix of the cell `mat` and the
-Vector{SVector{3,Float64}} `pos` whose elements are the positions of the
+Vector{SVector{3,Float64}} `pos` whose elements are the fractional positions of the
 atoms, extract the list of PeriodicEdge3D corresponding to the bonds.
 Since the adjacency matrix wraps bonds across the boundaries of the cell, the edges
 are extracted so that the closest representatives are chosen to form bonds.
@@ -461,8 +450,8 @@ function edges_from_bonds(adjacency, mat, pos)
         adjacency[k,i] || continue
         offset::Vector{SVector{3, Int}} = []
         old_dst = ref_dst
-        for ofsx in -1:1, ofsy in -1:1, ofsz in -1:1
-            dst = norm(pos[i] .- (pos[k] .+ (mat * [ofsx, ofsy, ofsz])))
+        for ofsx in -1:1, ofsy in -1:1, ofsz in -1:1 # TODO: optimize with the periodic_distance trick?
+            dst = norm(mat * (pos[i] .- (pos[k] .+ (ofsx, ofsy, ofsz))))
             if abs2(dst - old_dst) < 1e-3
                 push!(offset, (ofsx, ofsy, ofsz))
                 old_dst = (dst + old_dst)/2
@@ -511,7 +500,7 @@ Base.isempty(c::Clusters) = c.attributions == 1:length(c.attributions)
     Crystal
 
 Intermediate representation of a crystal, retaining information on the cell, and the
-exact placement of the atoms and their type, as well as the residues which will be used as
+fractional placement of the atoms and their type, as well as the residues which will be used as
 vertices for the computation of the underlying topology.
 """
 struct Crystal{T<:Union{Nothing,Clusters}}
