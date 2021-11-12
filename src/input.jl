@@ -443,7 +443,7 @@ macro reduce_valence(n)
         (!dofix || m < $n) && push!(invalidatoms, t)
         if dofix && m > $n
             posi = pos[i]
-            Δs = [norm(pos[x.v] .+ mat * x.ofs - posi) for x in neighs]
+            Δs = [norm(mat * (pos[x.v] .+ x.ofs - posi)) for x in neighs]
             toremove = least_plausible_neighbours(Δs, m - $n)
             neighs = copy(neighs) # otherwise the list is modified by rem_edge!
             for v in toremove
@@ -464,7 +464,7 @@ macro reduce_valence(n1, n2)
         if dofix && m > $n2
             posi = pos[i]
             noHatoms = [x for x in neighs if types[x.v] !== :H]
-            Δs = [norm(pos[x.v] .+ mat * x.ofs - posi) for x in noHatoms]
+            Δs = [norm(mat * (pos[x.v] .+ x.ofs - posi)) for x in noHatoms]
             toremove = least_plausible_neighbours(Δs, m - $n2)
             for v in toremove
                 rem_edge!(graph, PeriodicEdge{N}(i, noHatoms[v]))
