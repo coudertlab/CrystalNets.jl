@@ -382,16 +382,9 @@ end
 # if specialmode === :zeolite
 #     throw(ArgumentError("Found atom $t in zeolite mode, where only Si and O are accepted. Choose a different mode."))
 # end
-
-"""
-    least_plausible_neighbours(Δs, n, δ)
-
-Find the positions of the n least probable neighbours of an atom, given the list
-Δs of the distance between their position and that of the atom.
-
-This function is highly empirical and should not be considered utterly reliable.
-"""
+#=
 function least_plausible_neighbours(Δs, n)
+    @show Δs
     m = length(Δs)
     p::Vector{Int} = sortperm(Δs)
     n == 1 && return [p[1]]
@@ -418,6 +411,28 @@ function least_plausible_neighbours(Δs, n)
         append!(ret, @view p[n+j:end])
         return ret
     end
+end =#
+
+
+"""
+    least_plausible_neighbours(Δs, n)
+
+Find the positions of the n least probable neighbours of an atom, given the list
+Δs of the distance between their position and that of the atom.
+
+This function is highly empirical and should not be considered utterly reliable.
+"""
+function least_plausible_neighbours(Δs, n)
+    m = length(Δs)
+    m ≤ n && return collect(1:m) # may happen because H bonds cannot be removed
+    p::Vector{Int} = sortperm(Δs)
+    # If we should only remove n neighbours, remove those which minimize
+    # the dispersion among the remaining others
+    m == n+1 && return p[2:end] # only one remaining neighbour: keep the closest
+    if std(Δs[p[n+1:end]]) > 0.9std(Δs[p[1:end-n]])
+        return p[end-n+1:end]
+    end
+    return p[1:n]
 end
 
 macro reduce_valence(n)
@@ -429,7 +444,7 @@ macro reduce_valence(n)
         if dofix && m > $n
             posi = pos[i]
             Δs = [norm(pos[x.v] .+ mat * x.ofs - posi) for x in neighs]
-            toremove = least_plausible_neighbours(Δs, $n)
+            toremove = least_plausible_neighbours(Δs, m - $n)
             neighs = copy(neighs) # otherwise the list is modified by rem_edge!
             for v in toremove
                 rem_edge!(graph, PeriodicEdge{N}(i, neighs[v]))
@@ -439,67 +454,45 @@ macro reduce_valence(n)
 end
 
 macro reduce_valence(n1, n2)
+    comparison = n1 == 0 ? :(m ≤ $n2) : :($n1 ≤ m ≤ $n2)
+    invalidcond = n1 == 0 ? :(!dofix) : :(!dofix || m < $n1)
     return esc(quote
         neighs = neighbors(graph, i)
         m = length(neighs)
-        $n1 ≤ m ≤ $n2 && continue
-        (!dofix || m < $n1) && push!(invalidatoms, t)
+        $comparison && continue
+        ($invalidcond) && push!(invalidatoms, t)
         if dofix && m > $n2
             posi = pos[i]
-            Δs = [norm(pos[x.v] .+ mat * x.ofs - posi) for x in neighs]
-            toremove = least_plausible_neighbours(Δs, $n2)
-            neighs = copy(neighs) # otherwise the list is modified by rem_edge!
+            noHatoms = [x for x in neighs if types[x.v] !== :H]
+            Δs = [norm(pos[x.v] .+ mat * x.ofs - posi) for x in noHatoms]
+            toremove = least_plausible_neighbours(Δs, m - $n2)
             for v in toremove
-                rem_edge!(graph, PeriodicEdge{N}(i, neighs[v]))
+                rem_edge!(graph, PeriodicEdge{N}(i, noHatoms[v]))
             end
         end
     end)
 end
-#
-# macro loop_reduce_valence(typs...)
-#     if length(typs) == 1
-#         return esc(quote
-#             if $(typs[1].args[2]) ∈ uniquetypes
-#                 for i in 1:n
-#                     t = types[i]
-#                     if t === $(typs[1].args[2])
-#                         @reduce_valence $(typs[1].args[3])
-#                     end
-#                 end
-#             end
-#         end)
-#     else
-#         x1 = pop!(typs)
-#         x2 = pop!(typs)
-#         cond = Expr(:||, Expr(:call, :∈, QuoteNode(x1.args[2]), :uniquetypes),
-#                          Expr(:call, :∈, QuoteNode(x2.args[2]), :uniquetypes))
-#         subcond = Expr(:||, Expr(:call, :===, :t, QuoteNode(x1.args[2])),
-#                             Expr(:call, :===, :t, QuoteNode(x2.args[2])))
-#         for x in typs
-#             cond = Expr(:||, Expr(:call, :∈, QuoteNode(x.args[2]), :uniquetypes), cond)
-#             subcond = Expr(:||, Expr(:call, :===, :t, QuoteNode(x.args[2])))
-#         end
-#     return quote
-#         if $cond
-#             for i in 1:n
-#                 t = types[i]
-#                 if $subcond
-#                     @reduce_valence
-#     end
-# end
+
 
 #hasHneighbor(types, graph, i) = any(x -> types[x.v] === :H, neighbors(graph,i))
 function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}) where {N,dofix}
     # Small atoms valence check
     n = length(types)
     invalidatoms = Set{Symbol}()
-    monovalent = Set{Symbol}([:H, :Li, :Na, :K, :F, :Br, :Cl, :I])
+    # First pass over H, since those are likely bonded to their closest neighbor
+    for i in 1:n
+        t = types[i]
+        if t === :H
+            @reduce_valence 1
+        end
+    end
+    monovalent = Set{Symbol}([:Li, :Na, :K, :F, :Br, :Cl, :I])
     for i in 1:n
         t = types[i]
         if t ∈ monovalent
-            @reduce_valence 1
+            @reduce_valence 0 1
         elseif t === :O
-            @reduce_valence 2
+            @reduce_valence 0 2
         elseif t === :N
             @reduce_valence 2 4
         elseif t === :C  # sp1 carbon is not a common occurence
@@ -581,7 +574,7 @@ function parse_as_cif(cif, bondingmode, assert_use_existing_residues, ignore_ato
             throw(ArgumentError("Cannot use input bonds since there are none. Use another option for --bonds-detect or provide bonds in the CIF file."))
         end
         guessed_bonds = true
-        
+
         bonds = guess_bonds(pos, types, Float64.(cif.cell.mat))
     else
         bonds = Tuple{Int,Int}[]
