@@ -263,12 +263,12 @@ function export_clusters(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tem
     # end
     _a, _b, _c, α, β, γ = cell_parameters(crystal.cell)
     Chemfiles.set_cell!(frame, Chemfiles.UnitCell(_a, _b, _c, α, β, γ))
-    recenter::SVector{3,Float64} = minimum(crystal.pos; dims=2)
+    recenter::SVector{3,Float64} = minimum(reduce(hcat, crystal.pos); dims=2)
     for i in 1:length(crystal.types)
         # resid = crystal.clusters.attributions[i]
         atom = Chemfiles.Atom(string(crystal.clusters.classes[crystal.clusters.attributions[i]]))
         Chemfiles.set_type!(atom, string(crystal.types[i]))
-        Chemfiles.add_atom!(frame, atom, collect(Float64.(crystal.pos[:,i] .- recenter)))
+        Chemfiles.add_atom!(frame, atom, collect(Float64.(crystal.cell.mat * (crystal.pos[i] .- recenter))))
         # Chemfiles.add_atom!(residues[resid], i)
     end
     for e in edges(crystal.graph)

@@ -82,6 +82,7 @@ end
         redirect_stderr(devnull) do; parse_chemfile(joinpath(cifs, "Moganite.cif")) end))) == "mog"
 end
 
+
 @testset "Executable" begin
     cifs, crystalnetsdir = _finddirs()
     safeARGS = deepcopy(ARGS)
@@ -129,16 +130,14 @@ end
     push!(ARGS, "-c", "mof", path)
     result, written = capture_out(out)
     @test result == 0
-    @test length(written) == 2
-    @test last(written) == "tbo"
+    @test written == ["tbo"]
 
     empty!(ARGS)
     path = joinpath(cifs, "HKUST-1_sym.cif")
     push!(ARGS, "-c", "mof", path)
     result, written = capture_out(out)
     @test result == 0
-    @test length(written) == 2
-    @test last(written) == "tbo"
+    @test written == ["tbo"]
 
     empty!(ARGS)
     path = joinpath(cifs, "Diamond.cif")

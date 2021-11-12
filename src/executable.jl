@@ -26,7 +26,7 @@ function unhandled_error(msg, e, stacktrace)
     return 5
 end
 
-function parse_commandline()
+function parse_commandline(args)
     s = ArgParseSettings(prog = "CrystalNets" * (Sys.iswindows() ? ".exe" : ""),
                          description = "Automatic reckognition of crystal net topologies.",
                          epilog = """\n\n\n\nCLUSTERING_MODE options:\n\n
@@ -155,7 +155,7 @@ function parse_commandline()
     end
 
     ret = try
-        parse_args(s; as_symbols=true)
+        parse_args(args, s; as_symbols=true)
     catch e
         return internal_error("An error happened while parsing the input argument and options:",
                               e, catch_backtrace())
@@ -188,10 +188,11 @@ macro parse_to_str_or_nothing(x, name=x)
     end
 end
 
+main(x::String) = main(split(x))
 
-Base.@ccallable function julia_main()::Cint
+function main(args)
     try
-        parsed_args = parse_commandline()
+        parsed_args = parse_commandline(args)
         if parsed_args isa Int
             return parsed_args
         end
@@ -379,14 +380,17 @@ Base.@ccallable function julia_main()::Cint
             end
             net::CrystalNet = try
                 clusters, _net = do_clustering(crystal, clustering)
-                if !isempty(clusters)
+                global DOEXPORT
+                if !isempty(clusters) && DOEXPORT[]::Bool
+                    name = first(splitext(splitdir(input_file)[end]))
+                    clusters_path = tmpexportname(tempdir(), name, "clusters_", ".pdb")
                     export_address = try
-                        export_clusters(Crystal{Clusters}(crystal, clusters))
+                        export_clusters(Crystal{Clusters}(crystal, clusters), clusters_path)
                     catch e
                         return internal_error("""Internal error while exporting the clustering of vertices""",
                                               e, catch_backtrace())
                     end
-                    println("Clustering of vertices represented represented at ", export_address)
+                    println("Clustering of vertices represented represented at ", replace(export_address, ('\\'=>'/')))
                 end
                 _net
             catch e
@@ -445,4 +449,9 @@ Base.@ccallable function julia_main()::Cint
                                e, catch_backtrace())
     end
 
+end
+
+
+Base.@ccallable function julia_main()::Cint
+    main(ARGS)
 end

@@ -36,18 +36,23 @@ macro ifwarn(ex)
     end
 end
 
+function tmpexportname(path, name, pre, ext)
+    if name isa Nothing
+        return tempname(path; cleanup=false)*ext
+    end
+    i = 0
+    x = joinpath(path, pre*name*'_'*string(i)*ext)
+    while isfile(x)
+        i += 1
+        x = joinpath(path, pre*name*'_'*string(i)*ext)
+    end
+    return x
+end
+
 function ifexport(c, _name=nothing, path=tempdir())
     global DOEXPORT
     if (DOEXPORT[]::Bool)
-        name::String = _name isa Nothing ? tempname(path; cleanup=false)*".vtf" : begin
-            i = 0
-            x = "crystal_"*_name*'_'*string(i)*".vtf"
-            while isfile(joinpath(path, x))
-                i += 1
-                x = "crystal_"*_name*'_'*string(i)*".vtf"
-            end
-            x
-        end
+        name = tmpexportname(path, _name, "crystal_", ".vtf")
         truepath = replace(joinpath(path, name), ('\\' => "/"))
         println("Automatic export of input is enabled: saving file at $truepath")
         try

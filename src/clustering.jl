@@ -324,10 +324,10 @@ transformed into a new vertex.
 function coalesce_sbus(crystal::Crystal{Clusters})
     clusters = crystal.clusters
     n = length(clusters.sbus)
-    pos = Matrix{Float64}(undef, 3, n)
+    pos = Vector{SVector{3,Float64}}(undef, n)
     types = Vector{Symbol}(undef, n)
     for (i, sbu) in enumerate(clusters.sbus)
-        pos[:,i] = mean(crystal.pos[:,x.v] .+ x.ofs for x in sbu)
+        pos[i] = mean(crystal.pos[x.v] .+ x.ofs for x in sbu)
         types[i] = length(sbu) == 1 ? crystal.types[only(sbu).v] : Symbol(clusters.classes[i]) #Symbol(join(sort!([crystal.types[x.v] for x in sbu])))
     end
     edgs = PeriodicEdge3D[]
