@@ -41,12 +41,14 @@ function tmpexportname(path, name, pre, ext)
         return tempname(path; cleanup=false)*ext
     end
     i = 0
-    x = joinpath(path, pre*name*'_'*string(i)*ext)
-    while isfile(x)
+    pre = pre*name*'_'
+    x = pre*string(i)*ext
+    paths = Set{String}(readdir(path; sort=false, join=false))
+    while x ∈ paths
         i += 1
-        x = joinpath(path, pre*name*'_'*string(i)*ext)
+        x = pre*string(i)*ext
     end
-    return x
+    return joinpath(path, x)
 end
 
 function ifexport(c, _name=nothing, path=tempdir())
