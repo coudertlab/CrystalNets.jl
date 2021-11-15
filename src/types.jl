@@ -6,6 +6,103 @@ import Base: ==
 using Serialization
 using Tokenize
 
+## Computation options
+
+"""
+    @enum BondingMode
+
+Selection mode for the detection of bonds. The choices are:
+-   `InputBonds`: use the input bonds. Fail if those are not specified.
+-   `ChemfilesBonds`: use chemfiles built-in bond detection mechanism.
+-   `AutoBonds`: if the input specifies bonds, use them unless they look suspicious (too or too
+    large according to a heuristic). Otherwise, fall back to `ChemfilesBonds`.
+"""
+@enum BondingMode begin
+    InputBonds
+    ChemfilesBonds
+    AutoBonds
+end
+
+
+"""
+    @enum ClusteringMode
+
+Selection mode for the clustering of vertices. The choices are:
+-   `InputClustering`: use the input residues as clusters. Fail if some atom does
+    not belong to a residue.
+-   `EachVertexClustering`: each vertex is its own cluster.
+-   `MOFClustering`: discard the input residues and consider the input as a MOF. Identify
+    organic and inorganic clusters using a simple heuristic based on the atom types.
+-   `GuessClustering`: discard the input residues and try to identify the clusters as in `MOFClustering`.
+    If it fails, use `EachVertexClustering`.
+-   `AutomaticClustering`: if the input assigns each atom to a residue, use these residues
+    as clusters. Otherwise, try to guess the clusters as in `GuessClustering`.
+"""
+@enum ClusteringMode begin
+    InputClustering
+    EachVertexClustering
+    MOFClustering
+    GuessClustering
+    AutomaticClustering
+end
+
+
+"""
+    Options
+
+Different options, passed as keyword arguments:
+- export_to: path to the directory in which to store the .vtf representing
+             the parsed structure.
+- bonding_mode: one of the [@BondingMode] options, see above.
+- cutoff_coeff: coefficient used to detect bonds. Default is 0.75, higher
+                values will include bonds that were considered to long before.
+- ignore_atoms: set of atom symbols to ignore (for instance [:C,:H] will
+                remove carbohydrate solvent residues).
+- skip_minimize: assume that the cell is already the unit cell (default is false).
+- forget_types: disregard atom types to compute the topology, making pcu and pcu-b
+                identical for example (default is true)
+- dimensions: the set of crystal net dimensions to consider. For instance, putting
+              Set(3) will ensure that only 3-dimensional nets are considered.
+              Default is empty, meaning that all nets are considered.
+"""
+struct Options
+    export_to::String
+    bonding_mode::BondingMode
+    cutoff_coeff::Float64
+    clustering::ClusteringMode
+    ignore_atoms::Set{Symbol}
+    authorize_pruning::Bool
+    dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
+    skip_minimize::Bool
+    forget_types::Bool
+    dimensions::Set{Int}
+
+    function Options(; export_to=tempdir(),
+                            bonding_mode=AutoBonds,
+                            cutoff_coeff=0.75,
+                            clustering=AutomaticClustering,
+                            ignore_atoms=Set{Symbol}(),
+                            authorize_pruning=true,
+                            dryrun=nothing,
+                            skip_minimize=false,
+                            forget_types=true,
+                            dimensions=Set{Int}())
+        new(export_to, bonding_mode, cutoff_coeff, clustering, Set{Symbol}(ignore_atoms),
+            authorize_pruning, dryrun, skip_minimize, forget_types, dimensions)
+    end
+end
+
+function Options(options::Options; kwargs...)
+    base = Dict{Symbol,Any}([x => getfield(options, x) for x in fieldnames(Options)])
+    for (kwarg, val) in kwargs
+        T = fieldtype(Options, kwarg)
+        val = isconcretetype(T) ? T(val) : val
+        base[kwarg] = val
+    end
+    return Options(; base...)
+end
+
+
 ## EquivalentPosition
 
 """
@@ -332,9 +429,9 @@ end
 """
     prune_collisions(::CIF)
 
-Remove all atoms that are suspiciously close to one another. This arises when all
-the possible positions of at atom are superposed in the CIF file, typically for
-a solvent which should be disregarded anyway.
+For each site where there are atoms suspiciously close to one another, remove all
+but one of them. This arises for example when all the possible positions of at atom are
+superposed in the CIF file, typically for a solvent which should be disregarded anyway.
 """
 function prune_collisions(cif::CIF)
     toremove = Int[]
@@ -343,20 +440,19 @@ function prune_collisions(cif::CIF)
     smallmat = Float64.(cif.cell.mat)
     for i in 1:n, j in (i+1):n
         if periodic_distance(points[i], points[j], smallmat) < 0.55
-            push!(toremove, i)
             push!(toremove, j)
         end
     end
     if isempty(toremove) # Nothing to do, we simply alias the CIF to help the compiler (it may be useless)
-        return CIF(cif.cifinfo, cif.cell, cif.ids, cif.types, cif.pos, cif.bonds)
+        return false, CIF(cif.cifinfo, cif.cell, cif.ids, cif.types, cif.pos, cif.bonds)
     end
-    @ifwarn @warn "This CIF file contains multiple colliding atoms. All colliding atoms will be removed."
+    @ifwarn @warn "This CIF file contains multiple colliding atoms. Only one atom will be kept per site."
     unique!(sort!(toremove))
     ids = deleteat!(copy(cif.ids), toremove)
     tokeep = deleteat!(collect(1:n), toremove)
     bonds = cif.bonds[tokeep, tokeep]
     pos = cif.pos[:,tokeep]
-    return CIF(cif.cifinfo, cif.cell, ids, cif.types, pos, bonds)
+    return true, CIF(cif.cifinfo, cif.cell, ids, cif.types, pos, bonds)
 end
 
 """
@@ -367,12 +463,12 @@ Applies all the symmetry operations listed in the CIF file to the atoms and the 
 function expand_symmetry(c::CIF)
     cif::CIF = remove_partial_occupancy(c)
     if isempty(cif.cell.equivalents)
-        return prune_collisions(CIF(cif.cifinfo, deepcopy(cif.cell), cif.ids,
-                                    cif.types, cif.pos, cif.bonds))
+        return CIF(cif.cifinfo, deepcopy(cif.cell), cif.ids, cif.types, cif.pos, cif.bonds)
     end
     n = length(cif.ids)
     _oldbonds = Dict((cif.ids[i],cif.ids[j]) => cif.bonds[i,j] for i in 1:n for j in (i+1):n if cif.bonds[i,j] < Inf32)
     knownbondlengths = !any(iszero, values(_oldbonds))
+    
     if !isempty(_oldbonds) && !knownbondlengths
         # This means that the bonds are determined as symmetric images of bonds of the
         # asymetric unit, which may or may not be the convention used in the CIF files.
@@ -429,8 +525,7 @@ function expand_symmetry(c::CIF)
         end
     end
 
-    newcif = CIF(cif.cifinfo, deepcopy(cif.cell), newids, copy(cif.types), reduce(hcat, newpos), bonds)
-    return prune_collisions(newcif)
+    return CIF(cif.cifinfo, deepcopy(cif.cell), newids, copy(cif.types), reduce(hcat, newpos), bonds)
 end
 
 """
@@ -813,12 +908,12 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGr
     if nonuniqueD
         @ifwarn @warn "Presence of periodic structures of different dimensionalities. Only the highest dimensionality ($D here) will be retained."
     end
-    entertwinedD = false
+    intertwinnedD = false
     @separategroups D group begin
-        entertwinedD = length(group) > 1
+        intertwinedD = length(group) > 1
     end
-    if entertwinedD
-        error(ArgumentError("Multiple entertwined $D-dimensional structures. Cannot handle this as a single CrystalNet, use CrystalNetGroup instead."))
+    if intertwinnedD
+        error(ArgumentError("Multiple intertwinned $D-dimensional structures. Cannot handle this as a single CrystalNet, use CrystalNetGroup instead."))
     end
     @separategroups D group begin
         return last(only(group))
@@ -877,27 +972,7 @@ function CrystalNetGroup(crystal::Crystal)
     CrystalNetGroup(c.cell, c.types, c.graph)
 end
 
-"""
-    @enum ClusteringMode
 
-Selection mode for the clustering of vertices. The choices are:
--   `InputClustering`: use the input residues as clusters. Fail if some atom does
-    not belong to a residue.
--   `EachVertexClustering`: each vertex is its own cluster.
--   `MOFClustering`: discard the input residues and consider the input as a MOF. Identify
-    organic and inorganic clusters using a simple heuristic based on the atom types.
--   `GuessClustering`: discard the input residues and try to identify the clusters as in `MOFClustering`.
-    If it fails, use `EachVertexClustering`.
--   `AutomaticClustering`: if the input assigns each atom to a residue, use these residues
-    as clusters. Otherwise, try to guess the clusters as in `GuessClustering`.
-"""
-@enum ClusteringMode begin
-    InputClustering
-    EachVertexClustering
-    MOFClustering
-    GuessClustering
-    AutomaticClustering
-end
 
 function do_clustering(c::Crystal{T}, mode::ClusteringMode)::Tuple{Clusters, CrystalNet} where T
     n = length(c.types)

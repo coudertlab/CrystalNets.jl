@@ -373,7 +373,7 @@ function main(args)
             end
         else
             crystal::Crystal = try
-                parse_chemfile(input_file, exportto, bondingmode, clustering==InputClustering)
+                parse_chemfile(input_file, Options(; exportto, bondingmode, clustering))
             catch e
                 return invalid_input_error("""The input file could not be correctly parsed as as a crystal because of the following error:""",
                                            e, catch_backtrace())

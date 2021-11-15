@@ -121,7 +121,7 @@ const vdwradii = Dict{Symbol, Float64}(
     :Uuo => 2.0
 )
 
-function guess_bonds(pos, types, mat)
+function guess_bonds(pos, types, mat, cutoff_coeff)
     # Algorithm from chemfiles, itself from VMD
     @ifwarn begin
         @warn "Guessing bonds with Chemfiles algorithm (from VMD). This may take a while for big structures and may be inexact."
@@ -129,7 +129,8 @@ function guess_bonds(pos, types, mat)
     end
     bonds = Tuple{Int,Int}[]
     radii = [vdwradii[t] for t in types]
-    cutoff = 1.2 * max(maximum(radii), 0.833)
+    cutoff = 3*(cutoff_coeff^3.1) * max(maximum(radii), 0.833)
+    cutoff2 = 13*cutoff_coeff/15
     n = length(pos)
     for i in 1:n
         radius_i = radii[i]
@@ -139,7 +140,7 @@ function guess_bonds(pos, types, mat)
             posj = pos[j]
             d1 = periodic_distance(posi, posj, mat)
             d2 = radius_i + radius_j
-            if d1 < cutoff && 0.5 < d1 < 0.65*d2
+            if d1 < cutoff && 0.5 < d1 < cutoff2*d2
                 push!(bonds, (i,j))
             end
         end

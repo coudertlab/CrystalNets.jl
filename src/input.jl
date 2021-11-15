@@ -264,46 +264,6 @@ function parse_atom(name)
 end
 
 
-#=function set_unique_bond_type!(frame::Frame, types, bond_length, bonded_atoms::Tuple{Symbol, Symbol}, onlykeep, tol)
-    @ifwarn @info "To avoid guessing bonds, use a file format that contains the bonds."
-    n = Int(size(frame))
-    pos = Chemfiles.positions(frame)
-    mat = Chemfiles.matrix(UnitCell(frame))'
-    invmat = inv(mat)
-    indices = [i for i in 1:n if types[i] ∈ onlykeep]
-    invpos = [invmat*pos[:,i] for i in indices]
-    #=@inbounds=# for _i in 1:length(indices)
-        i = indices[_i]
-        for _j in _i+1:length(indices)
-            j = indices[_j]
-            if minmax(types[i], types[j]) == bonded_atoms
-                bonded = abs2(periodic_distance(invpos[_i], invpos[_j], mat) - bond_length) <= tol
-                if bonded
-                    Chemfiles.add_bond!(frame, i-1, j-1)
-                end
-            end
-        end
-    end
-    nothing
-end
-
-function try_guess_bonds!(frame::Frame, types)
-    unique_types = unique!(sort(types))
-    if unique_types == [:C] || unique_types == [:C, :H]
-        @ifwarn @warn "Guessing bonds. The structure seems to be made of only carbons (and possibly hydrogens): using an interatomic distance of 1.54±0.3 Å to assign edges between C atoms."
-        set_unique_bond_type!(frame, types, 1.54, (:C, :C), (:C,), 0.3)
-    elseif unique_types == [:O, :Si] || unique_types == [:Si]
-        @ifwarn @warn "Guessing bonds. The structure seems to be a zeolite: using an interatomic distance of 1.63±0.15 Å to assign edges between Si and O atoms."
-        set_unique_bond_type!(frame, types, 1.63, (:O, :Si), (:O, :Si), 0.15)
-    else
-        @ifwarn begin
-            @warn "Guessing bonds through Chemfiles. This may take a while for big structures and may be inexact."
-            @info "To avoid guessing bonds, use a file format that contains the bonds."
-        end
-        guess_bonds!(frame)
-    end
-end=#
-
 
 function attribute_residues(residues, n, assert_use_existing_residues)
     m = length(residues)
@@ -346,72 +306,21 @@ function check_collision(pos, mat)
     toremove = Int[]
     for i in 1:n
         posi = pos[i]
-        flagi = false
         for j in (i+1):n
             if periodic_distance(posi, pos[j], mat) < 0.55
                 push!(toremove, j)
-                if !flagi
-                    push!(toremove, i)
-                    flagi = true
-                end
             end
         end
     end
     if !isempty(toremove)
-        @ifwarn @warn "This file contains multiple colliding atoms. All colliding atoms will be removed."
-        unique!(sort!(toremove))
+        @ifwarn @warn "This file contains multiple colliding atoms. Only one atom will be kept per site."
+        sort!(toremove)
+        unique!(toremove)
     end
 
-    return sort!(toremove)
+    return toremove
 end
 
-
-# macro checkvalence(type, degree, mode)
-#     msg = Expr(:call, :string, "In ", mode, " mode, found ", type,
-#                " with incorrect valence (", :d, ").")
-#     return esc(quote
-#         if t === $type
-#             d == $degree && continue
-#             CrystalNets.@ifwarn @warn $msg
-#             return true
-#         end
-#     end)
-# end
-# @checkvalence :O 2 specialmode
-# @checkvalence :Si 4 specialmode
-# if specialmode === :zeolite
-#     throw(ArgumentError("Found atom $t in zeolite mode, where only Si and O are accepted. Choose a different mode."))
-# end
-#=
-function least_plausible_neighbours(Δs, n)
-    @show Δs
-    m = length(Δs)
-    p::Vector{Int} = sortperm(Δs)
-    n == 1 && return [p[1]]
-    cycle = Δs[p[1:n]]
-    avg = mean(cycle)
-    means = Float64[avg]
-    stds = Float64[std(cycle; mean=avg)]
-    for i in n+1:m
-        popfirst!(cycle)
-        push!(cycle, Δs[p[i]])
-        avg += (-Δs[p[i-n]] + Δs[p[i]])/n
-        push!(means, avg)
-        push!(stds, std(cycle; mean=avg))
-    end
-    if m == n+1
-        _min, _max = minmax(stds[1], stds[2])
-        if _max - _min > 0.5/n
-            return stds[1] < stds[2] ? [p[1]] : [p[2]]
-        end
-        return [p[1]]
-    else
-        j = argmin(collect(stds[i] + abs(means[i] - 1.65)/2 + means[i]/3 for i in 1:(m-n)))
-        ret = p[1:j-1]
-        append!(ret, @view p[n+j:end])
-        return ret
-    end
-end =#
 
 
 """
@@ -502,46 +411,36 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}) wh
     if !isempty(invalidatoms)
         s = String.(collect(invalidatoms))
         @ifwarn @warn (dofix ? "After attempted fix, f" : "F")*"ound $(join(s, ", ", " and ")) with invalid number of bonds."
-        return true
     end
-    return false
+    return invalidatoms
 end
 
 
-"""
-    @enum BondingMode
 
-Selection mode for the detection of bonds. The choices are:
--   `InputBonds`: use the input bonds. Fail if those are not specified.
--   `ChemfilesBonds`: use chemfiles built-in bond detection mechanism.
--   `AutoBonds`: if the input specifies bonds, use them unless they look suspicious (too or too
-    large according to a heuristic). Otherwise, fall back to `ChemfilesBonds`.
-"""
-@enum BondingMode begin
-    InputBonds
-    ChemfilesBonds
-    AutoBonds
-end
-
-
-function sanity_checks!(graph, pos, types, mat, bondingmode)
+function sanity_checks!(graph, pos, types, mat, options)
     ## Bond length check
     removeedges = PeriodicEdge3D[]
     for e in edges(graph)
         s, d = e.src, e.dst.v
         bondlength = norm(mat *(pos[d] .+ e.dst.ofs .- pos[s]))
-        if (bondlength < 0.85 && types[s] !== :H && types[d] !== :H)
+        if (bondlength < 0.65 && types[s] !== :H && types[d] !== :H)
             push!(removeedges, e)
-        elseif bondlength > 3
+        elseif bondlength > 3 && options.cutoff_coeff ≤ 0.85
             @ifwarn @warn "Suspiciously large bond found: $bondlength pm between $(types[s]) and $(types[d])."
             return true
         end
     end
-    if bondingmode == AutoBonds
-        @ifwarn begin
-            if !isempty(removeedges)
-                @warn "Suspicious bonds lengths found. Such bonds are probably spurious and will be deleted."
+    if options.bonding_mode == AutoBonds
+        if !isempty(removeedges)
+            @ifwarn begin
+                @warn "Suspicious small bond lengths found. Such bonds are probably spurious and will be deleted."
                 @info "To force retaining these bonds, use --bond-detect=input or --bond-detect=chemfiles"
+            end
+            if !(options.dryrun isa Nothing)
+                options.dryrun[:try_noAutoBonds] = nothing
+                options.dryrun[:suspect_smallbonds] = union(
+                    Set{Symbol}([src(e) for e in removeedges]),
+                    Set{Symbol}([dst(e) for e in removeedges]))
             end
         end
         for e in removeedges
@@ -552,16 +451,15 @@ function sanity_checks!(graph, pos, types, mat, bondingmode)
 end
 
 
-function parse_as_cif(cif, bondingmode, assert_use_existing_residues, ignore_atoms, exprt)
+function parse_as_cif(cif, options, name)
     guessed_bonds = false
-    framecif = Frame()
     n = length(cif.ids)
     ignored = Int[]
     types = Symbol[]
     pos = SVector{3,Float64}[]
     for i in 1:n
         typ = cif.types[cif.ids[i]]
-        if typ ∈ ignore_atoms
+        if typ ∈ options.ignore_atoms
             push!(ignored, i)
             continue
         end
@@ -570,12 +468,12 @@ function parse_as_cif(cif, bondingmode, assert_use_existing_residues, ignore_ato
         #push!(pos, cif.cell.mat * cif.pos[:,i])
     end
     if all(==(Inf32), cif.bonds)
-        if bondingmode == InputBonds
+        if options.bonding_mode == InputBonds
             throw(ArgumentError("Cannot use input bonds since there are none. Use another option for --bonds-detect or provide bonds in the CIF file."))
         end
         guessed_bonds = true
 
-        bonds = guess_bonds(pos, types, Float64.(cif.cell.mat))
+        bonds = guess_bonds(pos, types, Float64.(cif.cell.mat), options.cutoff_coeff)
     else
         bonds = Tuple{Int,Int}[]
         _i = 1 # correction to i based on ignored atoms
@@ -603,15 +501,15 @@ function parse_as_cif(cif, bondingmode, assert_use_existing_residues, ignore_ato
     n -= length(ignored)
 
     cell = Cell(Cell(), cif.cell.mat)
-    return finalize_checks(cell, pos, types, Int[], bonds, guessed_bonds, bondingmode, exprt)
+    return finalize_checks(cell, pos, types, Int[], bonds, guessed_bonds, options, name)
 end
 
 
-function parse_as_chemfile(frame, bondingmode, assert_use_existing_residues, ignore_atoms, exprt)
+function parse_as_chemfile(frame, options, name)
     types = Symbol[]
     for i in Int(size(frame))-1:-1:0
         typ = Symbol(type(Chemfiles.Atom(frame, i)))
-        if typ ∈ ignore_atoms
+        if typ ∈ options.ignore_atoms
             Chemfiles.remove_atom!(frame, i)
         else
             push!(types, typ)
@@ -622,9 +520,14 @@ function parse_as_chemfile(frame, bondingmode, assert_use_existing_residues, ign
     pos::Vector{SVector{3,Float64}} = Ref(inv(cell.mat)) .* eachcol(positions(frame))
 
     toremove = check_collision(pos, cell.mat)
-    deleteat!(types, toremove)
-    for j in reverse(toremove)
-        Chemfiles.remove_atom!(frame, j-1)
+    if !isempty(toremove)
+        deleteat!(types, toremove)
+        for j in Iterators.reverse(toremove)
+            Chemfiles.remove_atom!(frame, j-1)
+        end
+        if !(options.dryrun isa Nothing)
+            options.dryrun[:collisions] = nothing
+        end
     end
 
     n = length(pos)
@@ -632,24 +535,27 @@ function parse_as_chemfile(frame, bondingmode, assert_use_existing_residues, ign
     topology = Topology(frame)
     if bonds_count(topology) == 0
         guessed_bonds = true
-        bonds = guess_bonds(pos, types, Float64.(cell.mat))
+        bonds = guess_bonds(pos, types, Float64.(cell.mat), options.cutoff_coeff)
         for (u,v) in bonds
             add_bond!(frame, u-1, v-1)
         end
     else
         bonds = [(a+1, b+1) for (a,b) in eachcol(Chemfiles.bonds(topology))]
+        if !(options.dryrun isa Nothing) && options.bonding_mode == AutoBonds
+            options.dryrun[:try_InputBonds] = nothing
+        end
     end
 
     topology = Topology(frame) # Just a precaution since frame was possibly modified
     m = Int(count_residues(topology))
     residues = [Residue(topology, i) for i in 0:(m-1)]
 
-    attributions = attribute_residues(residues, n, assert_use_existing_residues)
-    return finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, bondingmode, exprt)
+    attributions = attribute_residues(residues, n, options.clustering == InputClustering)
+    return finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
 end
 
 
-function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, bondingmode, (exportto, name))
+function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
     if !all(isfinite, cell.mat) || iszero(det(cell.mat))
         @ifwarn @error "Suspicious unit cell of matrix $(Float64.(cell.mat)). Is the input really periodic? Using a cubic unit cell instead."
         cell = Cell()
@@ -665,16 +571,16 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, b
     mat = Float64.(cell.mat)
     graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, mat, pos))
 
-    if bondingmode != InputBonds
-        bad_valence = fix_valence!(graph, pos, types, mat, Val(false))
-        recompute_bonds = bad_valence || sanity_checks!(graph, pos, types, mat, bondingmode)
+    if options.bonding_mode != InputBonds
+        bad_valence = !isempty(fix_valence!(graph, pos, types, mat, Val(false)))
+        recompute_bonds = bad_valence || sanity_checks!(graph, pos, types, mat, options)
         if recompute_bonds
             if !guessed_bonds
                 @ifwarn begin
                     @warn "Disregarding all bonds from the input file."
                     @info "To force retaining the initial bonds, use --bond-detect=input"
                 end
-                bonds = guess_bonds(pos, types, mat)
+                bonds = guess_bonds(pos, types, mat, options.cutoff_coeff)
                 adjacency = falses(n, n)
                 for (a,b) in bonds
                     adjacency[a, b] = true
@@ -682,45 +588,56 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, b
                 end
                 graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, cell.mat, pos))
             end
-            remaining_not_fixed = fix_valence!(graph, pos, types, mat, Val(true))
+            invalidatoms = fix_valence!(graph, pos, types, mat, Val(true))
+            remaining_not_fixed = !isempty(invalidatoms)
             @ifwarn if remaining_not_fixed
                 @warn "Remaining atoms with invalid valence. Proceeding anyway."
             end
-            recompute_bonds = sanity_checks!(graph, pos, types, cell.mat, bondingmode)
+            if !(options.dryrun isa Nothing)
+                options.dryrun[:invalidatoms] = invalidatoms
+            end
+            recompute_bonds = sanity_checks!(graph, pos, types, cell.mat, options)
             @ifwarn if recompute_bonds
-                 @warn "Remaining bonds of suspicious lengths. Proceeding anyway."
+                @warn "Remaining bonds of suspicious lengths. Proceeding anyway."
             end
         end
     end
 
     if isempty(attributions)
         crystalnothing = Crystal{Nothing}(cell, types, nothing, pos, graph)
-        ifexport(crystalnothing, name, exportto)
+        ifexport(crystalnothing, name, options.export_to)
         return crystalnothing
     else
         crystalclusters = Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions), pos, graph)
-        ifexport(crystalclusters, name, exportto)
+        ifexport(crystalclusters, name, options.export_to)
         return crystalclusters
     end
 end
 
 
 """
-       parse_chemfile(path)
+       parse_chemfile(path, options::Options)
 
 Parse a file given in any reckognised chemical format and extract the topological
 information.
 Such format can be .cif or any file format reckognised by Chemfiles.jl that
 contains all the necessary topological information.
 """
-function parse_chemfile(_path, exportto=tempdir(), bondingmode::BondingMode=AutoBonds, assert_use_existing_residues=false; ignore_atoms=[])
+function parse_chemfile(_path, options::Options)
     # Separate the cases unhandled by Chemfiles from the others
     path = expanduser(_path)
     name = splitext(splitdir(path)[2])[1]
     if lowercase(last(splitext(path))) == ".cif"
         cif = expand_symmetry(CIF(path))
-        return parse_as_cif(cif, bondingmode, assert_use_existing_residues, ignore_atoms, (exportto, name))
+        if options.authorize_pruning
+            neededprune, cif = prune_collisions(cif)
+            if neededprune && !(options.dryrun isa Nothing)
+                options.dryrun[:collisions] = nothing
+            end
+        end
+        return parse_as_cif(cif, options, name)
     end
     frame = read(Trajectory(path))
-    return parse_as_chemfile(frame, bondingmode, assert_use_existing_residues, ignore_atoms, (exportto, name))
+    return parse_as_chemfile(frame, options, name)
 end
+parse_chemfile(path; kwargs...) = parse_chemfile(path, Options(; kwargs...))
