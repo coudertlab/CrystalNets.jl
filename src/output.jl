@@ -14,7 +14,7 @@ function export_dataline(f, x)
     println(f, inbetween*x)
 end
 
-function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=1, colorname=false)
+function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname=false)
     mkpath(splitdir(file)[1])
     n = length(c.types)
     @assert length(c.pos) == n

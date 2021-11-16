@@ -1,5 +1,6 @@
 # Data from Blue Obelisk's data repository, corrected for H, C, O, N, S and F
 # (see https://github.com/chemfiles/chemfiles/issues/301#issuecomment-574100048)
+
 const vdwradii = Dict{Symbol, Float64}(
     :H => 1.0,
     :He => 1.4,
