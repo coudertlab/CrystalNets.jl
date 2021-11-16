@@ -439,8 +439,8 @@ function sanity_checks!(graph, pos, types, mat, options)
             if !(options.dryrun isa Nothing)
                 options.dryrun[:try_noAutoBonds] = nothing
                 options.dryrun[:suspect_smallbonds] = union(
-                    Set{Symbol}([src(e) for e in removeedges]),
-                    Set{Symbol}([dst(e) for e in removeedges]))
+                    Set{Symbol}([types[src(e)] for e in removeedges]),
+                    Set{Symbol}([types[dst(e)] for e in removeedges]))
             end
         end
         for e in removeedges
@@ -450,16 +450,36 @@ function sanity_checks!(graph, pos, types, mat, options)
     return false
 end
 
+function remove_monotonic_bonds!(graph::PeriodicGraph{D}, types, targets) where D
+    isempty(targets) && return
+    n = length(types)
+    for i in 1:n
+        t = types[i]
+        t ∈ targets || continue
+        rem_edges = PeriodicVertex{D}[]
+        for x in neighbors(graph, i)
+            types[x.v] == t || continue
+            push!(rem_edges, x)
+        end
+        for x in rem_edges
+            rem_edge!(graph, i, x)
+        end
+    end
+    nothing
+end
 
-function parse_as_cif(cif, options, name)
+
+function parse_as_cif(cif::CIF, options, name)
     guessed_bonds = false
     n = length(cif.ids)
     ignored = Int[]
     types = Symbol[]
     pos = SVector{3,Float64}[]
+    occupancies = options.ignore_low_occupancy ?
+                        get(cif.cifinfo, :atom_site_occupancy, ones(n)) : ones(n)
     for i in 1:n
         typ = cif.types[cif.ids[i]]
-        if typ ∈ options.ignore_atoms
+        if typ ∈ options.ignore_atoms || occupancies[i] < 0.5
             push!(ignored, i)
             continue
         end
@@ -603,12 +623,15 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
         end
     end
 
+    remove_monotonic_bonds!(graph, types, options.ignore_monotonic_bonds)
+
     if isempty(attributions)
-        crystalnothing = Crystal{Nothing}(cell, types, nothing, pos, graph)
+        crystalnothing = Crystal{Nothing}(cell, types, nothing, pos, graph, options)
         ifexport(crystalnothing, name, options.export_to)
         return crystalnothing
     else
-        crystalclusters = Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions), pos, graph)
+        crystalclusters = Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions),
+                                            pos, graph, options)
         ifexport(crystalclusters, name, options.export_to)
         return crystalclusters
     end

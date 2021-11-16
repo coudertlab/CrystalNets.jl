@@ -71,6 +71,8 @@ struct Options
     cutoff_coeff::Float64
     clustering::ClusteringMode
     ignore_atoms::Set{Symbol}
+    ignore_monotonic_bonds::Set{Symbol}
+    ignore_low_occupancy::Bool
     authorize_pruning::Bool
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
     skip_minimize::Bool
@@ -82,21 +84,25 @@ struct Options
                             cutoff_coeff=0.75,
                             clustering=AutomaticClustering,
                             ignore_atoms=Set{Symbol}(),
+                            ignore_monotonic_bonds=Set{Symbol}(),
+                            ignore_low_occupancy=false,
                             authorize_pruning=true,
                             dryrun=nothing,
                             skip_minimize=false,
                             forget_types=true,
                             dimensions=Set{Int}())
         new(export_to, bonding_mode, cutoff_coeff, clustering, Set{Symbol}(ignore_atoms),
-            authorize_pruning, dryrun, skip_minimize, forget_types, dimensions)
+            Set{Symbol}(ignore_monotonic_bonds), ignore_low_occupancy, authorize_pruning,
+            dryrun, skip_minimize, forget_types, dimensions)
     end
 end
 
 function Options(options::Options; kwargs...)
+    isempty(kwargs) && return options
     base = Dict{Symbol,Any}([x => getfield(options, x) for x in fieldnames(Options)])
     for (kwarg, val) in kwargs
         T = fieldtype(Options, kwarg)
-        val = isconcretetype(T) ? T(val) : val
+        val = isconcretetype(T) && !(T <: Enum) ? T(val) : val
         base[kwarg] = val
     end
     return Options(; base...)
@@ -604,26 +610,27 @@ struct Crystal{T<:Union{Nothing,Clusters}}
     clusters::T
     pos::Vector{SVector{3,Float64}}
     graph::PeriodicGraph3D
+    options::Options
 end
 
 function ==(c1::Crystal{T}, c2::Crystal{T}) where T
     c1.cell == c2.cell && c1.types == c2.types && c1.clusters == c2.clusters &&
-    c1.pos == c2.pos && c1.graph == c2.graph
+    c1.pos == c2.pos && c1.graph == c2.graph && c1.options == c2.options
 end
 
 Crystal{Nothing}(c::Crystal{Nothing}) = c
 function Crystal{Nothing}(c::Crystal{Clusters})
-    Crystal{Nothing}(c.cell, c.types, nothing, c.pos, c.graph)
+    Crystal{Nothing}(c.cell, c.types, nothing, c.pos, c.graph, c.options)
 end
 function Crystal{Clusters}(c::Crystal, clusters::Clusters)
-    Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph)
+    Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph, c.options)
 end
 
 
 trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(coalesce_sbus(c))
 function trimmed_crystal(c::Crystal{Nothing})
     vmap, graph = trim_topology(c.graph)
-    return Crystal(c.cell, c.types[vmap], nothing, c.pos[vmap], graph)
+    return Crystal(c.cell, c.types[vmap], nothing, c.pos[vmap], graph, c.options)
 end
 
 ## CrystalNet
@@ -742,26 +749,32 @@ struct CrystalNet{D,T<:Real}
     types::Vector{Symbol}
     pos::Vector{SVector{D,T}}
     graph::PeriodicGraph{D}
+    options::Options
 end
 
 CrystalNet{D,T}(net::CrystalNet{D,T}) where {D,T} = net
-function CrystalNet{D,T}(net::CrystalNet{N}) where {D,T,N}
+function CrystalNet{D,T}(net::CrystalNet{N}; kwargs...) where {D,T,N}
     n = length(net.types)
-    newpos = Vector{SVector{D,T}}(undef, n)
-    for i in 1:n
-        if N < D
-            _pos = zero(MVector{D,T})
-            _pos[1:N] = net.pos[i]
-            pos = SVector{D,T}(_pos)
-        else
-            pos = SVector{D,T}(net.pos[i][1:D])
+    if N != D
+        newpos = Vector{SVector{D,T}}(undef, n)
+        for i in 1:n
+            if N < D
+                _pos = zero(MVector{D,T})
+                _pos[1:N] = net.pos[i]
+                pos = SVector{D,T}(_pos)
+            else
+                pos = SVector{D,T}(net.pos[i][1:D])
+            end
+            newpos[i] = pos
         end
-        newpos[i] = pos
+    else
+        newpos = net.pos
     end
     CrystalNet{D,T}(net.cell, net.types, newpos,
-                    PeriodicGraphs.change_dimension(PeriodicGraph{D}, net.graph))
+                    PeriodicGraphs.change_dimension(PeriodicGraph{D}, net.graph),
+                    Options(net.options; kwargs...))
 end
-CrystalNet{D}(net::CrystalNet{R,T}) where {D,R,T} = CrystalNet{D,T}(net)
+CrystalNet{D}(net::CrystalNet{R,T}; kwargs...) where {D,R,T} = CrystalNet{D,T}(net; kwargs...)
 
 const CrystalNet1D = CrystalNet{1}
 const CrystalNet2D = CrystalNet{2}
@@ -770,7 +783,7 @@ const CrystalNet3D = CrystalNet{3}
 Base.ndims(::CrystalNet{D}) where {D} = D
 
 function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph{D},
-                       placement::AbstractMatrix{T}) where {D,T<:Real}
+                       placement::AbstractMatrix{T}, options::Options) where {D,T<:Real}
     n = nv(graph)
     @assert size(placement) == (D, n)
     pos = Vector{SVector{D,T}}(undef, n)
@@ -785,7 +798,7 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
     cell = Cell(cell, EquivalentPosition[])
     graph = offset_representatives!(graph, .-offsets)[s]
     # @assert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
-    return CrystalNet{D,T}(cell, types, pos, graph)
+    return CrystalNet{D,T}(cell, types, pos, graph, options)
 end
 
 function trim_crystalnet!(graph, types, tohandle, keep)
@@ -841,9 +854,11 @@ end
 struct NonPeriodicInputException <: Exception end
 Base.showerror(io::IO, ::NonPeriodicInputException) = print(io, "Non-periodic input")
 
-function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph)
+function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
+                         graph::PeriodicGraph, opts::Options)
     initialvmap, graph = trim_topology(PeriodicGraphs.change_dimension(PeriodicGraph3D, graph))
     types = types[initialvmap]
+    remove_monotonic_bonds!(graph, types, opts.ignore_monotonic_bonds)
     dimensions = PeriodicGraphs.dimensionality(graph)
 
     if haskey(dimensions, 0)
@@ -894,15 +909,16 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
                 t = typesD[vmap]
                 vmap = vmapD[vmap]
             end
-            @separategroups D groups push!(groups, (vmap, CrystalNet(cell, t, g)))
+            @separategroups D groups push!(groups, (vmap, CrystalNet(cell, t, g, opts)))
         end
     end
 
     return groups
 end
 
-function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph)
-    group = CrystalNetGroup(cell, types, graph)
+function CrystalNet(cell::Cell, types::AbstractVector{Symbol},
+                    graph::PeriodicGraph, options::Options)
+    group = CrystalNetGroup(cell, types, graph, options)
     D = isempty(group.D3) ? (isempty(group.D2) ? 1 : 2) : 3
     nonuniqueD = D != 1 && (!isempty(group.D1) || (D == 3 && !isempty(group.D2)))
     if nonuniqueD
@@ -910,7 +926,7 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGr
     end
     intertwinnedD = false
     @separategroups D group begin
-        intertwinedD = length(group) > 1
+        intertwinnedD = length(group) > 1
     end
     if intertwinnedD
         error(ArgumentError("Multiple intertwinned $D-dimensional structures. Cannot handle this as a single CrystalNet, use CrystalNetGroup instead."))
@@ -920,34 +936,40 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGr
     end
 end
 
-function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph) where D
+function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
+                       graph::PeriodicGraph, options::Options) where D
     g = change_dimension(PeriodicGraph{D}, graph)
-    return CrystalNet{D}(cell, types, g)
+    return CrystalNet{D}(cell, types, g, options)
 end
 
 
 
-macro tryinttype(D, inttype, m, M, cell, types, graph, placement)
-    quote
-        if ((typemin($(esc(inttype))) <= $(esc(m))) & ($(esc(M)) <= typemax($(esc(inttype)))))
-            return CrystalNet{$(esc(D)),Rational{$(esc(inttype))}}(
-                        $(esc(cell)), $(esc(types)), $(esc(graph)),
-                        Rational{$(esc(inttype))}.($(esc(placement))))
+macro tryinttype(T)
+    tmin = :(typemin($T))
+    tmax = :(typemax($T))
+    return esc(quote
+        if (($tmin <= m) & (M <= $tmax))
+            net = CrystalNet{D,Rational{$T}}(cell, types, graph,
+                        Rational{$T}.(placement), options)
+            export_vtf("C:/Users/LIONEL~1.ZOU/AppData/Local/Temp/foo.vtf", net)
+            return net
         end
-    end
+    end)
 end
 
-function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph{D}) where D
+function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
+                       graph::PeriodicGraph{D}, options::Options) where D
+    q = 2
     placement = equilibrium(graph)
     m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
     M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))
-    @tryinttype(D, Int8,   m, M, cell, types, graph, placement)
-    @tryinttype(D, Int16,  m, M, cell, types, graph, placement)
-    @tryinttype(D, Int32,  m, M, cell, types, graph, placement)
-    @tryinttype(D, Int64,  m, M, cell, types, graph, placement)
-    @tryinttype(D, Int128, m, M, cell, types, graph, placement)
-    return CrystalNet{D,Rational{BigInt}}(cell, types, graph, placement)
-    # Type-unstable function, but yields better performance than always falling back to Int128
+    @tryinttype Int8
+    @tryinttype Int16
+    @tryinttype Int32
+    @tryinttype Int64
+    @tryinttype Int128
+    return CrystalNet{D,Rational{BigInt}}(cell, types, graph, placement, options)
+    # Type-unstable function, but yields better performance than always falling back to BigInt
 end
 
 function prepare_crystal(crystal::Crystal{T}) where T
@@ -964,16 +986,16 @@ end
 
 function CrystalNet(crystal::Crystal)
     c = prepare_crystal(crystal)
-    CrystalNet(c.cell, c.types, c.graph)
+    CrystalNet(c.cell, c.types, c.graph, c.options)
 end
 
 function CrystalNetGroup(crystal::Crystal)
     c = prepare_crystal(crystal)
-    CrystalNetGroup(c.cell, c.types, c.graph)
+    CrystalNetGroup(c.cell, c.types, c.graph, c.options)
 end
 
 
-
+do_clustering(c::Crystal) = do_clustering(c, c.options.clustering)
 function do_clustering(c::Crystal{T}, mode::ClusteringMode)::Tuple{Clusters, CrystalNet} where T
     n = length(c.types)
     if mode == InputClustering
@@ -1012,10 +1034,11 @@ function do_clustering(c::Crystal{T}, mode::ClusteringMode)::Tuple{Clusters, Cry
     end
 end
 
-function CrystalNet(g::Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D})
+function CrystalNet(g::Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D},
+                    options::Options=Options())
     graph = PeriodicGraph(g)
     cell = Cell()
     n = nv(graph)
     types = [Symbol("") for _ in 1:n]
-    return CrystalNet(cell, types, graph)
+    return CrystalNet(cell, types, graph, options)
 end

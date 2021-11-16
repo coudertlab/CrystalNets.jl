@@ -373,13 +373,13 @@ function main(args)
             end
         else
             crystal::Crystal = try
-                parse_chemfile(input_file, Options(; exportto, bondingmode, clustering))
+                parse_chemfile(input_file, Options(; export_to, bonding_mode, clustering))
             catch e
                 return invalid_input_error("""The input file could not be correctly parsed as as a crystal because of the following error:""",
                                            e, catch_backtrace())
             end
             net::CrystalNet = try
-                clusters, _net = do_clustering(crystal, clustering)
+                clusters, _net = do_clustering(crystal)
                 global DOEXPORT
                 if !isempty(clusters) && DOEXPORT[]::Bool
                     name = first(splitext(splitdir(input_file)[end]))

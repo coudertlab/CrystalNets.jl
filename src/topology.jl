@@ -262,7 +262,7 @@ function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
     end
     graph = PeriodicGraph{D}(edges)
     @assert degree(graph) == lengths[I_kept]
-    return CrystalNet(cell, c.types[I_kept], sortedcol, graph)
+    return CrystalNet(cell, c.types[I_kept], sortedcol, graph, c.options)
 end
 
 function minimize(net::CrystalNet)
@@ -984,14 +984,15 @@ function find_new_representation(pos, basis, vmap, graph)
 end
 
 
-function topological_genome(net::CrystalNet{D,T}, options::Options)::String where {D,T}
+function topological_genome(net::CrystalNet{D,T})::String where {D,T}
     if !allunique(net.pos)
         return UnstableNetException(net).g
     end
-    if options.forget_types
-        net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos, net.graph)
+    if net.options.forget_types
+        net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos,
+                              net.graph, net.options)
     end
-    if !options.skip_minimize
+    if !net.options.skip_minimize
         flag = true
         try
             net = minimize(net)
@@ -1002,8 +1003,8 @@ function topological_genome(net::CrystalNet{D,T}, options::Options)::String wher
             end
         end
         if flag # not in the catch to avoid a StackOverflow of errors in case something goes wrong
-            return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), 
-                                      Options(options; forget_types=false))
+            newnet = CrystalNet{D,widen(soft_widen(T))}(net; forget_types=false)
+            return topological_genome(newnet)
         end
     end
     try
@@ -1015,13 +1016,12 @@ function topological_genome(net::CrystalNet{D,T}, options::Options)::String wher
             rethrow()
         end
     end
-    return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net),
-                              Options(options; skip_minimize=true))
+    return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net; skip_minimize=true))
 end
 
-function topological_genome(g::PeriodicGraph, options::Options)
-    net = CrystalNet(g)
-    return topological_genome(net, options)
+function topological_genome(g::PeriodicGraph, options::Options=Options())
+    net = CrystalNet(g, options)
+    return topological_genome(net)
 end
 
 function _loop_group!(ex, id, net, group)
@@ -1048,7 +1048,7 @@ macro loop_group(ex)
         net = Symbol("net", i)
         D = Symbol("D", i)
         group = :(group.$D)
-        isdindimensions = :(isempty(options.dimensions) || $id in options.dimensions)
+        isdindimensions = :(isempty(net.options.dimensions) || $id in net.options.dimensions)
         newex = quote
             if $(isdindimensions)
                 $(deepcopy(ex))
@@ -1060,14 +1060,13 @@ macro loop_group(ex)
     return ret
 end
 
-function topological_genome(group::CrystalNetGroup, options::Options)
+function topological_genome(group::CrystalNetGroup)
     ret = Tuple{Vector{Int},String}[]
     @loop_group for (id, net) in group
-        push!(ret, (id, topological_genome(net, options)))
+        push!(ret, (id, topological_genome(net)))
     end
     return ret
 end
-topological_genome(x; kwargs...) = topological_genome(x, Options(; kwargs...))
 
 
 function reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
@@ -1088,7 +1087,7 @@ function reckognize_topologies(path, options)
         name = first(splitext(f))
         # println(name)
         genomes::Vector{Tuple{Vector{Int},String}} = try
-            topological_genome(CrystalNetGroup(parse_chemfile(joinpath(path, f), options)), options)
+            topological_genome(CrystalNetGroup(parse_chemfile(joinpath(path, f), options)))
         catch e
             if e isa InterruptException ||
               (e isa TaskFailedException && e.task.result isa InterruptException)
@@ -1117,29 +1116,39 @@ reckognize_topologies(path; kwargs...) = reckognize_topologies(path, Options(; k
 
 
 
-macro ifvalidgenomereturn(opts, skipcrystal=false)
+macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
     crystaldef = skipcrystal ? nothing : :(crystal = parse_chemfile(path, $opts))
+    msg = "(found by $msg)"
+    ifprintinfo = skipcrystal ? nothing : :(@ifwarn @info $msg)
+
     return esc(quote
     $crystaldef
-    group = CrystalNetGroup(crystal)
-    dim, subnets = isempty(group.D3) ? isempty(group.D2) ? (1, group.D1) : 
-                                        (2, group.D2) : (3, group.D3)
+    group = try
+        CrystalNetGroup(crystal)
+    catch e
+        if e isa NonPeriodicInputException
+            CrystalNetGroup()
+        else
+            rethrow()
+        end
+    end::CrystalNetGroup
+    dim, subnets = isempty(group.D3) ? isempty(group.D2) ? isempty(group.D1) ? 
+                    (0, CrystalNet1D{Int}[]) : (1, group.D1) : (2, group.D2) : (3, group.D3)
     if dim > maxdim
         maxdim = dim
-        # encountered_graphs = Dict{String,String}()
-        # encountered_genomes = Dict{String,Int}()
     end
     if dim ≥ maxdim
         if length(subnets) == 1 # otherwise, multiple intertwinned nets -> skip
             net = subnets[1][2]
-            sig = string(net.graph)
+            sig = string(net.graph)::String
             sig = get(encountered_graphs, sig, sig)
             if haskey(encountered_genomes, sig)
                 encountered_genomes[sig] += 1
             else
-                genome = reckognize_topology(topological_genome(net, $opts))
+                genome = reckognize_topology(topological_genome(net))
                 if !startswith(genome, "UNKNOWN") && !startswith(genome, "unstable") &&
                                                     !startswith(genome, "non-periodic")
+                    $ifprintinfo
                     return genome
                 end
                 encountered_graphs[sig] = genome
@@ -1153,41 +1162,45 @@ end
 
 
 function guess_topology(path, defopts)
-    maxdim = 0
+    maxdim = -1
     encountered_graphs = Dict{String,String}()
     encountered_genomes = Dict{String,Int}()
     dryrun = Dict{Symbol,Union{Nothing,Set{Symbol}}}()
     crystal = parse_chemfile(path, Options(defopts; dryrun))
     atoms = Set{Symbol}(crystal.types)
 
-    @ifvalidgenomereturn defopts true
+    @ifvalidgenomereturn defopts "" true
     if defopts.cutoff_coeff == 0.75 # if default cutoff was used, try larger
-        @ifvalidgenomereturn Options(defopts; cutoff_coeff=0.85)
+        @ifvalidgenomereturn Options(defopts; cutoff_coeff=0.85) "using longer cutoff"
     end
     invalidatoms = union(get(dryrun, :invalidatoms, Set{Symbol}()),
                          get(dryrun, :suspect_smallbonds, Set{Symbol}()))
     hashydrogens = :H ∈ atoms
     if hashydrogens
-        @ifvalidgenomereturn Options(defopts; ignore_atoms=(:H,))
+        @ifvalidgenomereturn Options(defopts; ignore_atoms=(:H,)) "ignoring H"
         delete!(invalidatoms, :H)
     end
     for a in invalidatoms
-        @ifvalidgenomereturn Options(defopts; ignore_atoms=tuple(a))
+        @ifvalidgenomereturn Options(defopts; ignore_atoms=tuple(a)) "ignoring $a"
         if hashydrogens
-            @ifvalidgenomereturn Options(defopts; ignore_atoms=(a, :H))
+            @ifvalidgenomereturn Options(defopts; ignore_atoms=(a, :H)) "ignoring H and $a"
         end
     end
     if haskey(dryrun, :try_InputBonds)
-        @ifvalidgenomereturn Options(defopts; bonding_mode=InputBonds)
+        @ifvalidgenomereturn Options(defopts; bonding_mode=InputBonds) "using input bonds"
+    end
+    @ifvalidgenomereturn Options(defopts; ignore_low_occupancy=true) "removing atoms with occupancy < 0.5"
+    if :Al ∈ atoms || :P ∈ atoms # ALPO datastructure
+        @ifvalidgenomereturn Options(defopts; ignore_monotonic_bonds=(:Al,:P)) "removing Al-O-Al and P-O-P bonds"
+        if :Sn ∈ atoms # observed in some cases for ALPO databases
+            @ifvalidgenomereturn Options(defopts; ignore_atoms=(:Sn,)) "ignoring Sn"
+        end
     end
     if haskey(dryrun, :try_noAutoBonds)
-        @ifvalidgenomereturn Options(defopts; bonding_mode=ChemfilesBonds)
-    end
-    if :Sn ∈ atoms # observed in some cases for ALPO database
-        @ifvalidgenomereturn Options(defopts; ignore_atoms=(:Sn,))
+        @ifvalidgenomereturn Options(defopts; bonding_mode=ChemfilesBonds) "enforcing Chemfiles bond detection"
     end
     if haskey(dryrun, :collisions)
-        @ifvalidgenomereturn Options(defopts; authorize_pruning=false)
+        @ifvalidgenomereturn Options(defopts; authorize_pruning=false) "retaining all colliding atoms"
     end
 
     # Finally, if everything fails, return the one encountered most
@@ -1199,7 +1212,7 @@ function guess_topology(path, defopts)
             most_plausible_genome = genome
         end
     end
-    return most_plausible_genome == "" ? "FAILED (multiple intertwinned structures)" :
+    return most_plausible_genome == "" ? "FAILED (most likely because of multiple intertwinned structures)" :
                                          most_plausible_genome
 end
 guess_topology(path; kwargs...) = guess_topology(path, Options(; kwargs...))
@@ -1219,13 +1232,8 @@ function guess_topologies(path, options)
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            if e isa NonPeriodicInputException
-                "non-periodic"
-            else
-                e isa ArgumentError && startswith(e.msg, "Cannot use input bonds since there are none.") && continue
-                failed[name] = (e, catch_backtrace())
-                "FAILED"
-            end
+            failed[name] = (e, catch_backtrace())
+            "FAILED"
         end
         ret[name] = result
         if startswith("UNKNOWN", result)
@@ -1234,5 +1242,4 @@ function guess_topologies(path, options)
     end
     return ret, newgenomes, failed
 end
-
 guess_topologies(path; kwargs...) = guess_topologies(path, Options(; kwargs...))
