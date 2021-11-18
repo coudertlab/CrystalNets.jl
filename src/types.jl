@@ -51,8 +51,13 @@ end
     Options
 
 Different options, passed as keyword arguments:
-- export_to: path to the directory in which to store the .vtf representing
-             the parsed structure.
+- name: a name for the structure
+- export_input: path to the directory in which to store the .vtf representing
+                the parsed structure. Empty string if none.
+- export_clusters: path to the directory in which to store the .pdb representing
+                   the clustering of vertices. Empty string if none.
+- export_net: path to the directory in which to store the .vtf representing the
+              extracted net on which the topology is computed. Empty string if none.
 - bonding_mode: one of the [@BondingMode] options, see above.
 - cutoff_coeff: coefficient used to detect bonds. Default is 0.75, higher
                 values will include bonds that were considered to long before.
@@ -66,7 +71,11 @@ Different options, passed as keyword arguments:
               Default is empty, meaning that all nets are considered.
 """
 struct Options
-    export_to::String
+    name::String # used for exports
+
+    export_input::String
+    export_clusters::String
+    export_net::String
     bonding_mode::BondingMode
     cutoff_coeff::Float64
     clustering::ClusteringMode
@@ -74,26 +83,32 @@ struct Options
     ignore_monotonic_bonds::Set{Symbol}
     ignore_low_occupancy::Bool
     authorize_pruning::Bool
+
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
+
     skip_minimize::Bool
     forget_types::Bool
     dimensions::Set{Int}
 
-    function Options(; export_to=tempdir(),
-                            bonding_mode=AutoBonds,
-                            cutoff_coeff=0.75,
-                            clustering=AutomaticClustering,
-                            ignore_atoms=Set{Symbol}(),
-                            ignore_monotonic_bonds=Set{Symbol}(),
-                            ignore_low_occupancy=false,
-                            authorize_pruning=true,
-                            dryrun=nothing,
-                            skip_minimize=false,
-                            forget_types=true,
-                            dimensions=Set{Int}())
-        new(export_to, bonding_mode, cutoff_coeff, clustering, Set{Symbol}(ignore_atoms),
-            Set{Symbol}(ignore_monotonic_bonds), ignore_low_occupancy, authorize_pruning,
-            dryrun, skip_minimize, forget_types, dimensions)
+    function Options(; name="unnamed",
+                       export_input=(DOEXPORT[] ? tempdir() : ""),
+                       export_clusters=(DOEXPORT[] ? tempdir() : ""),
+                       export_net="",
+                       bonding_mode=AutoBonds,
+                       cutoff_coeff=0.75,
+                       clustering=AutomaticClustering,
+                       ignore_atoms=Set{Symbol}(),
+                       ignore_monotonic_bonds=Set{Symbol}(),
+                       ignore_low_occupancy=false,
+                       authorize_pruning=true,
+                       dryrun=nothing,
+                       skip_minimize=false,
+                       forget_types=true,
+                       dimensions=Set{Int}())
+        new(name, export_input, export_clusters, export_net, bonding_mode, cutoff_coeff,
+            clustering, Set{Symbol}(ignore_atoms), Set{Symbol}(ignore_monotonic_bonds),
+            ignore_low_occupancy, authorize_pruning, dryrun, skip_minimize, forget_types,
+            dimensions)
     end
 end
 
@@ -611,6 +626,27 @@ struct Crystal{T<:Union{Nothing,Clusters}}
     pos::Vector{SVector{3,Float64}}
     graph::PeriodicGraph3D
     options::Options
+
+    function Crystal{Clusters}(cell, types, clusters, pos, graph, options)
+        ret = new{Clusters}(cell, types, clusters, pos, graph, options)
+        if !isempty(options.export_clusters)
+            path = tmpexportname(options.export_clusters, "clusters_", options.name, ".pdb")
+            println("Clustering of vertices represented represented at ", replace(path, ('\\'=>'/')))
+            export_clusters(ret, path)
+        end
+        return ret
+    end
+
+    function Crystal{Nothing}(cell, types, pos, graph, options)
+        return new{Nothing}(cell, types, nothing, pos, graph, options)
+    end
+end
+
+function Crystal(cell, types, clusters, graph, options)
+    if clusters isa Nothing
+        return Crystal{Nothing}(cell, types, graph, options)
+    end
+    return Crystal{Clusters}(cell, types, clusters, graph, options)
 end
 
 function ==(c1::Crystal{T}, c2::Crystal{T}) where T
@@ -620,7 +656,7 @@ end
 
 Crystal{Nothing}(c::Crystal{Nothing}) = c
 function Crystal{Nothing}(c::Crystal{Clusters})
-    Crystal{Nothing}(c.cell, c.types, nothing, c.pos, c.graph, c.options)
+    Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, c.options)
 end
 function Crystal{Clusters}(c::Crystal, clusters::Clusters)
     Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph, c.options)
@@ -630,7 +666,7 @@ end
 trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(coalesce_sbus(c))
 function trimmed_crystal(c::Crystal{Nothing})
     vmap, graph = trim_topology(c.graph)
-    return Crystal(c.cell, c.types[vmap], nothing, c.pos[vmap], graph, c.options)
+    return Crystal{Nothing}(c.cell, c.types[vmap], c.pos[vmap], graph, c.options)
 end
 
 ## CrystalNet
@@ -951,7 +987,6 @@ macro tryinttype(T)
         if (($tmin <= m) & (M <= $tmax))
             net = CrystalNet{D,Rational{$T}}(cell, types, graph,
                         Rational{$T}.(placement), options)
-            export_vtf("C:/Users/LIONEL~1.ZOU/AppData/Local/Temp/foo.vtf", net)
             return net
         end
     end)
@@ -959,7 +994,6 @@ end
 
 function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
-    q = 2
     placement = equilibrium(graph)
     m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
     M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))

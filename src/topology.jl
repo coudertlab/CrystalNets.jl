@@ -1166,6 +1166,9 @@ function guess_topology(path, defopts)
     encountered_graphs = Dict{String,String}()
     encountered_genomes = Dict{String,Int}()
     dryrun = Dict{Symbol,Union{Nothing,Set{Symbol}}}()
+    if defopts.name == "unnamed"
+        defopts = Options(defopts; name=splitext(splitdir(path)[2])[1])
+    end
     crystal = parse_chemfile(path, Options(defopts; dryrun))
     atoms = Set{Symbol}(crystal.types)
 

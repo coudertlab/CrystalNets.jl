@@ -626,13 +626,13 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
     remove_monotonic_bonds!(graph, types, options.ignore_monotonic_bonds)
 
     if isempty(attributions)
-        crystalnothing = Crystal{Nothing}(cell, types, nothing, pos, graph, options)
-        ifexport(crystalnothing, name, options.export_to)
+        crystalnothing = Crystal{Nothing}(cell, types, pos, graph, options)
+        export_input(crystalnothing, name, options.export_input)
         return crystalnothing
     else
         crystalclusters = Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions),
                                             pos, graph, options)
-        ifexport(crystalclusters, name, options.export_to)
+        export_input(crystalclusters, name, options.export_input)
         return crystalclusters
     end
 end
@@ -650,6 +650,9 @@ function parse_chemfile(_path, options::Options)
     # Separate the cases unhandled by Chemfiles from the others
     path = expanduser(_path)
     name = splitext(splitdir(path)[2])[1]
+    if options.name == "unnamed"
+        options = Options(options; name)
+    end
     if lowercase(last(splitext(path))) == ".cif"
         cif = expand_symmetry(CIF(path))
         if options.authorize_pruning

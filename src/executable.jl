@@ -213,7 +213,7 @@ function main(args)
         end
 
         @parse_to_str_or_nothing export_to
-        exportto::String = if export_to isa Nothing
+        export_path::String = if export_to isa Nothing
             tempdir()
         else
             toggle_export(true)
@@ -373,7 +373,9 @@ function main(args)
             end
         else
             crystal::Crystal = try
-                parse_chemfile(input_file, Options(; export_to, bonding_mode, clustering))
+                parse_chemfile(input_file, Options(; export_input=export_path,
+                                                     export_clusters=export_path,
+                                                     bonding_mode, clustering))
             catch e
                 return invalid_input_error("""The input file could not be correctly parsed as as a crystal because of the following error:""",
                                            e, catch_backtrace())
@@ -381,16 +383,13 @@ function main(args)
             net::CrystalNet = try
                 clusters, _net = do_clustering(crystal)
                 global DOEXPORT
-                if !isempty(clusters) && DOEXPORT[]::Bool
-                    name = first(splitext(splitdir(input_file)[end]))
-                    clusters_path = tmpexportname(tempdir(), name, "clusters_", ".pdb")
-                    export_address = try
-                        export_clusters(Crystal{Clusters}(crystal, clusters), clusters_path)
+                if !isempty(clusters) && DOEXPORT[]::Bool # TODO: remove the dependency to DOEXPORT here
+                    try
+                        Crystal{Clusters}(crystal, clusters)
                     catch e
                         return internal_error("""Internal error while exporting the clustering of vertices""",
-                                              e, catch_backtrace())
+                                                e, catch_backtrace())
                     end
-                    println("Clustering of vertices represented represented at ", replace(export_address, ('\\'=>'/')))
                 end
                 _net
             catch e

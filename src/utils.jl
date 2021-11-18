@@ -1,12 +1,5 @@
 ## Common utility functions
 
-# function no_metadata_metafmt(args...; kwargs...)
-#     color, prefix, suffix = Logging.default_metafmt(args...; kwargs...)
-#     if prefix == "Warning"
-#         return color, prefix, ""
-#     end
-#     return color, prefix, suffix
-# end
 function no_metadata_metafmt(level::Logging.LogLevel, _module, group, id, file, line)
     @nospecialize
     color = Logging.default_logcolor(level)
@@ -15,16 +8,6 @@ function no_metadata_metafmt(level::Logging.LogLevel, _module, group, id, file, 
 end
 const minimal_logger = Logging.ConsoleLogger(; meta_formatter=no_metadata_metafmt)
 
-# function ifwarn(msg, ::Val{T}) where T
-#     global DOWARN
-#     if DOWARN[]
-#         with_logger(customLogger::Logging.ConsoleLogger) do
-#            @logmsg T msg
-#         end
-#     end
-#     nothing
-# end
-# ifwarn(msg) = ifwarn(msg, Val(Warn))
 
 macro ifwarn(ex)
     return quote
@@ -36,7 +19,7 @@ macro ifwarn(ex)
     end
 end
 
-function tmpexportname(path, name, pre, ext)
+function tmpexportname(path, pre, name, ext)
     if name isa Nothing
         return tempname(path; cleanup=false)*ext
     end
@@ -51,10 +34,9 @@ function tmpexportname(path, name, pre, ext)
     return joinpath(path, x)
 end
 
-function ifexport(c, _name=nothing, path=tempdir())
-    global DOEXPORT
-    if (DOEXPORT[]::Bool)
-        name = tmpexportname(path, _name, "crystal_", ".vtf")
+function export_input(c, _name=nothing, path=tempdir())
+    if !isempty(path)
+        name = tmpexportname(path, "crystal_", _name, ".vtf")
         truepath = replace(joinpath(path, name), ('\\' => "/"))
         println("Automatic export of input is enabled: saving file at $truepath")
         try

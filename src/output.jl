@@ -279,7 +279,6 @@ function export_clusters(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tem
     output = Chemfiles.Trajectory(target, 'w')
     write(output, frame)
     close(output)
-    return target
 end
 
 
