@@ -72,7 +72,8 @@ include("archive.jl") # Manipulation of the topological archive
 include("output.jl")
 include("arithmetics.jl")
 include("symmetries.jl")
-include("topology.jl") # Entry point for the main algorithm
+include("topology.jl") # Main functions of the algorithm
+include("query.jl") # Entry point for the user-facing functions
 include("executable.jl") # Entry point for the argument parsing of the executable
 include("precompile.jl")
 
