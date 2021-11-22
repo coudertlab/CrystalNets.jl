@@ -39,16 +39,21 @@ end
     @info "Checking that all known topologies are reckognized (this can take a few minutes)."
     tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)
                                if x ∉ known_unstable_nets])
-    Threads.@threads for (genome, id) in collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
+    reverse_archive = collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
+    Threads.@threads for (genome, id) in reverse_archive
         if id ∈ known_unstable_nets
             @test_broken reckognize_topology(topological_genome(PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE[id]))) == id
             continue
         end
-        tests[id] = reckognize_topology(topological_genome(PeriodicGraph(genome))) == id
+        tests[id] = try
+            reckognize_topology(topological_genome(PeriodicGraph(genome))) == id
+        catch
+            false
+        end
     end
     for (id, b) in tests
         if !b
-            @show "Failed for $id (Archive)"
+            @info "Failed for $id (Archive)"
         end
         @test b
     end
