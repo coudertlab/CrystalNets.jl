@@ -1,5 +1,4 @@
 ## Handling of the topological archive internally used to reckognize topologies.
-import Serialization
 import Pkg
 
 const CRYSTAL_NETS_VERSION = VersionNumber(Pkg.TOML.parsefile(joinpath(@__DIR__, "..", "Project.toml"))["version"])

@@ -34,11 +34,11 @@ function tmpexportname(path, pre, name, ext)
     return joinpath(path, x)
 end
 
-function export_input(c, _name=nothing, path=tempdir())
+function export_default(c, obj=string(typeof(c)), _name=nothing, path=tempdir())
     if !isempty(path)
-        name = tmpexportname(path, "crystal_", _name, ".vtf")
+        name = tmpexportname(path, obj*'_', _name, ".vtf")
         truepath = replace(joinpath(path, name), ('\\' => "/"))
-        println("Automatic export of input is enabled: saving file at $truepath")
+        println("Export of $obj is enabled: saving file at $truepath")
         try
             export_vtf(truepath, c, 6)
         catch e

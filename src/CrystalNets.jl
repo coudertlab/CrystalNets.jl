@@ -16,11 +16,20 @@ julia> reckognize_topology(topological_genome(CrystalNet(parse_chemfile(FILE))))
 """
 module CrystalNets
 
-export CrystalNet, CrystalNetGroup, topological_genome, parse_chemfile,
-       reckognize_topology, guess_topology
+export CrystalNet,
+       CrystalNetGroup,
+       parse_chemfile,
+       topological_genome,
+       reckognize_topology,
+       determine_topology,
+       determine_topologies,
+       guess_topology,
+       guess_topologies,
+       topologies_dataset
 
 import LinearAlgebra: det, norm, rank
 using Base.Threads
+import Serialization
 
 using PeriodicGraphs
 import PeriodicGraphs: hash_position, change_dimension

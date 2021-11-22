@@ -627,12 +627,12 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
 
     if isempty(attributions)
         crystalnothing = Crystal{Nothing}(cell, types, pos, graph, options)
-        export_input(crystalnothing, name, options.export_input)
+        export_default(crystalnothing, "input", name, options.export_input)
         return crystalnothing
     else
         crystalclusters = Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions),
                                             pos, graph, options)
-        export_input(crystalclusters, name, options.export_input)
+        export_default(crystalclusters, "input", name, options.export_input)
         return crystalclusters
     end
 end

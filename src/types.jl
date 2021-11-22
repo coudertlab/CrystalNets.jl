@@ -3,7 +3,6 @@
 include("specialsolver.jl")
 
 import Base: ==
-using Serialization
 using Tokenize
 
 ## Computation options
@@ -64,51 +63,66 @@ Different options, passed as keyword arguments:
 - ignore_atoms: set of atom symbols to ignore (for instance [:C,:H] will
                 remove carbohydrate solvent residues).
 - skip_minimize: assume that the cell is already the unit cell (default is false).
-- forget_types: disregard atom types to compute the topology, making pcu and pcu-b
-                identical for example (default is true)
 - dimensions: the set of crystal net dimensions to consider. For instance, putting
               Set(3) will ensure that only 3-dimensional nets are considered.
               Default is empty, meaning that all nets are considered.
+- ignore_types: disregard atom types to compute the topology, making pcu and pcu-b
+                identical for example (default is true)
 """
 struct Options
     name::String # used for exports
 
-    export_input::String
-    export_clusters::String
-    export_net::String
+    # Input options
     bonding_mode::BondingMode
     cutoff_coeff::Float64
     clustering::ClusteringMode
+    authorize_pruning::Bool
     ignore_atoms::Set{Symbol}
     ignore_monotonic_bonds::Set{Symbol}
     ignore_low_occupancy::Bool
-    authorize_pruning::Bool
+    export_input::String
+    export_clusters::String
 
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
 
+    # Topology computation options
     skip_minimize::Bool
-    forget_types::Bool
     dimensions::Set{Int}
+    ignore_types::Bool
+    export_net::String
 
     function Options(; name="unnamed",
-                       export_input=(DOEXPORT[] ? tempdir() : ""),
-                       export_clusters=(DOEXPORT[] ? tempdir() : ""),
-                       export_net="",
                        bonding_mode=AutoBonds,
                        cutoff_coeff=0.75,
                        clustering=AutomaticClustering,
+                       authorize_pruning=true,
                        ignore_atoms=Set{Symbol}(),
                        ignore_monotonic_bonds=Set{Symbol}(),
                        ignore_low_occupancy=false,
-                       authorize_pruning=true,
+                       export_input=(DOEXPORT[] ? tempdir() : ""),
+                       export_clusters=(DOEXPORT[] ? tempdir() : ""),
                        dryrun=nothing,
                        skip_minimize=false,
-                       forget_types=true,
-                       dimensions=Set{Int}())
-        new(name, export_input, export_clusters, export_net, bonding_mode, cutoff_coeff,
-            clustering, Set{Symbol}(ignore_atoms), Set{Symbol}(ignore_monotonic_bonds),
-            ignore_low_occupancy, authorize_pruning, dryrun, skip_minimize, forget_types,
-            dimensions)
+                       dimensions=Set{Int}(),
+                       ignore_types=true,
+                       export_net="")
+        new(
+            name,
+            bonding_mode,
+            cutoff_coeff,
+            clustering,
+            authorize_pruning,
+            Set{Symbol}(ignore_atoms),
+            Set{Symbol}(ignore_monotonic_bonds),
+            ignore_low_occupancy,
+            export_input,
+            export_clusters,
+            dryrun,
+            skip_minimize,
+            Set{Int}(dimensions),
+            ignore_types,
+            export_net
+        )
     end
 end
 
@@ -117,7 +131,11 @@ function Options(options::Options; kwargs...)
     base = Dict{Symbol,Any}([x => getfield(options, x) for x in fieldnames(Options)])
     for (kwarg, val) in kwargs
         T = fieldtype(Options, kwarg)
-        val = isconcretetype(T) && !(T <: Enum) ? T(val) : val
+        val = if isconcretetype(T) && !(T <: Enum)
+            T <: Set ? union(base[kwarg], T(val)) : T(val)
+        else
+            val
+        end
         base[kwarg] = val
     end
     return Options(; base...)
@@ -1006,6 +1024,11 @@ function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
     # Type-unstable function, but yields better performance than always falling back to BigInt
 end
 
+struct EmptyGraphException end
+function Base.showerror(io::IO, ::EmptyGraphException)
+    print(io, "Empty graph. This probably means that the bonds have not been correctly attributed. Please switch to an input file containing explicit bonds.")
+end
+
 function prepare_crystal(crystal::Crystal{T}) where T
     c::Crystal{Nothing} = if T === Clusters # the only alternative is c.clusters === nothing
         coalesce_sbus(crystal)
@@ -1013,7 +1036,7 @@ function prepare_crystal(crystal::Crystal{T}) where T
         crystal
     end
     if ne(c.graph) == 0
-        error("Empty graph. This probably means that the bonds have not been correctly attributed. Please switch to an input file containing explicit bonds.")
+        throw(EmptyGraphException())
     end
     return c
 end
