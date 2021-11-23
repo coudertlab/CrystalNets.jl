@@ -335,6 +335,7 @@ function ==(c1::Cell, c2::Cell)
 end
 
 Cell() = Cell(Symbol(""), "P 1", 0, 10, 10, 10, 90, 90, 90, EquivalentPosition[])
+
 function cell_parameters(mat::StaticArray{Tuple{3,3},BigFloat})
     _a, _b, _c = eachcol(mat)
     a = norm(_a)
@@ -346,10 +347,20 @@ function cell_parameters(mat::StaticArray{Tuple{3,3},BigFloat})
     return (a, b, c, α, β, γ)
 end
 cell_parameters(cell::Cell) = cell_parameters(cell.mat)
+
 function Cell(cell::Cell, mat::StaticArray{Tuple{3,3},BigFloat})
     a, b, c, α, β, γ = cell_parameters(mat)
     return Cell(cell.latticesystem, cell.spacegroup, cell.tablenumber, a, b, c, α, β, γ, cell.equivalents)
 end
+
+function Cell(mat::StaticArray{Tuple{3,3},BigFloat})
+    if !all(isfinite, mat) || iszero(det(mat))
+        @ifwarn @error "Suspicious unit cell of matrix $(Float64.(mat)). Is the input really periodic? Using a cubic unit cell instead."
+        return Cell()
+    end
+    return Cell(Cell(), mat)
+end
+
 function Base.show(io::IO, cell::Cell)
     a, b, c, α, β, γ = Float64.(cell_parameters(cell))
     print(io, Cell, "(\"$(cell.spacegroup)\", ($a, $b, $c), ($α, $β, $γ))")

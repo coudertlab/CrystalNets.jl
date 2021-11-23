@@ -545,7 +545,7 @@ function parse_as_cif(cif::CIF, options, name)
     end
     n -= length(ignored)
 
-    cell = Cell(Cell(), cif.cell.mat)
+    cell = Cell(cif.cell.mat)
     return finalize_checks(cell, pos, types, Int[], bonds, guessed_bonds, options, name)
 end
 
@@ -561,12 +561,15 @@ function parse_as_chemfile(frame, options, name)
         end
     end
 
-    cell = Cell(Cell(), SMatrix{3,3,BigFloat}(matrix(UnitCell(frame)))')
-    pos::Vector{SVector{3,Float64}} = Ref(inv(cell.mat)) .* eachcol(positions(frame))
+    _pos = collect(eachcol(positions(frame)))
+    cell = Cell(SMatrix{3,3,BigFloat}(matrix(UnitCell(frame)))')
+
+    pos::Vector{SVector{3,Float64}} = Ref(inv(cell.mat)) .* _pos
 
     toremove = check_collision(pos, cell.mat)
     if !isempty(toremove)
         deleteat!(types, toremove)
+        deleteat!(pos, toremove)
         for j in Iterators.reverse(toremove)
             Chemfiles.remove_atom!(frame, j-1)
         end
@@ -601,11 +604,6 @@ end
 
 
 function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
-    if !all(isfinite, cell.mat) || iszero(det(cell.mat))
-        @ifwarn @error "Suspicious unit cell of matrix $(Float64.(cell.mat)). Is the input really periodic? Using a cubic unit cell instead."
-        cell = Cell()
-    end
-
     n = length(pos)
 
     adjacency = falses(n, n)
