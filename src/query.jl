@@ -54,7 +54,7 @@ end
 
 Compute the topological genome of a periodic graph.
 """
-function topological_genome(g::PeriodicGraph, options::Options=Options())
+function topological_genome(g::PeriodicGraph, options::Options)
     net = CrystalNet(g, options)
     return topological_genome(net)
 end
