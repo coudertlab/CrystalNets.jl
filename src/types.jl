@@ -78,7 +78,7 @@ struct Options
     clustering::ClusteringMode
     authorize_pruning::Bool
     ignore_atoms::Set{Symbol}
-    ignore_monotonic_bonds::Set{Symbol}
+    ignore_homoatomic_bonds::Set{Symbol}
     ignore_low_occupancy::Bool
     export_input::String
     export_clusters::String
@@ -97,7 +97,7 @@ struct Options
                        clustering=AutomaticClustering,
                        authorize_pruning=true,
                        ignore_atoms=Set{Symbol}(),
-                       ignore_monotonic_bonds=Set{Symbol}(),
+                       ignore_homoatomic_bonds=Set{Symbol}(),
                        ignore_low_occupancy=false,
                        export_input=(DOEXPORT[] ? tempdir() : ""),
                        export_clusters=(DOEXPORT[] ? tempdir() : ""),
@@ -113,7 +113,7 @@ struct Options
             clustering,
             authorize_pruning,
             Set{Symbol}(ignore_atoms),
-            Set{Symbol}(ignore_monotonic_bonds),
+            Set{Symbol}(ignore_homoatomic_bonds),
             ignore_low_occupancy,
             export_input,
             export_clusters,
@@ -912,7 +912,7 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
                          graph::PeriodicGraph, opts::Options)
     initialvmap, graph = trim_topology(PeriodicGraphs.change_dimension(PeriodicGraph3D, graph))
     types = types[initialvmap]
-    remove_monotonic_bonds!(graph, types, opts.ignore_monotonic_bonds)
+    remove_homoatomic_bonds!(graph, types, opts.ignore_homoatomic_bonds)
     dimensions = PeriodicGraphs.dimensionality(graph)
 
     if haskey(dimensions, 0)

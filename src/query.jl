@@ -302,7 +302,7 @@ function guess_topology(path, defopts)
     end
     @ifvalidgenomereturn Options(defopts; ignore_low_occupancy=true) "removing atoms with occupancy < 0.5"
     if :Al ∈ atoms || :P ∈ atoms # ALPO datastructure
-        @ifvalidgenomereturn Options(defopts; ignore_monotonic_bonds=(:Al,:P)) "removing Al-O-Al and P-O-P bonds"
+        @ifvalidgenomereturn Options(defopts; ignore_homoatomic_bonds=(:Al,:P)) "removing Al-O-Al and P-O-P bonds"
         if :Sn ∈ atoms # observed in some cases for ALPO databases
             @ifvalidgenomereturn Options(defopts; ignore_atoms=(:Sn,)) "ignoring Sn"
         end
@@ -466,6 +466,7 @@ function topologies_dataset(path, save, autoclean, options::Options)
             push!(ret, Pair(l[1:_i-1], l[_i+1:end]))
         end
     end
+    result::Dict{String,String} = Dict(ret)
     if save
         i = 0
         tmpresultdir = resultdir*".OLD"*string(i)
@@ -474,7 +475,7 @@ function topologies_dataset(path, save, autoclean, options::Options)
             tmpresultdir = resultdir*".OLD"*string(i)
         end
         mv(resultdir, tmpresultdir)
-        Serialization.serialize(resultdir, ret)
+        Serialization.serialize(resultdir, result)
         println("Topologies of $path saved at $resultdir")
         if autoclean
             rm(tmpresultdir; recursive=true)
@@ -486,7 +487,7 @@ function topologies_dataset(path, save, autoclean, options::Options)
     else
         println("Temporary files kept at $resultdir")
     end
-    return Dict(ret)
+    return result
 end
 function topologies_dataset(path, save=true, autoclean=true; kwargs...)
     topologies_dataset(path, save, autoclean, Options(; kwargs...))

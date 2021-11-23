@@ -300,7 +300,14 @@ end
     end
 end
 
+"""
+    check_collision(pos, mat)
 
+Given a list of fractional coordinates `pos` and the matrix of the unit cell
+`mat`, return a list of atoms that are suspiciously close to another atom
+of the list. For each collision site, only one atom is not present in the
+returned list.
+"""
 function check_collision(pos, mat)
     n = length(pos)
     toremove = Int[]
@@ -383,7 +390,15 @@ macro reduce_valence(n1, n2)
 end
 
 
-#hasHneighbor(types, graph, i) = any(x -> types[x.v] === :H, neighbors(graph,i))
+"""
+    fix_valence!(graph::PeriodicGraph, pos, types, mat, ::Val{dofix}) where dofix
+
+Attempt to ensure that the coordinence of certain atoms are at least plausible
+by removing some edges from the graph.
+These atoms are H, halogens, O, N and C.
+if `dofix` is set, actually modify the graph; otherwise, only emit a warning.
+In both cases, return a list of atoms with invalid coordinence.
+"""
 function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}) where {N,dofix}
     # Small atoms valence check
     n = length(types)
@@ -416,7 +431,12 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}) wh
 end
 
 
+"""
+    sanity_checks!(graph, pos, types, mat, options)
 
+Perform some sanity checks to ensure that the detected bonds are not obviously
+wrong because they are either too short or too long.
+"""
 function sanity_checks!(graph, pos, types, mat, options)
     ## Bond length check
     removeedges = PeriodicEdge3D[]
@@ -450,7 +470,12 @@ function sanity_checks!(graph, pos, types, mat, options)
     return false
 end
 
-function remove_monotonic_bonds!(graph::PeriodicGraph{D}, types, targets) where D
+"""
+    remove_homoatomic_bonds!(graph::PeriodicGraph, types, targets)
+
+Remove from the graph all bonds of the form X-X where X is an atom in `targets`.
+"""
+function remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets) where D
     isempty(targets) && return
     n = length(types)
     for i in 1:n
@@ -623,7 +648,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
         end
     end
 
-    remove_monotonic_bonds!(graph, types, options.ignore_monotonic_bonds)
+    remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds)
 
     if isempty(attributions)
         crystalnothing = Crystal{Nothing}(cell, types, pos, graph, options)

@@ -1,3 +1,5 @@
+## Main functions of the algorithm
+
 struct UnstableNetException <: Exception
     g::String
 end
@@ -905,31 +907,6 @@ function find_candidates_fallback(net::CrystalNet{3,T}, reprs, othercats, catego
     @assert all(isempty, values(candidates))
     return Dict{Int,Vector{SMatrix{3,3,U,9}}}()
 end
-
-# function parallel_topological_key(net::CrystalNet{D,T}) where {D,T}
-#     candidates = find_candidates(net)
-#     # @show length(candidates)
-#     numthreads = min(nthreads(), length(candidates))
-#     minimal_graph = Vector{PeriodicGraph3D}(undef, numthreads)
-#     minimal_vmap = Vector{Vector{Int}}(undef, numthreads)
-#     minimal_basis = Vector{SMatrix{3,3,T,9}}(undef, numthreads)
-#     @threads for i in 1:numthreads
-#         v, basis = candidates[end+1-i]
-#         minimal_basis[i], minimal_vmap[i], minimal_graph[i] = candidate_key(net, v, basis)
-#     end
-#     resize!(candidates, length(candidates) - numthreads)
-#     @threads for (v, basis) in candidates
-#         id = threadid() # necessarily inbounds because otherwise the candidates is empty
-#         newbasis, vmap, graph = candidate_key(net, v, basis)
-#         if edges(graph) < edges(minimal_graph[id])
-#             minimal_graph[id] = graph
-#             minimal_vmap[id] = vmap
-#             minimal_basis[id] = newbasis
-#         end
-#     end
-#     _, j = findmin(edges.(minimal_graph))
-#     return minimal_basis[j], minimal_vmap[j], minimal_graph[j]
-# end
 
 function topological_key(net::CrystalNet{D,T}) where {D,T}
     if isempty(net.pos)
