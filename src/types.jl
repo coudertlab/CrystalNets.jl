@@ -306,35 +306,35 @@ end
     Cell
 
 Representation of a periodic cell in 3D. Contains information about the cell
-(axes lengths and angles) and its symmetry group.
+(axes lengths and angles) and its symmetry group, through its Hall number.
+
+See SPACE_GROUP_HALL, SPACE_GROUP_FULL, SPACE_GROUP_HM et SPACE_GROUP_IT for
+the correspondance between Hall number and usual symbolic representations.
 """
 struct Cell
-    latticesystem::Symbol
-    spacegroup::String
-    tablenumber::Int
+    hall::Int
     mat::SMatrix{3,3,BigFloat,9} # Cartesian coordinates of a, b and c
     equivalents::Vector{EquivalentPosition}
 
-    function Cell(lattice, space, table, a, b, c, α, β, γ, eq)
-        cosα = cosd(α); cosβ = cosd(β); cosγ = cosd(γ); sinγ = sind(γ)
-        ω = sqrt(1 - cosα^2 - cosβ^2 - cosγ^2 + 2*cosα*cosβ*cosγ)
-        mat = SMatrix{3,3,BigFloat,9}([a  b*cosγ  c*cosβ ;
-                                      0   b*sinγ  c*(cosα - cosβ*cosγ)/sinγ ;
-                                      0   0       c*ω/sinγ ])
-        return new(lattice, space, table, mat, eq)
-    end
-
-    function Cell(c::Cell, eqs::Vector{EquivalentPosition})
-        return new(c.latticesystem, c.spacegroup, c.tablenumber, c.mat, eqs)
-    end
+    Cell(hall, mat::AbstractMatrix, equivalents) = new(hall, mat, equivalents)
 end
 
 function ==(c1::Cell, c2::Cell)
-    c1.latticesystem == c2.latticesystem && c1.spacegroup == c2.spacegroup &&
-    c1.tablenumber == c2.tablenumber && c1.mat == c2.mat && c1.equivalents == c2.equivalents
+    c1.hall == c2.hall && c1.mat == c2.mat
 end
 
-Cell() = Cell(Symbol(""), "P 1", 0, 10, 10, 10, 90, 90, 90, EquivalentPosition[])
+function Cell(hall, (a, b, c), (α, β, γ), eqs=EquivalentPosition[])
+    cosα = cosd(α); cosβ = cosd(β); cosγ = cosd(γ); sinγ = sind(γ)
+    ω = sqrt(1 - cosα^2 - cosβ^2 - cosγ^2 + 2*cosα*cosβ*cosγ)
+    mat = SMatrix{3,3,BigFloat,9}([a  b*cosγ  c*cosβ ;
+                                  0   b*sinγ  c*(cosα - cosβ*cosγ)/sinγ ;
+                                  0   0       c*ω/sinγ ])
+    if isempty(eqs)
+        eqs = get_symmetry_equivalents(hall)
+    end
+    return Cell(hall, mat, eqs)
+end
+Cell() = Cell(1, (10, 10, 10), (90, 90, 90), EquivalentPosition[])
 
 function cell_parameters(mat::StaticArray{Tuple{3,3},BigFloat})
     _a, _b, _c = eachcol(mat)
@@ -344,13 +344,12 @@ function cell_parameters(mat::StaticArray{Tuple{3,3},BigFloat})
     α = acosd(_b'_c/(b*c))
     β = acosd(_c'_a/(c*a))
     γ = acosd(_a'_b/(a*b))
-    return (a, b, c, α, β, γ)
+    return a, b, c, α, β, γ
 end
 cell_parameters(cell::Cell) = cell_parameters(cell.mat)
 
 function Cell(cell::Cell, mat::StaticArray{Tuple{3,3},BigFloat})
-    a, b, c, α, β, γ = cell_parameters(mat)
-    return Cell(cell.latticesystem, cell.spacegroup, cell.tablenumber, a, b, c, α, β, γ, cell.equivalents)
+    return Cell(cell.hall, mat, cell.equivalents)
 end
 
 function Cell(mat::StaticArray{Tuple{3,3},BigFloat})
@@ -363,7 +362,13 @@ end
 
 function Base.show(io::IO, cell::Cell)
     a, b, c, α, β, γ = Float64.(cell_parameters(cell))
-    print(io, Cell, "(\"$(cell.spacegroup)\", ($a, $b, $c), ($α, $β, $γ))")
+    print(io, Cell, "($(cell.hall), ($a, $b, $c), ($α, $β, $γ))")
+end
+function Base.show(io::IO, ::MIME"text/plain", cell::Cell)
+    (a, b, c), (α, β, γ) = Float64.(cell_parameters(cell))
+    hall_symbol, crystal_system = HALL_SYMBOLS[cell.hall]
+    print(io, Cell, " with Hall symbol $hall_symbol ($crystal_system) and parameters")
+    print(io, "a=$a, b=$b, c=$c, α=$α, β=$β, γ=$γ")
 end
 
 ## CIF
@@ -860,7 +865,6 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
     s = sortperm(pos)
     pos = pos[s]
     types = Symbol[types[s[i]] for i in 1:n]
-    cell = Cell(cell, EquivalentPosition[])
     graph = offset_representatives!(graph, .-offsets)[s]
     # @assert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
     return CrystalNet{D,T}(cell, types, pos, graph, options)

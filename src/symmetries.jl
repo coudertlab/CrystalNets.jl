@@ -1,5 +1,7 @@
 # Wrapper around the spglib library
 
+include("symmetry_groups.jl")
+
 import spglib_jll: libsymspg
 
 mutable struct SpglibDataset
@@ -86,6 +88,62 @@ function Base.getproperty(ds::SpglibDataset, name::Symbol)
         getfield(ds, name)
     end
 end
+
+
+function find_hall_number(hallsymbol, hm, it)
+    if hallsymbol != ""
+        hall = get(SPACE_GROUP_HALL, replace(hallsymbol, ('_' => ' ')), 0)
+        if hall ∈ (322, 326, 330)
+            if hall == 322
+                if endswith(hm, 'b')
+                    hall = 324
+                end
+            elseif hall == 326
+                if occursin('c', hm)
+                    hall = 328
+                end
+            elseif occursin('a', hm)
+                hall = 332
+            end
+        end
+        hall == 0 || return hall
+        @ifwarn @warn "Hall symbol provided but not reckognised: $hallsymbol"
+    end
+    if hm != ""
+        dense_hm = replace(join(split(hm)), ('_'=>""))
+        hall = get(SPACE_GROUP_HM, dense_hm, 0)
+        hall == 0 || return hall
+        hall = get(SPACE_GROUP_FULL, dense_hm, 0)
+        hall == 0 || return hall
+        @ifwarn @warn "H-M symbol provided but not reckognised : $hm"
+    end
+    if it != 0
+        if it < 1 || it > 230
+            @ifwarn @error "International Table number provided is outside of the allowed range (1-230) : $it"
+            return 1
+        end
+        return SPACE_GROUP_IT[it]
+    end
+    @ifwarn @warn "Could not determine the space group of this file. It will be considered P1."
+    return 1
+end
+
+function get_symmetry_equivalents(hall)
+    rotations = Array{Cint}(undef, 3, 3, 192)
+    translations = Array{Cdouble}(undef, 3, 192)
+    len = ccall((:spg_get_symmetry_from_database, libsymspg), Cint,
+                (Ptr{Cint}, Ptr{Cdouble}, Cint), rotations, translations, hall)
+    @assert len < 192
+    eqs = EquivalentPosition[]
+    for i in 1:len
+        rot = SMatrix{3,3,Rational{Int},9}(transpose(@inbounds rotations[:,:,i]))
+        tr = SVector{3,Cdouble}(@inbounds translations[:,i])
+        trans = SVector{3,Rational{Int}}(round.(Int, 360 .* tr) .// 360)
+        push!(eqs, EquivalentPosition(rot, trans))
+    end
+    return eqs
+end
+
 
 function get_spglib_dataset(net::CrystalNet3D)
     lattice = Matrix{Cdouble}(adjoint(net.cell.mat)) # transpose to account for row-major operations

@@ -83,10 +83,11 @@ function parse_cif(file)
     return all_data
 end
 
-function parsestrip(s)
+function parsestrip(T, s)
     s = s[end] == ')' ? s[1:prevind(s, findlast('(', s))] : s
-    return parse(BigFloat, s)
+    return parse(T, s)
 end
+parsestrip(s) = parsestrip(BigFloat, s)
 
 
 """
@@ -97,24 +98,35 @@ Make a CIF object out of the parsed file.
 CIF(file::AbstractString) = CIF(parse_cif(file))
 function CIF(parsed::Dict{String, Union{Vector{String},String}})
     natoms = length(parsed["atom_site_label"])
-    equivalentpositions = pop!(parsed,
-        haskey(parsed, "symmetry_equiv_pos_as_xyz") ?
-            "symmetry_equiv_pos_as_xyz" : "space_group_symop_operation_xyz")
+    equivalentpositions = haskey(parsed, "symmetry_equiv_pos_as_xyz") ?
+        pop!(parsed, "symmetry_equiv_pos_as_xyz") : 
+        haskey(parsed, "space_group_symop_operation_xyz") ?
+            pop!(parsed, "space_group_symop_operation_xyz") : EquivalentPosition[]
     refid = find_refid(equivalentpositions)
-    cell = Cell(Symbol(haskey(parsed, "symmetry_cell_setting") ?
-                            pop!(parsed, "symmetry_cell_setting") : ""),
-                pop!(parsed, "symmetry_space_group_name_H-M"),
-                haskey(parsed, "symmetry_Int_Tables_number") ?
-                    parse(Int, pop!(parsed, "symmetry_Int_Tables_number")) : 0,
-                parsestrip(pop!(parsed, "cell_length_a")),
-                parsestrip(pop!(parsed, "cell_length_b")),
-                parsestrip(pop!(parsed, "cell_length_c")),
-                parsestrip(pop!(parsed, "cell_angle_alpha")),
-                parsestrip(pop!(parsed, "cell_angle_beta")),
-                parsestrip(pop!(parsed, "cell_angle_gamma")),
+    hall = find_hall_number(
+            haskey(parsed, "space_group_name_Hall") ?
+                pop!(parsed, "space_group_name_Hall") :
+                haskey(parsed, "symmetry_space_group_name_Hall") ?
+                    pop!(parsed, "symmetry_space_group_name_Hall") : "",
+            haskey(parsed, "space_group_name_H-M_alt") ?
+                pop!(parsed, "space_group_name_H-M_alt") :
+                haskey(parsed, "symmetry_space_group_name_H-M") ?
+                    pop!(parsed, "symmetry_space_group_name_H-M") : "",
+            haskey(parsed, "symmetry_Int_Tables_number") ?
+                parse(Int, pop!(parsed, "symmetry_Int_Tables_number")) :
+                haskey(parsed, "space_group.IT_number") ? 
+                    parse(Int, pop!(parsed, "space_group.IT_number")) : 0)
+    cell = Cell(hall, (parsestrip(pop!(parsed, "cell_length_a")),
+                       parsestrip(pop!(parsed, "cell_length_b")),
+                       parsestrip(pop!(parsed, "cell_length_c"))),
+                      (parsestrip(pop!(parsed, "cell_angle_alpha")),
+                       parsestrip(pop!(parsed, "cell_angle_beta")),
+                       parsestrip(pop!(parsed, "cell_angle_gamma"))),
                 parse.(EquivalentPosition, equivalentpositions, Ref(refid)))
 
     haskey(parsed, "symmetry_equiv_pos_site_id") && pop!(parsed, "symmetry_equiv_pos_site_id")
+    haskey(parsed, "symmetry_cell_setting") && pop!(parsed, "symmetry_cell_setting")
+
     removed_identity = false
     for i in eachindex(cell.equivalents)
         eq = cell.equivalents[i]
@@ -146,7 +158,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
         @assert !haskey(correspondence, labels[i])
         correspondence[labels[i]] = i
         push!(types, Symbol(symbols[i]))
-        pos[:,i] = parsestrip.([pos_x[i], pos_y[i], pos_z[i]])
+        pos[:,i] = parsestrip.(Float64, [pos_x[i], pos_y[i], pos_z[i]])
         pos[:,i] .-= floor.(Int, pos[:,i])
     end
 
@@ -159,7 +171,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
         bond_a = pop!(parsed, "geom_bond_atom_site_label_1")
         bond_b = pop!(parsed, "geom_bond_atom_site_label_2")
         dists = haskey(parsed, "geom_bond_distance") ? 
-                    parse.(Float32, pop!(parsed, "geom_bond_distance")) :
+                    parsestrip.(Float32, pop!(parsed, "geom_bond_distance")) :
                     fill(zero(Float32), length(bond_a))
         for i in 1:length(bond_a)
             try

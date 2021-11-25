@@ -7,9 +7,7 @@ import Base.Threads
 CrystalNets.toggle_export(false)
 
 function _finddirs()
-    curr = last(splitdir(@__DIR__))
-    root = curr == "CrystalNets" ? normpath(@__DIR__) : normpath(@__DIR__, "..")
-    return joinpath(root, "test", "cif"), root
+    return joinpath(dirname(pathof(CrystalNets)), "test", "cif"), root
 end
 
 const known_unstable_nets = ("sxt", "llw-z") # special case for these known unstable nets

@@ -1,0 +1,75 @@
+
+
+
+
+ 
+#*********************************************************************************
+#
+# Crystallographic Information File for IST-1, as-made 
+#
+# Reference : 
+#   Jorda, J.L., McCusker, L.B., Baerlocher, Ch., Morais, C.M., Rocha, J., Fernandez, C., Borges, C., Lourenco, J.P., Ribeiro, M.F. and Gabelica, Z.
+#   Microporous Mesoporous Mat., 65, 43-57, (2003)
+#
+#
+# CIF downloaded from the IZA-SC Database of Zeolite Structures
+# Ch. Baerlocher and L.B. McCusker,
+# Database of Zeolite Structures: http://www.iza-structure.org/databases/ 
+#
+#**********************************************************************************
+
+
+data_IST-1_as-made
+_chemical_name_systematic 'IST-1, as-made'
+
+_cell_length_a      9.6152
+_cell_length_b      8.6702
+_cell_length_c      16.2196 
+_cell_angle_alpha   90 
+_cell_angle_beta    90 
+_cell_angle_gamma   90
+_cell_formula_units_Z   1
+
+_space_group.name_H-M_ref   'P c a 21'
+_symmetry_space_group_name_H-M   'P c a 21'
+_symmetry_space_group_name_Hall  'P 2c -2ac'
+_space_group.IT_number  29 
+
+ 
+ loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_B_iso_or_equiv
+_atom_site_occupancy
+Al1  Al  0.195  0.8346  0.3921  0.43  1
+Al2  Al  0.0171  0.6502  0.104  0.43  1
+Al3  Al  0.178  0.4521  0.3614  0.43  1
+P1  P  0.038  0.3284  0.7909  0.43  1
+P2  P  0.1877  0.5844  0.5345  0.43  1
+P3  P  0.0259  0.1513  0.4455  0.43  1
+O1  O  0.3738  0.896  0.4306  0.59  1
+O2  O  0.147  0.732  0.4927  0.59  1
+O3  O  0.0188  0.7988  0.3478  0.59  1
+O4  O  0.1226  0.0127  0.4409  0.59  1
+O5  O  0.2011  0.3396  0.8031  0.59  1
+O6  O  0.974  0.4831  0.807  0.59  1
+O7  O  0.0198  0.278  0.7014  0.59  1
+O8  O  -0.0371  0.789  0.0367  0.59  1
+O9  O  0.1931  0.6098  0.0977  0.59  1
+O10  O  0.94  0.4761  0.0856  0.59  1
+O11  O  0.0676  0.276  0.3868  0.59  1
+O12  O  0.2282  0.4627  0.4698  0.59  1
+O13  O  0.2607  0.6465  0.3459  0.59  1.125
+C1  C  0.1528  0.9036  0.7281  3.95  1.5
+N1  N  0.2603  0.9621  0.7855  3.95  1.29
+C2  C  0.1442  0.1472  0.1047  3.95  1.5
+N2  N  0.1317  0.1829  0.0146  3.95  1.43
+
+# End of data for IST-1_as-made
+
+
+			
+	
