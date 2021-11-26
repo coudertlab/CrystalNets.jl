@@ -52,6 +52,16 @@ function export_default(c, obj=string(typeof(c)), _name=nothing, path=tempdir())
     nothing
 end
 
+function db_options(; kwargs...)
+    if DOWARN[]
+        @error "Warnings may critically alter performance."
+        @info "Use CrystalNets.toggle_warning(false) or the --no-warn option to remove them"
+    end
+    # if kwargs explicitly set one of the two, it will take precedence
+    return Options(; export_input="", export_clusters="", kwargs...)
+end
+
+
 """
     soft_widen(::Type)
 

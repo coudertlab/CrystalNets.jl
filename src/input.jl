@@ -530,7 +530,7 @@ function parse_as_cif(cif::CIF, options, name)
         end
         guessed_bonds = true
 
-        bonds = guess_bonds(pos, types, Float64.(cif.cell.mat), options.cutoff_coeff)
+        bonds = guess_bonds(pos, types, Float64.(cif.cell.mat), options)
     else
         bonds = Tuple{Int,Int}[]
         _i = 1 # correction to i based on ignored atoms
@@ -595,7 +595,7 @@ function parse_as_chemfile(frame, options, name)
     topology = Topology(frame)
     if bonds_count(topology) == 0
         guessed_bonds = true
-        bonds = guess_bonds(pos, types, Float64.(cell.mat), options.cutoff_coeff)
+        bonds = guess_bonds(pos, types, Float64.(cell.mat), options)
         for (u,v) in bonds
             add_bond!(frame, u-1, v-1)
         end
@@ -635,7 +635,8 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
                     @warn "Disregarding all bonds from the input file."
                     @info "To force retaining the initial bonds, use --bond-detect=input"
                 end
-                bonds = guess_bonds(pos, types, mat, options.cutoff_coeff)
+                bonds = guess_bonds(pos, types, mat, options)
+                guessed_bonds = true
                 adjacency = falses(n, n)
                 for (a,b) in bonds
                     adjacency[a, b] = true
@@ -658,7 +659,9 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
         end
     end
 
-    remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds)
+    if !guessed_bonds
+        remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds)
+    end
 
     if isempty(attributions)
         crystalnothing = Crystal{Nothing}(cell, types, pos, graph, options)

@@ -212,7 +212,7 @@ function determine_topologies(path, options)
     return Dict(Iterators.flatten(ret)), unique!(newgens),
            Dict(skipmissing(failed))
 end
-determine_topologies(path; kwargs...) = determine_topologies(path, Options(; kwargs...))
+determine_topologies(path; kwargs...) = determine_topologies(path, db_options(; kwargs...))
 
 
 
@@ -371,7 +371,7 @@ function guess_topologies(path, options)
     newgens = sort!(collect(skipmissing(newgenomes)))
     return Dict(ret), unique!(newgens), Dict(skipmissing(failed))
 end
-guess_topologies(path; kwargs...) = guess_topologies(path, Options(; kwargs...))
+guess_topologies(path; kwargs...) = guess_topologies(path, db_options(; kwargs...))
 
 
 """
@@ -490,5 +490,5 @@ function topologies_dataset(path, save, autoclean, options::Options)
     return result
 end
 function topologies_dataset(path, save=true, autoclean=true; kwargs...)
-    topologies_dataset(path, save, autoclean, Options(; kwargs...))
+    topologies_dataset(path, save, autoclean, db_options(; kwargs...))
 end
