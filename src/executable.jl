@@ -38,8 +38,8 @@ function parse_commandline(args)
                          \n\n
                          BONDING_MODE options:\n\n
                          \ua0\ua0\ua0* input: use the bonds explicitly given by the input file. Fail if bonds are not provided by the input.\n\n
-                         \ua0\ua0\ua0* chemfiles: guess bonds using chemfiles built-in bond detection mechanism.\n\n
-                         \ua0\ua0\ua0* auto: if the input possesses explicit bonds, use them unless they are suspicious. Otherwise, fall back to "chemfiles". Default option.\n\n
+                         \ua0\ua0\ua0* guess: guess bonds using a variant of chemfiles / VMD algorithm.\n\n
+                         \ua0\ua0\ua0* auto: if the input possesses explicit bonds, use them unless they are suspicious. Otherwise, fall back to "guess". Default option.\n\n
                          \n\n
                          CREATE_MODE options:\n\n
                          \ua0\ua0\ua0* empty: empty archive, unable to reckognize any topological structure.\n\n
@@ -97,7 +97,7 @@ function parse_commandline(args)
             metavar = "CLUSTERING_MODE"
 
         "--bond-detect", "-b"
-            help = """Bond detection mode, to be chosen between input, chemfiles and auto.
+            help = """Bond detection mode, to be chosen between input, guess and auto.
             See bottom for more details.
             """
             metavar = "BONDING_MODE"
@@ -214,7 +214,7 @@ function main(args)
 
         @parse_to_str_or_nothing export_to
         export_path::String = if export_to isa Nothing
-            tempdir()
+            DOEXPORT[] ? tempdir() : ""
         else
             toggle_export(true)
             export_to
@@ -288,20 +288,20 @@ function main(args)
         end
 
         @parse_to_str_or_nothing clustering cluster_mode
-        clustering::ClusteringMode = begin
+        clustering::ClusteringMode._ClusteringMode = begin
             if cluster_mode isa Nothing
-                AutomaticClustering
+                ClusteringMode.Auto
             else
                 if cluster_mode == "input"
-                    InputClustering
+                    ClusteringMode.Input
                 elseif cluster_mode == "atom"
-                    EachVertexClustering
+                    ClusteringMode.EachVertex
                 elseif cluster_mode == "mof"
-                    MOFClustering
+                    ClusteringMode.MOF
                 elseif cluster_mode == "guess"
-                    GuessClustering
+                    ClusteringMode.Guess
                 elseif cluster_mode == "auto"
-                    AutomaticClustering
+                    ClusteringMode.Auto
                 else
                     return parse_error("""Unknown clustering mode: $cluster_mode. Choose between "input", "atom", "mof", "guess" and "auto".""")
                 end
@@ -309,18 +309,18 @@ function main(args)
         end
 
         @parse_to_str_or_nothing bond_detect
-        bondingmode::BondingMode = begin
+        bondingmode::BondingMode._BondingMode = begin
             if bond_detect isa Nothing
-                AutoBonds
+                BondingMode.Auto
             else
                 if bond_detect == "input"
-                    InputBonds
-                elseif bond_detect == "chemfiles"
-                    ChemfilesBonds
+                    BondingMode.Input
+                elseif bond_detect == "guess"
+                    BondingMode.Guess
                 elseif bond_detect == "auto"
-                    AutoBonds
+                    BondingMode.Auto
                 else
-                    return parse_error("""Unknown bond detection mode: $bond_detect. Choose between "input", "chemfiles" and "auto".""")
+                    return parse_error("""Unknown bond detection mode: $bond_detect. Choose between "input", "guess" and "auto".""")
                 end
             end
         end
@@ -382,8 +382,7 @@ function main(args)
             end
             net::CrystalNet = try
                 clusters, _net = do_clustering(crystal)
-                global DOEXPORT
-                if !isempty(clusters) && DOEXPORT[]::Bool # TODO: remove the dependency to DOEXPORT here
+                if !isempty(clusters) && !isempty(export_path)
                     try
                         Crystal{Clusters}(crystal, clusters)
                     catch e

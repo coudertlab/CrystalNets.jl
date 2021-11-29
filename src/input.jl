@@ -411,7 +411,7 @@ These atoms are H, halogens, O, N and C.
 if `dofix` is set, actually modify the graph; otherwise, only emit a warning.
 In both cases, return a list of atoms with invalid coordinence.
 """
-function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}) where {N,dofix}
+function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}, options) where {N,dofix}
     # Small atoms valence check
     n = length(types)
     invalidatoms = Set{Symbol}()
@@ -422,13 +422,14 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}) wh
             @reduce_valence 1
         end
     end
-    monovalent = Set{Symbol}([:Li, :Na, :K, :F, :Br, :Cl, :I])
     for i in 1:n
         t = types[i]
-        if t ∈ monovalent
-            @reduce_valence 0 1
-        elseif t === :O
-            @reduce_valence 0 2
+        if t === :O
+            if options.clustering_mode == ClusteringMode.MOF
+                @reduce_valence 0 4 # oxo-clusters
+            else
+                @reduce_valence 0 2
+            end
         elseif t === :N
             @reduce_valence 2 4
         elseif t === :C  # sp1 carbon is not a common occurence
@@ -462,14 +463,14 @@ function sanity_checks!(graph, pos, types, mat, options)
             return true
         end
     end
-    if options.bonding_mode == AutoBonds
+    if options.bonding_mode == BondingMode.Auto
         if !isempty(removeedges)
             @ifwarn begin
                 @warn "Suspicious small bond lengths found. Such bonds are probably spurious and will be deleted."
                 @info "To force retaining these bonds, use --bond-detect=input or --bond-detect=chemfiles"
             end
             if !(options.dryrun isa Nothing)
-                options.dryrun[:try_noAutoBonds] = nothing
+                options.dryrun[:try_no_Auto_bonds] = nothing
                 options.dryrun[:suspect_smallbonds] = union(
                     Set{Symbol}([types[src(e)] for e in removeedges]),
                     Set{Symbol}([types[dst(e)] for e in removeedges]))
@@ -525,7 +526,7 @@ function parse_as_cif(cif::CIF, options, name)
         #push!(pos, cif.cell.mat * cif.pos[:,i])
     end
     if all(==(Inf32), cif.bonds)
-        if options.bonding_mode == InputBonds
+        if options.bonding_mode == BondingMode.Input
             throw(ArgumentError("Cannot use input bonds since there are none. Use another option for --bonds-detect or provide bonds in the CIF file."))
         end
         guessed_bonds = true
@@ -601,8 +602,8 @@ function parse_as_chemfile(frame, options, name)
         end
     else
         bonds = [(a+1, b+1) for (a,b) in eachcol(Chemfiles.bonds(topology))]
-        if !(options.dryrun isa Nothing) && options.bonding_mode == AutoBonds
-            options.dryrun[:try_InputBonds] = nothing
+        if !(options.dryrun isa Nothing) && options.bonding_mode == BondingMode.Auto
+            options.dryrun[:try_Input_bonds] = nothing
         end
     end
 
@@ -610,7 +611,7 @@ function parse_as_chemfile(frame, options, name)
     m = Int(count_residues(topology))
     residues = [Residue(topology, i) for i in 0:(m-1)]
 
-    attributions = attribute_residues(residues, n, options.clustering == InputClustering)
+    attributions = attribute_residues(residues, n, options.clustering_mode == ClusteringMode.Input)
     return finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
 end
 
@@ -626,8 +627,8 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
     mat = Float64.(cell.mat)
     graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, mat, pos))
 
-    if options.bonding_mode != InputBonds
-        bad_valence = !isempty(fix_valence!(graph, pos, types, mat, Val(false)))
+    if options.bonding_mode != BondingMode.Input
+        bad_valence = !isempty(fix_valence!(graph, pos, types, mat, Val(false), options))
         recompute_bonds = bad_valence || sanity_checks!(graph, pos, types, mat, options)
         if recompute_bonds
             if !guessed_bonds
@@ -644,7 +645,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
                 end
                 graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, cell.mat, pos))
             end
-            invalidatoms = fix_valence!(graph, pos, types, mat, Val(true))
+            invalidatoms = fix_valence!(graph, pos, types, mat, Val(true), options)
             remaining_not_fixed = !isempty(invalidatoms)
             @ifwarn if remaining_not_fixed
                 @warn "Remaining atoms with invalid valence. Proceeding anyway."

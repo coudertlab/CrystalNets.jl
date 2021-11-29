@@ -297,8 +297,8 @@ function guess_topology(path, defopts)
             @ifvalidgenomereturn Options(defopts; ignore_atoms=(a, :H)) "ignoring H and $a"
         end
     end
-    if haskey(dryrun, :try_InputBonds)
-        @ifvalidgenomereturn Options(defopts; bonding_mode=InputBonds) "using input bonds"
+    if haskey(dryrun, :try_Input_bonds)
+        @ifvalidgenomereturn Options(defopts; bonding_mode=BondingMode.Input) "using input bonds"
     end
     @ifvalidgenomereturn Options(defopts; ignore_low_occupancy=true) "removing atoms with occupancy < 0.5"
     if :Al ∈ atoms || :P ∈ atoms # ALPO datastructure
@@ -307,8 +307,8 @@ function guess_topology(path, defopts)
             @ifvalidgenomereturn Options(defopts; ignore_atoms=(:Sn,)) "ignoring Sn"
         end
     end
-    if haskey(dryrun, :try_noAutoBonds)
-        @ifvalidgenomereturn Options(defopts; bonding_mode=ChemfilesBonds) "enforcing Chemfiles bond detection"
+    if haskey(dryrun, :try_no_Auto_bonds)
+        @ifvalidgenomereturn Options(defopts; bonding_mode=BondingMode.Guess) "discarding input bonds and guessing them"
     end
     if haskey(dryrun, :collisions)
         @ifvalidgenomereturn Options(defopts; authorize_pruning=false) "retaining all colliding atoms"

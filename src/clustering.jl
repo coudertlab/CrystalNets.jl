@@ -1,127 +1,25 @@
 using Statistics: mean
 import Graphs: SimpleEdge
 
-const elements = Dict{Symbol,String}( # populated using PeriodicTable.jl
-    :H => "diatomic nonmetal",
-    :He => "noble gas",
-    :Li => "alkali metal",
-    :Be => "alkaline earth metal",
-    :B => "metalloid",
-    :C => "polyatomic nonmetal",
-    :N => "diatomic nonmetal",
-    :O => "diatomic nonmetal",
-    :F => "diatomic nonmetal",
-    :Ne => "noble gas",
-    :Na => "alkali metal",
-    :Mg => "alkaline earth metal",
-    :Al => "post-transition metal",
-    :Si => "metalloid",
-    :P => "polyatomic nonmetal",
-    :S => "polyatomic nonmetal",
-    :Cl => "diatomic nonmetal",
-    :Ar => "noble gas",
-    :K => "alkali metal",
-    :Ca => "alkaline earth metal",
-    :Sc => "transition metal",
-    :Ti => "transition metal",
-    :V => "transition metal",
-    :Cr => "transition metal",
-    :Mn => "transition metal",
-    :Fe => "transition metal",
-    :Co => "transition metal",
-    :Ni => "transition metal",
-    :Cu => "transition metal",
-    :Zn => "transition metal",
-    :Ga => "post-transition metal",
-    :Ge => "metalloid",
-    :As => "metalloid",
-    :Se => "polyatomic nonmetal",
-    :Br => "diatomic nonmetal",
-    :Kr => "noble gas",
-    :Rb => "alkali metal",
-    :Sr => "alkaline earth metal",
-    :Y => "transition metal",
-    :Zr => "transition metal",
-    :Nb => "transition metal",
-    :Mo => "transition metal",
-    :Tc => "transition metal",
-    :Ru => "transition metal",
-    :Rh => "transition metal",
-    :Pd => "transition metal",
-    :Ag => "transition metal",
-    :Cd => "transition metal",
-    :In => "post-transition metal",
-    :Sn => "post-transition metal",
-    :Sb => "metalloid",
-    :Te => "metalloid",
-    :I => "diatomic nonmetal",
-    :Xe => "noble gas",
-    :Cs => "alkali metal",
-    :Ba => "alkaline earth metal",
-    :La => "lanthanide",
-    :Ce => "lanthanide",
-    :Pr => "lanthanide",
-    :Nd => "lanthanide",
-    :Pm => "lanthanide",
-    :Sm => "lanthanide",
-    :Eu => "lanthanide",
-    :Gd => "lanthanide",
-    :Tb => "lanthanide",
-    :Dy => "lanthanide",
-    :Ho => "lanthanide",
-    :Er => "lanthanide",
-    :Tm => "lanthanide",
-    :Yb => "lanthanide",
-    :Lu => "lanthanide",
-    :Hf => "transition metal",
-    :Ta => "transition metal",
-    :W => "transition metal",
-    :Re => "transition metal",
-    :Os => "transition metal",
-    :Ir => "transition metal",
-    :Pt => "transition metal",
-    :Au => "transition metal",
-    :Hg => "transition metal",
-    :Tl => "post-transition metal",
-    :Pb => "post-transition metal",
-    :Bi => "post-transition metal",
-    :Po => "post-transition metal",
-    :At => "metalloid",
-    :Rn => "noble gas",
-    :Fr => "alkali metal",
-    :Ra => "alkaline earth metal",
-    :Ac => "actinide",
-    :Th => "actinide",
-    :Pa => "actinide",
-    :U => "actinide",
-    :Np => "actinide",
-    :Pu => "actinide",
-    :Am => "actinide",
-    :Cm => "actinide",
-    :Bk => "actinide",
-    :Cf => "actinide",
-    :Es => "actinide",
-    :Fm => "actinide",
-    :Md => "actinide",
-    :No => "actinide",
-    :Lr => "actinide",
-    :Rf => "transition metal",
-    :Db => "transition metal",
-    :Sg => "transition metal",
-    :Bh => "transition metal",
-    :Hs => "transition metal",
-    :Mt => "unknown, probably transition metal",
-    :Ds => "unknown, probably transition metal",
-    :Rg => "unknown, probably transition metal",
-    :Cn => "transition metal",
-    :Nh => "unknown, probably transition metal",
-    :Fl => "post-transition metal",
-    :Mc => "unknown, probably post-transition metal",
-    :Lv => "unknown, probably post-transition metal",
-    :Ts => "unknown, probably metalloid",
-    :Og => "unknown, predicted to be noble gas",
-    :Uue => "unknown, but predicted to be an alkali metal"
-)
+const element_categories = String[ # populated using PeriodicTable.jl
+    "nonmetal", "gas", "metal", "metal", "metalloid", "nonmetal", "nonmetal",
+    "nonmetal", "halogen", "metal", "metal", "metal", "metalloid", "nonmetal",
+    "nonmetal", "nonmetal", "halogen", "metal", "metal", "metal", "metal",
+    "metal", "metal", "metal", "metal", "metal", "metal", "metal", "metal",
+    "metal", "metalloid", "metalloid", "nonmetal", "nonmetal", "halogen",
+    "metal", "metal", "metal", "metal", "metal", "metal", "metal", "metal",
+    "metal", "metal", "metal", "metal", "metal", "metal", "metalloid",
+    "metalloid", "nonmetal", "halogen", "metal", "metal", "lanthanide",
+    "lanthanide", "lanthanide", "lanthanide", "lanthanide", "lanthanide",
+    "lanthanide", "lanthanide", "lanthanide", "lanthanide", "lanthanide",
+    "lanthanide", "lanthanide", "lanthanide", "lanthanide", "halogen", "metal",
+    "metal", "metal", "metal", "metal", "metal", "metal", "metal", "metal",
+    "metal", "metal", "metal", "metalloid", "halogen", "metal", "metal",
+    "actinide", "actinide", "actinide", "actinide", "actinide", "actinide",
+    "actinide", "actinide", "actinide", "actinide", "actinide", "actinide",
+    "actinide", "actinide", "actinide", "halogen", "metal", "metal", "metal",
+    "metal", "metal", "metal", "metal", "metal", "metal", "metal", "metal",
+    "metal", "metalloid", "halogen", "metal"]
 
 
 """
@@ -218,14 +116,14 @@ Reckognize SBUs using a simple heuristic based on the atom types.
 function find_sbus(crystal)
     n = nv(crystal.graph)
     classes = Vector{Int}(undef, n)
-    inv_classes = SVector{3,Vector{Int}}(Int[], Int[], Int[])
+    unclassified = Int[]
     for i in 1:n
         atom_name = crystal.types[i]
         if atom_name === :C
             classes[i] = 1 # Class 1 contains organic SBUs
-            push!(inv_classes[1], i)
         else
-            if !haskey(elements, atom_name)
+            atom = get(atomic_numbers, atom_name, 0)
+            if atom == 0
                 if atom_name === Symbol("")
                     throw(MissingAtomInformation("""
                     the input is a periodic graph with no atom information, it cannot be reckognized as a MOF.
@@ -239,16 +137,17 @@ function find_sbus(crystal)
                     throw(MissingAtomInformation("unknown atom name: $atom_name"))
                 end
             end
-            category = elements[atom_name]
-            last_category = last(split(category, ' '))
-            if last_category == "metal" || category == "actinide" || category == "lanthanide"
+            category = element_categories[atom]
+            if category == "metal" || category == "actinide" || category == "lanthanide"
                 classes[i] = 2 # Class 2 contains inorganic SBUs
-                push!(inv_classes[2], i)
-            elseif last_category == "nonmetal" || category == "metalloid"
+            elseif category == "nonmetal" || category == "metalloid"
                 classes[i] = 3 # Class 3 is temporary and contains unclassified elements
-                push!(inv_classes[3], i)
+                push!(unclassified, i)
+            elseif category == "halogen"
+                classes[i] = 1 # Special case for halogens, which should never be both
+                # part of inorganic SBUs and more than monovalent.
             else
-                throw(MissingAtomInformation("unhandled atom type: $atom_name"))
+                throw(MissingAtomInformation("unhandled atom type: $category (for atom $atom_name)"))
             end
         end
     end
@@ -260,7 +159,6 @@ function find_sbus(crystal)
       - If it has a neighbour of class 2, it becomes of class 2 (inorganic SBUs)
       - Otherwise, it only has neighbours of class 1 and then it becomes of class 1.
     =#
-    unclassified = inv_classes[3]
     @assert issorted(unclassified)
     rev_unclassified = zeros(Int, n)
     m = length(unclassified)
@@ -300,14 +198,16 @@ function find_sbus(crystal)
             classes[unclassified[j]] = new_class
         end
     end
-    # As a last pass, we set a class of 0 for each atom of an organic SBU (class 1)
-    # that is bonded to an inorganic SBU (class 2).
-    for i in 1:n
-        classes[i] == 1 || continue
-        for x in neighbors(crystal.graph, i)
-            if classes[x.v] == 2
-                classes[i] = 0
-                break
+    if crystal.options.cluster_adjacent_sbus
+        # As a last pass, we set a class of 0 for each atom of an organic SBU (class 1)
+        # that is bonded to an inorganic SBU (class 2).
+        for i in 1:n
+            classes[i] == 1 || continue
+            for x in neighbors(crystal.graph, i)
+                if classes[x.v] == 2
+                    classes[i] = 0
+                    break
+                end
             end
         end
     end

@@ -8,43 +8,52 @@ using Tokenize
 ## Computation options
 
 """
-    @enum BondingMode
+    BondingMode
 
 Selection mode for the detection of bonds. The choices are:
--   `InputBonds`: use the input bonds. Fail if those are not specified.
--   `ChemfilesBonds`: use chemfiles built-in bond detection mechanism.
--   `AutoBonds`: if the input specifies bonds, use them unless they look suspicious (too or too
-    large according to a heuristic). Otherwise, fall back to `ChemfilesBonds`.
+-   `Input`: use the input bonds. Fail if those are not specified.
+-   `Guess`: guess bonds using a variant of chemfiles / VMD algorithm.
+-   `Auto`: if the input specifies bonds, use them unless they look suspicious (too or too
+    large according to a heuristic). Otherwise, fall back to `Guess`.
 """
-@enum BondingMode begin
-    InputBonds
-    ChemfilesBonds
-    AutoBonds
+module BondingMode
+    @enum _BondingMode begin
+        Input
+        Guess
+        Auto
+    end
+    """See help for `BondingMode`"""
+    Input, Guess, Auto
 end
-
+import .BondingMode
 
 """
-    @enum ClusteringMode
+    ClusteringMode
 
 Selection mode for the clustering of vertices. The choices are:
--   `InputClustering`: use the input residues as clusters. Fail if some atom does
+-   `Input`: use the input residues as clusters. Fail if some atom does
     not belong to a residue.
--   `EachVertexClustering`: each vertex is its own cluster.
--   `MOFClustering`: discard the input residues and consider the input as a MOF. Identify
+-   `EachVertex`: each vertex is its own cluster.
+-   `MOF`: discard the input residues and consider the input as a MOF. Identify
     organic and inorganic clusters using a simple heuristic based on the atom types.
--   `GuessClustering`: discard the input residues and try to identify the clusters as in `MOFClustering`.
-    If it fails, use `EachVertexClustering`.
--   `AutomaticClustering`: if the input assigns each atom to a residue, use these residues
-    as clusters. Otherwise, try to guess the clusters as in `GuessClustering`.
+-   `Auto`: attempt `Input` and fall back to `EachVertex` if the input does not
+    provide adequate residues.
+-   `Guess`: try to identify the clusters as in `MOF`.
+    If it fails, fall back to `Auto`.
 """
-@enum ClusteringMode begin
-    InputClustering
-    EachVertexClustering
-    MOFClustering
-    GuessClustering
-    AutomaticClustering
+module ClusteringMode
+    @enum _ClusteringMode begin
+        Input
+        EachVertex
+        MOF
+        Guess
+        Auto
+    end
+    """See help for `ClusteringMode`"""
+    Input, EachVertex, MOF, Guess, Auto
 end
-
+import .ClusteringMode
+import .ClusteringMode: _ClusteringMode
 
 """
     Options
@@ -68,22 +77,27 @@ Different options, passed as keyword arguments:
               Default is empty, meaning that all nets are considered.
 - ignore_types: disregard atom types to compute the topology, making pcu and pcu-b
                 identical for example (default is true)
+- cluster_adjacent_sbus: if set, inorganic sbus that are only set apart by one
+                         atom are merged into one new inorganic sbu.
 """
 struct Options
     name::String # used for exports
 
     # Input options
-    bonding_mode::BondingMode
+    bonding_mode::BondingMode._BondingMode
     cutoff_coeff::Float64
-    clustering::ClusteringMode
+    clustering_mode::ClusteringMode._ClusteringMode
     authorize_pruning::Bool
     ignore_atoms::Set{Symbol}
     ignore_homoatomic_bonds::Set{Symbol}
     ignore_low_occupancy::Bool
     export_input::String
-    export_clusters::String
 
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
+
+    # Clustering options
+    cluster_adjacent_sbus::Bool
+    export_clusters::String
 
     # Topology computation options
     skip_minimize::Bool
@@ -92,16 +106,17 @@ struct Options
     export_net::String
 
     function Options(; name="unnamed",
-                       bonding_mode=AutoBonds,
+                       bonding_mode=BondingMode.Auto,
+                       clustering_mode=ClusteringMode.Auto,
                        cutoff_coeff=0.75,
-                       clustering=AutomaticClustering,
                        authorize_pruning=true,
                        ignore_atoms=Set{Symbol}(),
                        ignore_homoatomic_bonds=Set{Symbol}(),
                        ignore_low_occupancy=false,
                        export_input=(DOEXPORT[] ? tempdir() : ""),
-                       export_clusters=(DOEXPORT[] ? tempdir() : ""),
                        dryrun=nothing,
+                       cluster_adjacent_sbus=false,
+                       export_clusters=(DOEXPORT[] ? tempdir() : ""),
                        skip_minimize=false,
                        dimensions=Set{Int}(),
                        ignore_types=true,
@@ -110,14 +125,15 @@ struct Options
             name,
             bonding_mode,
             cutoff_coeff,
-            clustering,
+            clustering_mode,
             authorize_pruning,
             Set{Symbol}(ignore_atoms),
             Set{Symbol}(ignore_homoatomic_bonds),
             ignore_low_occupancy,
             export_input,
-            export_clusters,
             dryrun,
+            cluster_adjacent_sbus,
+            export_clusters,
             skip_minimize,
             Set{Int}(dimensions),
             ignore_types,
@@ -1044,17 +1060,35 @@ function Base.showerror(io::IO, ::EmptyGraphException)
     print(io, "Empty graph. This probably means that the bonds have not been correctly attributed. Please switch to an input file containing explicit bonds.")
 end
 
-function prepare_crystal(crystal::Crystal{T}) where T
-    c::Crystal{Nothing} = if T === Clusters # the only alternative is c.clusters === nothing
-        coalesce_sbus(crystal)
+
+function prepare_crystal(crystal::Crystal{T}, mode=crystal.options.clustering_mode) where T
+    clusters, clustering = find_clusters(crystal, mode)
+    c::Crystal{Nothing} = if clustering != ClusteringMode.EachVertex
+        try
+            coalesce_sbus(Crystal{Clusters}(crystal, clusters))
+        catch e
+            if !(e isa MissingAtomInformation) || clustering != ClusteringMode.Guess
+                rethrow()
+            end
+            Crystal{Nothing}(crystal)
+        end
     else
-        crystal
+        Crystal{Nothing}(crystal)
+    end
+    if clustering == ClusteringMode.Guess && nv(c.graph) == 1
+        return prepare_crystal(crystal, ClusteringMode.Auto)
     end
     if ne(c.graph) == 0
         throw(EmptyGraphException())
     end
     return c
 end
+
+# ClusteringMode.Input: c
+# ClusteringMode.EachVertex: Crystal{Nothing}(c)
+# ClusteringMode.MOF: Crystal{Clusters}(c, clusters)
+# ClusteringMode.Guess: ClusteringMode.MOF
+# ClusteringMode.Auto: c
 
 function CrystalNet(crystal::Crystal)
     c = prepare_crystal(crystal)
@@ -1067,50 +1101,53 @@ function CrystalNetGroup(crystal::Crystal)
 end
 
 
-do_clustering(c::Crystal) = do_clustering(c, c.options.clustering)
-function do_clustering(c::Crystal{T}, mode::ClusteringMode)::Tuple{Clusters, CrystalNet} where T
-    n = length(c.types)
-    if mode == InputClustering
+find_clusters(c::Crystal) = find_clusters(c, c.options.clustering_mode)
+function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _ClusteringMode} where T
+    if mode == ClusteringMode.EachVertex
+        return Clusters(length(c.types)), ClusteringMode.EachVertex
+    elseif mode == ClusteringMode.Auto
+        if T === Clusters
+            return c.clusters, ClusteringMode.Auto
+        else
+            return find_clusters(c, ClusteringMode.EachVertex)
+        end
+    elseif mode == ClusteringMode.Input
         if T === Nothing
             throw(ArgumentError("Cannot use input residues as clusters: the input does not have residues."))
         else
-            return Clusters(n), CrystalNet(c)
+            return c.clusters, ClusteringMode.Input
         end
-    elseif mode == EachVertexClustering
-        return Clusters(n), CrystalNet(Crystal{Nothing}(c))
-    elseif mode == MOFClustering
+    elseif mode == ClusteringMode.MOF
         clusters = find_sbus(c)
         if length(clusters.sbus) <= 1
-            throw(MissingAtomInformation("MOFClustering leads to a single cluster, choose a different clustering mode."))
+            throw(MissingAtomInformation("ClusteringMode.MOF leads to a single cluster, choose a different clustering mode."))
         end
-        return clusters, CrystalNet(Crystal{Clusters}(c, clusters))
-    elseif mode == GuessClustering
+        return clusters, ClusteringMode.MOF
+    elseif mode == ClusteringMode.Guess
         crystal = Crystal{Nothing}(c)
-        try
-            clusters, net = do_clustering(crystal, MOFClustering)
-            if nv(net.graph) > 1
-                return clusters, net
-            end
-        catch e
-            if !(e isa MissingAtomInformation)
-                rethrow()
+        uniquetypes = unique!(sort!(c.types))
+        if (:C ∈ uniquetypes) && any(x -> ismetal[x] for x in uniquetypes)
+            try
+                return first(find_clusters(crystal, ClusteringMode.MOF)), ClusteringMode.Guess
+            catch e
+                if !(e isa MissingAtomInformation)
+                    rethrow()
+                end
             end
         end
-        return do_clustering(crystal, EachVertexClustering)
-    elseif mode == AutomaticClustering
-        if T === Clusters
-            return Clusters(n), CrystalNet(c)
-        else
-            return do_clustering(c, GuessClustering)
-        end
+        return find_clusters(c, ClusteringMode.Auto)
     end
 end
 
 function CrystalNet(g::Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D},
-                    options::Options=Options())
+                    options::Options)
     graph = PeriodicGraph(g)
     cell = Cell()
     n = nv(graph)
     types = [Symbol("") for _ in 1:n]
     return CrystalNet(cell, types, graph, options)
+end
+function CrystalNet(g::Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D};
+                    kwargs...)
+    return CrystalNet(g, Options(; kwargs...))
 end
