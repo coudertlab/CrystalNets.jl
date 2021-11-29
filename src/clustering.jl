@@ -3,23 +3,23 @@ import Graphs: SimpleEdge
 
 const element_categories = String[ # populated using PeriodicTable.jl
     "nonmetal", "gas", "metal", "metal", "metalloid", "nonmetal", "nonmetal",
-    "nonmetal", "halogen", "metal", "metal", "metal", "metalloid", "nonmetal",
-    "nonmetal", "nonmetal", "halogen", "metal", "metal", "metal", "metal",
+    "nonmetal", "halogen", "gas", "metal", "metal", "metal", "metalloid",
+    "nonmetal", "nonmetal", "halogen", "gas", "metal", "metal", "metal",
     "metal", "metal", "metal", "metal", "metal", "metal", "metal", "metal",
-    "metal", "metalloid", "metalloid", "nonmetal", "nonmetal", "halogen",
+    "metal", "metal", "metalloid", "metalloid", "nonmetal", "halogen", "gas",
     "metal", "metal", "metal", "metal", "metal", "metal", "metal", "metal",
     "metal", "metal", "metal", "metal", "metal", "metal", "metalloid",
-    "metalloid", "nonmetal", "halogen", "metal", "metal", "lanthanide",
+    "metalloid", "halogen", "gas", "metal", "metal", "lanthanide",
     "lanthanide", "lanthanide", "lanthanide", "lanthanide", "lanthanide",
     "lanthanide", "lanthanide", "lanthanide", "lanthanide", "lanthanide",
-    "lanthanide", "lanthanide", "lanthanide", "lanthanide", "halogen", "metal",
+    "lanthanide", "lanthanide", "lanthanide", "lanthanide", "metal", "metal",
     "metal", "metal", "metal", "metal", "metal", "metal", "metal", "metal",
-    "metal", "metal", "metal", "metalloid", "halogen", "metal", "metal",
+    "metal", "metal", "metal", "halogen", "gas", "metal", "metal", "actinide",
     "actinide", "actinide", "actinide", "actinide", "actinide", "actinide",
     "actinide", "actinide", "actinide", "actinide", "actinide", "actinide",
-    "actinide", "actinide", "actinide", "halogen", "metal", "metal", "metal",
+    "actinide", "actinide", "metal", "metal", "metal", "metal", "metal",
     "metal", "metal", "metal", "metal", "metal", "metal", "metal", "metal",
-    "metal", "metalloid", "halogen", "metal"]
+    "halogen", "gas", "metal"]
 
 
 """
