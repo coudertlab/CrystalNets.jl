@@ -21,6 +21,10 @@ const element_categories = String[ # populated using PeriodicTable.jl
     "metal", "metal", "metal", "metal", "metal", "metal", "metal", "metal",
     "halogen", "gas", "metal"]
 
+abstract type ClusteringError end
+function Base.showerror(io::IO, e::ClusteringError)
+    print(io, "CrystalNets clustering error: ", e.msg)
+end
 
 """
     regroup_sbus(graph::PeriodicGraphs.PeriodicGraph3D, classes::AbstractVector{<:Integer})
@@ -40,7 +44,7 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
     offsets = zeros(SVector{3,Int}, n)
     for i in 1:n
         iszero(attributions[i]) || continue
-        class = max(1, classes[i])
+        class = max(1, classes[i]) # if classes[i] == 0, consider it to be 1
         push!(sbus, [PeriodicVertex3D(i)])
         push!(sbu_classes, class)
         attr = length(sbus)
@@ -74,11 +78,9 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
 end
 
 
-struct MissingAtomInformation <: Exception
+
+struct MissingAtomInformation <: ClusteringError
     msg::String
-end
-function Base.showerror(io::IO, e::MissingAtomInformation)
-    print(io, "CrystalNets clustering error: ", e.msg)
 end
 
 
@@ -113,7 +115,7 @@ end
 This is an automatic clustering function for MOFs.
 Reckognize SBUs using a simple heuristic based on the atom types.
 """
-function find_sbus(crystal)
+function find_sbus(crystal, ::Val{step}=Val(1)) where step
     n = nv(crystal.graph)
     classes = Vector{Int}(undef, n)
     unclassified = Int[]
@@ -138,11 +140,18 @@ function find_sbus(crystal)
                 end
             end
             category = element_categories[atom]
+            if step == 2 && category == "metalloid"
+                category = "metal"
+            end
             if category == "metal" || category == "actinide" || category == "lanthanide"
                 classes[i] = 2 # Class 2 contains inorganic SBUs
             elseif category == "nonmetal" || category == "metalloid"
-                classes[i] = 3 # Class 3 is temporary and contains unclassified elements
-                push!(unclassified, i)
+                if step == 1
+                    classes[i] = 3 # Class 3 is temporary and contains unclassified elements
+                    push!(unclassified, i)
+                else
+                    classes[i] = 1 # Metalloid-centred SBU are single atoms
+                end
             elseif category == "halogen"
                 classes[i] = 1 # Special case for halogens, which should never be both
                 # part of inorganic SBUs and more than monovalent.
@@ -215,6 +224,10 @@ function find_sbus(crystal)
 end
 
 
+struct InvalidSBU <: ClusteringError
+    msg::String
+end
+
 """
     coalesce_sbus(crystal::Crystal)
 
@@ -235,11 +248,15 @@ function coalesce_sbus(crystal::Crystal{Clusters})
         s, d, of = src(e), dst(e), PeriodicGraphs.ofs(e)
         atts = clusters.attributions[s]
         attd = clusters.attributions[d]
-        atts == attd && continue
-        push!(edgs, PeriodicEdge3D(atts, attd, of .+ clusters.offsets[s] .- clusters.offsets[d]))
+        newofs = of .+ clusters.offsets[s] .- clusters.offsets[d]
+        if atts == attd
+            iszero(newofs) && continue
+            throw(InvalidSBU("At least one SBU is periodic itself: cannot coalesce SBUs into new vertices."))
+        end
+        push!(edgs, PeriodicEdge3D(atts, attd, newofs))
     end
     if isempty(edgs)
-        throw(MissingAtomInformation("Coalescence of SBUs into new nodes leads to an edgeless graph: the clustering is probably wrong and the structure is not connected."))
+        throw(InvalidSBU("Coalescence of SBUs into new nodes leads to an edgeless graph: the clustering is probably wrong and the structure is not connected."))
     end
     return Crystal{Nothing}(crystal.cell, types, pos, PeriodicGraph3D(n, edgs),
                             crystal.options)

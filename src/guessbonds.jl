@@ -15,7 +15,7 @@ const vdwradii = Float32[1.0, 1.4, 2.2, 1.9, 1.8, 1.5, 1.4, 1.3, 1.2, 1.54, 2.4,
                          2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,
                          2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 
-# Data from PeriodicTable
+# Data from PeriodicTable.jl
 const ismetal = Bool[0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1,
                      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1,
                      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
@@ -23,6 +23,14 @@ const ismetal = Bool[0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1,
                      1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1]
 
+const ismetalormetalloid = Bool[0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0,
+                                0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                1, 1, 1, 1, 0, 0, 1]
 
 
 function guess_bonds(pos, types, mat, options)
@@ -42,7 +50,9 @@ function guess_bonds(pos, types, mat, options)
         radius_i = radii[i]
         posi = pos[i]
         typi = types[i]
-        skiphomoatomic = typi ∈ options.ignore_homoatomic_bonds
+        skiphomoatomic = typi ∈ options.ignore_homoatomic_bonds ||
+                         (options.ignore_homometallic_bonds &&
+                          ismetalormetalloid[atomic_numbers[typi]])
         for j in (i+1):n
             skiphomoatomic && types[j] === typi && continue
             radius_j = radii[j]

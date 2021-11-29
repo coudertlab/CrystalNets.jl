@@ -389,8 +389,8 @@ not represent a periodic structure, the result is "non-periodic".
 This function is similar to determine_topologies, but targets larger datasets,
 for which performance is critical. In particular, no attempt to separate
 intertwinned subnets will be performed.
-It is strongly recommended to toggle exports and warnings off (through
-`toggle_export` and `toggle_warning`) since those may reduce performance,
+It is strongly recommended to toggle warnings off (through `toggle_warning`) and
+not to export any file since those actions may critically reduce performance,
 especially for numerous files.
 
 If `save` is set, the result is also stored in a julia serialized file located at

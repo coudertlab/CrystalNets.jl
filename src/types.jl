@@ -90,6 +90,7 @@ struct Options
     authorize_pruning::Bool
     ignore_atoms::Set{Symbol}
     ignore_homoatomic_bonds::Set{Symbol}
+    ignore_homometallic_bonds::Bool
     ignore_low_occupancy::Bool
     export_input::String
 
@@ -112,6 +113,7 @@ struct Options
                        authorize_pruning=true,
                        ignore_atoms=Set{Symbol}(),
                        ignore_homoatomic_bonds=Set{Symbol}(),
+                       ignore_homometallic_bonds=clustering_mode == ClusteringMode.MOF,
                        ignore_low_occupancy=false,
                        export_input=(DOEXPORT[] ? tempdir() : ""),
                        dryrun=nothing,
@@ -129,6 +131,7 @@ struct Options
             authorize_pruning,
             Set{Symbol}(ignore_atoms),
             Set{Symbol}(ignore_homoatomic_bonds),
+            ignore_homometallic_bonds,
             ignore_low_occupancy,
             export_input,
             dryrun,
@@ -681,8 +684,8 @@ struct Crystal{T<:Union{Nothing,Clusters}}
         ret = new{Clusters}(cell, types, clusters, pos, graph, options)
         if !isempty(options.export_clusters)
             path = tmpexportname(options.export_clusters, "clusters_", options.name, ".pdb")
-            println("Clustering of vertices represented represented at ", replace(path, ('\\'=>'/')))
             export_clusters(ret, path)
+            println("Clustering of vertices represented represented at ", replace(path, ('\\'=>'/')))
         end
         return ret
     end
@@ -1067,7 +1070,7 @@ function prepare_crystal(crystal::Crystal{T}, mode=crystal.options.clustering_mo
         try
             coalesce_sbus(Crystal{Clusters}(crystal, clusters))
         catch e
-            if !(e isa MissingAtomInformation) || clustering != ClusteringMode.Guess
+            if !(e isa ClusteringError) || clustering != ClusteringMode.Guess
                 rethrow()
             end
             Crystal{Nothing}(crystal)
@@ -1084,11 +1087,7 @@ function prepare_crystal(crystal::Crystal{T}, mode=crystal.options.clustering_mo
     return c
 end
 
-# ClusteringMode.Input: c
-# ClusteringMode.EachVertex: Crystal{Nothing}(c)
-# ClusteringMode.MOF: Crystal{Clusters}(c, clusters)
-# ClusteringMode.Guess: ClusteringMode.MOF
-# ClusteringMode.Auto: c
+
 
 function CrystalNet(crystal::Crystal)
     c = prepare_crystal(crystal)
@@ -1120,7 +1119,10 @@ function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _C
     elseif mode == ClusteringMode.MOF
         clusters = find_sbus(c)
         if length(clusters.sbus) <= 1
-            throw(MissingAtomInformation("ClusteringMode.MOF leads to a single cluster, choose a different clustering mode."))
+            clusters = find_sbus(c, Val(2))
+            if length(clusters.sbus) <= 1
+                throw(InvalidSBU("ClusteringMode.MOF leads to a single cluster, choose a different clustering mode."))
+            end
         end
         return clusters, ClusteringMode.MOF
     elseif mode == ClusteringMode.Guess
@@ -1130,7 +1132,7 @@ function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _C
             try
                 return first(find_clusters(crystal, ClusteringMode.MOF)), ClusteringMode.Guess
             catch e
-                if !(e isa MissingAtomInformation)
+                if !(e isa ClusteringError)
                     rethrow()
                 end
             end
