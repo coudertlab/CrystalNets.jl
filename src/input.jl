@@ -452,22 +452,45 @@ wrong because they are either too short or too long.
 """
 function sanity_checks!(graph, pos, types, mat, options)
     ## Bond length check
+    ret = false
     removeedges = PeriodicEdge3D[]
+    alreadywarned = Set{Tuple{Symbol,Symbol,Float16}}()
     for e in edges(graph)
         s, d = e.src, e.dst.v
-        bondlength = norm(mat *(pos[d] .+ e.dst.ofs .- pos[s]))
+        bondlength = norm(mat * (pos[d] .+ e.dst.ofs .- pos[s]))
         if (bondlength < 0.65 && types[s] !== :H && types[d] !== :H)
             push!(removeedges, e)
-        elseif bondlength > 3 && options.cutoff_coeff ≤ 0.85
-            @ifwarn @warn "Suspiciously large bond found: $bondlength pm between $(types[s]) and $(types[d])."
-            return true
+        elseif bondlength > 3
+            flag = true
+            neigh_s = neighbors(graph, s)
+            neigh_d = [PeriodicVertex(x.v, x.ofs .+ e.dst.ofs) for x in neighbors(graph, d)]
+            for x in intersect(neigh_s, neigh_d)
+                if norm(mat * (pos[x.v] .+ x.ofs .- pos[d] .- e.dst.ofs)) < 3 &&
+                        norm(mat * (pos[x.v] .+ x.ofs .- pos[s])) < 3
+                    push!(removeedges, e)
+                    flag = false
+                    break
+                end
+            end
+            if flag && options.cutoff_coeff ≤ 0.8
+                (order_s, order_d), blength = minmax(types[s], types[d]), Float16(bondlength)
+                if (order_s, order_d, blength) ∉ alreadywarned
+                    push!(alreadywarned, (order_s, order_d, blength))
+                    @ifwarn @warn "Suspiciously large bond found: $blength pm between $order_s and $order_d." *
+                        (bondlength > 4 ? " Such bonds are probably spurious and will be deleted." : "")
+                    ret = true
+                end
+                if bondlength > 4
+                    push!(removeedges, e)
+                end
+            end
         end
     end
     if options.bonding_mode == BondingMode.Auto
         if !isempty(removeedges)
             @ifwarn begin
                 @warn "Suspicious small bond lengths found. Such bonds are probably spurious and will be deleted."
-                @info "To force retaining these bonds, use --bond-detect=input or --bond-detect=chemfiles"
+                @info "To force retaining these bonds, use --bond-detect=input or --bond-detect=guess"
             end
             if !(options.dryrun isa Nothing)
                 options.dryrun[:try_no_Auto_bonds] = nothing
@@ -480,7 +503,7 @@ function sanity_checks!(graph, pos, types, mat, options)
             rem_edge!(graph, e)
         end
     end
-    return false
+    return ret
 end
 
 """

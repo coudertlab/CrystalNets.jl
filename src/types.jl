@@ -46,11 +46,15 @@ module ClusteringMode
         Input
         EachVertex
         MOF
+        MOFWiderOrganicSBUs
+        MOFMetalloidIsMetal
         Guess
         Auto
     end
     """See help for `ClusteringMode`"""
     Input, EachVertex, MOF, Guess, Auto
+    """Internal clustering modes, similar to MOF but with different heuristics"""
+    MOFWiderOrganicSBUs, MOFMetalloidIsMetal
 end
 import .ClusteringMode
 import .ClusteringMode: _ClusteringMode
@@ -681,19 +685,16 @@ struct Crystal{T<:Union{Nothing,Clusters}}
     options::Options
 
     function Crystal{Clusters}(cell, types, clusters, pos, graph, options)
-        ret = new{Clusters}(cell, types, clusters, pos, graph, options)
-        if !isempty(options.export_clusters)
-            path = tmpexportname(options.export_clusters, "clusters_", options.name, ".pdb")
-            export_clusters(ret, path)
-            println("Clustering of vertices represented represented at ", replace(path, ('\\'=>'/')))
-        end
-        return ret
+        return new{Clusters}(cell, types, clusters, pos, graph, options)
     end
 
     function Crystal{Nothing}(cell, types, pos, graph, options)
         return new{Nothing}(cell, types, nothing, pos, graph, options)
     end
 end
+
+
+
 
 function Crystal(cell, types, clusters, graph, options)
     if clusters isa Nothing
@@ -716,7 +717,7 @@ function Crystal{Clusters}(c::Crystal, clusters::Clusters)
 end
 
 
-trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(coalesce_sbus(c))
+trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(coalesce_sbus(c, c.clusters))
 function trimmed_crystal(c::Crystal{Nothing})
     vmap, graph = trim_topology(c.graph)
     return Crystal{Nothing}(c.cell, c.types[vmap], c.pos[vmap], graph, c.options)
@@ -1064,38 +1065,14 @@ function Base.showerror(io::IO, ::EmptyGraphException)
 end
 
 
-function prepare_crystal(crystal::Crystal{T}, mode=crystal.options.clustering_mode) where T
-    clusters, clustering = find_clusters(crystal, mode)
-    c::Crystal{Nothing} = if clustering != ClusteringMode.EachVertex
-        try
-            coalesce_sbus(Crystal{Clusters}(crystal, clusters))
-        catch e
-            if !(e isa ClusteringError) || clustering != ClusteringMode.Guess
-                rethrow()
-            end
-            Crystal{Nothing}(crystal)
-        end
-    else
-        Crystal{Nothing}(crystal)
-    end
-    if clustering == ClusteringMode.Guess && nv(c.graph) == 1
-        return prepare_crystal(crystal, ClusteringMode.Auto)
-    end
-    if ne(c.graph) == 0
-        throw(EmptyGraphException())
-    end
-    return c
-end
-
-
 
 function CrystalNet(crystal::Crystal)
-    c = prepare_crystal(crystal)
+    c = coalesce_sbus(crystal)
     CrystalNet(c.cell, c.types, c.graph, c.options)
 end
 
 function CrystalNetGroup(crystal::Crystal)
-    c = prepare_crystal(crystal)
+    c = coalesce_sbus(crystal)
     CrystalNetGroup(c.cell, c.types, c.graph, c.options)
 end
 
@@ -1119,10 +1096,19 @@ function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _C
     elseif mode == ClusteringMode.MOF
         clusters = find_sbus(c)
         if length(clusters.sbus) <= 1
-            clusters = find_sbus(c, Val(2))
-            if length(clusters.sbus) <= 1
-                throw(InvalidSBU("ClusteringMode.MOF leads to a single cluster, choose a different clustering mode."))
-            end
+            return find_clusters(c, ClusteringMode.MOFWiderOrganicSBUs)
+        end
+        return clusters, ClusteringMode.MOF
+    elseif mode == ClusteringMode.MOFWiderOrganicSBUs
+        clusters = find_sbus(c, Val(2))
+        if length(clusters.sbus) <= 1
+            return find_clusters(c, ClusteringMode.MOFMetalloidIsMetal)
+        end
+        return clusters, ClusteringMode.MOF
+    elseif mode == ClusteringMode.MOFMetalloidIsMetal
+        clusters = find_sbus(c, Val(3))
+        if length(clusters.sbus) <= 1
+            throw(InvalidSBU("ClusteringMode.MOF leads to a single cluster, choose a different clustering mode."))
         end
         return clusters, ClusteringMode.MOF
     elseif mode == ClusteringMode.Guess

@@ -149,8 +149,11 @@ function find_sbus(crystal, ::Val{step}=Val(1)) where step
                 if step == 1
                     classes[i] = 3 # Class 3 is temporary and contains unclassified elements
                     push!(unclassified, i)
-                else
-                    classes[i] = 1 # Metalloid-centred SBU are single atoms
+                elseif step == 2
+                    classes[i] = 1 # All unclassified are considered part of organic SBUs
+                elseif step == 3
+                    # Metalloids are considered metals
+                    classes[i] = 3 - 2*(category == "metalloid")
                 end
             elseif category == "halogen"
                 classes[i] = 1 # Special case for halogens, which should never be both
@@ -229,13 +232,17 @@ struct InvalidSBU <: ClusteringError
 end
 
 """
-    coalesce_sbus(crystal::Crystal)
+    coalesce_sbus(crystal::Crystal, clusters::Clusters)
 
 Return the new crystal corresponding to the input where each cluster has been
 transformed into a new vertex.
 """
-function coalesce_sbus(crystal::Crystal{Clusters})
-    clusters = crystal.clusters
+function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.clustering_mode, _attempt=1)
+    clusters, clustering = find_clusters(crystal, mode)
+    if clustering == ClusteringMode.EachVertex
+        return Crystal{Nothing}(crystal)
+    end
+    periodicsbuflag = false
     n = length(clusters.sbus)
     pos = Vector{SVector{3,Float64}}(undef, n)
     types = Vector{Symbol}(undef, n)
@@ -251,13 +258,35 @@ function coalesce_sbus(crystal::Crystal{Clusters})
         newofs = of .+ clusters.offsets[s] .- clusters.offsets[d]
         if atts == attd
             iszero(newofs) && continue
-            throw(InvalidSBU("At least one SBU is periodic itself: cannot coalesce SBUs into new vertices."))
+            periodicsbuflag = true
+            break
         end
         push!(edgs, PeriodicEdge3D(atts, attd, newofs))
     end
-    if isempty(edgs)
-        throw(InvalidSBU("Coalescence of SBUs into new nodes leads to an edgeless graph: the clustering is probably wrong and the structure is not connected."))
+    if periodicsbuflag || isempty(edgs)
+        if _attempt == 1 && (clustering == ClusteringMode.Guess || clustering == ClusteringMode.MOF)
+            return coalesce_sbus(crystal, ClusteringMode.MOFWiderOrganicSBUs, 2)
+        end
+        if _attempt == 2
+            return coalesce_sbus(crystal, ClusteringMode.MOFMetalloidIsMetal, 3)
+        end
+        if periodicsbuflag
+            throw(InvalidSBU("At least one SBU is periodic itself: cannot coalesce SBUs into new vertices."))
+        else
+            throw(InvalidSBU("Coalescence of SBUs into new nodes leads to an edgeless graph: the clustering is probably wrong and the structure is not connected."))
+        end 
     end
-    return Crystal{Nothing}(crystal.cell, types, pos, PeriodicGraph3D(n, edgs),
-                            crystal.options)
+    graph = PeriodicGraph3D(n, edgs)
+    if clustering == ClusteringMode.Guess && nv(graph) == 1
+        return coalesce_sbus(crystal, ClusteringMode.Auto)
+    end
+    if ne(graph) == 0
+        throw(EmptyGraphException())
+    end
+    if !isempty(crystal.options.export_clusters)
+        path = tmpexportname(crystal.options.export_clusters, "clusters_", crystal.options.name, ".pdb")
+        export_clusters(Crystal{Clusters}(crystal, clusters), path)
+        println("Clustering of vertices represented represented at ", replace(path, ('\\'=>'/')))
+    end
+    return Crystal{Nothing}(crystal.cell, types, pos, graph, crystal.options)
 end
