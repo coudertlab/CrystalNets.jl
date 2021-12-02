@@ -458,21 +458,24 @@ function sanity_checks!(graph, pos, types, mat, options)
     for e in edges(graph)
         s, d = e.src, e.dst.v
         bondlength = norm(mat * (pos[d] .+ e.dst.ofs .- pos[s]))
-        if (bondlength < 0.65 && types[s] !== :H && types[d] !== :H)
-            push!(removeedges, e)
-        elseif bondlength > 3
-            flag = true
+        cutoff = ismetal[atomic_numbers[types[s]]] || ismetal[atomic_numbers[types[d]]] ? 2.5 : 3
+        if bondlength > cutoff # This bond could be spurious
+            keptbond = true
             neigh_s = neighbors(graph, s)
             neigh_d = [PeriodicVertex(x.v, x.ofs .+ e.dst.ofs) for x in neighbors(graph, d)]
-            for x in intersect(neigh_s, neigh_d)
-                if norm(mat * (pos[x.v] .+ x.ofs .- pos[d] .- e.dst.ofs)) < 3 &&
-                        norm(mat * (pos[x.v] .+ x.ofs .- pos[s])) < 3
+            for x in intersect(neigh_s, neigh_d) # triangle
+                l1 = norm(mat * (pos[x.v] .+ x.ofs .- pos[d] .- e.dst.ofs))
+                l1 < cutoff || continue
+                l2 = norm(mat * (pos[x.v] .+ x.ofs .- pos[s]))
+                l2 < cutoff || continue
+                triangle_coeff = 0.8
+                if bondlength > min(3, triangle_coeff*(l1 + l2))
                     push!(removeedges, e)
-                    flag = false
+                    keptbond = false
                     break
                 end
             end
-            if flag && options.cutoff_coeff ≤ 0.8
+            if keptbond && bondlength > 3 && options.cutoff_coeff ≤ 0.8
                 (order_s, order_d), blength = minmax(types[s], types[d]), Float16(bondlength)
                 if (order_s, order_d, blength) ∉ alreadywarned
                     push!(alreadywarned, (order_s, order_d, blength))
@@ -484,6 +487,8 @@ function sanity_checks!(graph, pos, types, mat, options)
                     push!(removeedges, e)
                 end
             end
+        elseif (bondlength < 0.65 && types[s] !== :H && types[d] !== :H)
+            push!(removeedges, e)
         end
     end
     if options.bonding_mode == BondingMode.Auto

@@ -1,168 +1,11 @@
 ## Type definitions for intermediate representations of crystals up to a net
 
 include("specialsolver.jl")
+include("options.jl")
 
 import Base: ==
 using Tokenize
 
-## Computation options
-
-"""
-    BondingMode
-
-Selection mode for the detection of bonds. The choices are:
--   `Input`: use the input bonds. Fail if those are not specified.
--   `Guess`: guess bonds using a variant of chemfiles / VMD algorithm.
--   `Auto`: if the input specifies bonds, use them unless they look suspicious (too or too
-    large according to a heuristic). Otherwise, fall back to `Guess`.
-"""
-module BondingMode
-    @enum _BondingMode begin
-        Input
-        Guess
-        Auto
-    end
-    """See help for `BondingMode`"""
-    Input, Guess, Auto
-end
-import .BondingMode
-
-"""
-    ClusteringMode
-
-Selection mode for the clustering of vertices. The choices are:
--   `Input`: use the input residues as clusters. Fail if some atom does
-    not belong to a residue.
--   `EachVertex`: each vertex is its own cluster.
--   `MOF`: discard the input residues and consider the input as a MOF. Identify
-    organic and inorganic clusters using a simple heuristic based on the atom types.
--   `Auto`: attempt `Input` and fall back to `EachVertex` if the input does not
-    provide adequate residues.
--   `Guess`: try to identify the clusters as in `MOF`.
-    If it fails, fall back to `Auto`.
-"""
-module ClusteringMode
-    @enum _ClusteringMode begin
-        Input
-        EachVertex
-        MOF
-        MOFWiderOrganicSBUs
-        MOFMetalloidIsMetal
-        Guess
-        Auto
-    end
-    """See help for `ClusteringMode`"""
-    Input, EachVertex, MOF, Guess, Auto
-    """Internal clustering modes, similar to MOF but with different heuristics"""
-    MOFWiderOrganicSBUs, MOFMetalloidIsMetal
-end
-import .ClusteringMode
-import .ClusteringMode: _ClusteringMode
-
-"""
-    Options
-
-Different options, passed as keyword arguments:
-- name: a name for the structure
-- export_input: path to the directory in which to store the .vtf representing
-                the parsed structure. Empty string if none.
-- export_clusters: path to the directory in which to store the .pdb representing
-                   the clustering of vertices. Empty string if none.
-- export_net: path to the directory in which to store the .vtf representing the
-              extracted net on which the topology is computed. Empty string if none.
-- bonding_mode: one of the [@BondingMode] options, see above.
-- cutoff_coeff: coefficient used to detect bonds. Default is 0.75, higher
-                values will include bonds that were considered to long before.
-- ignore_atoms: set of atom symbols to ignore (for instance [:C,:H] will
-                remove carbohydrate solvent residues).
-- skip_minimize: assume that the cell is already the unit cell (default is false).
-- dimensions: the set of crystal net dimensions to consider. For instance, putting
-              Set(3) will ensure that only 3-dimensional nets are considered.
-              Default is empty, meaning that all nets are considered.
-- ignore_types: disregard atom types to compute the topology, making pcu and pcu-b
-                identical for example (default is true)
-- cluster_adjacent_sbus: if set, inorganic sbus that are only set apart by one
-                         atom are merged into one new inorganic sbu.
-"""
-struct Options
-    name::String # used for exports
-
-    # Input options
-    bonding_mode::BondingMode._BondingMode
-    cutoff_coeff::Float64
-    clustering_mode::ClusteringMode._ClusteringMode
-    authorize_pruning::Bool
-    ignore_atoms::Set{Symbol}
-    ignore_homoatomic_bonds::Set{Symbol}
-    ignore_homometallic_bonds::Bool
-    ignore_low_occupancy::Bool
-    export_input::String
-
-    dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
-
-    # Clustering options
-    cluster_adjacent_sbus::Bool
-    export_clusters::String
-
-    # Topology computation options
-    skip_minimize::Bool
-    dimensions::Set{Int}
-    ignore_types::Bool
-    export_net::String
-
-    function Options(; name="unnamed",
-                       bonding_mode=BondingMode.Auto,
-                       clustering_mode=ClusteringMode.Auto,
-                       cutoff_coeff=0.75,
-                       authorize_pruning=true,
-                       ignore_atoms=Set{Symbol}(),
-                       ignore_homoatomic_bonds=Set{Symbol}(),
-                       ignore_homometallic_bonds=clustering_mode == ClusteringMode.MOF,
-                       ignore_low_occupancy=false,
-                       export_input=(DOEXPORT[] ? tempdir() : ""),
-                       dryrun=nothing,
-                       cluster_adjacent_sbus=false,
-                       export_clusters=(DOEXPORT[] ? tempdir() : ""),
-                       skip_minimize=false,
-                       dimensions=Set{Int}(),
-                       ignore_types=true,
-                       export_net="")
-        new(
-            name,
-            bonding_mode,
-            cutoff_coeff,
-            clustering_mode,
-            authorize_pruning,
-            Set{Symbol}(ignore_atoms),
-            Set{Symbol}(ignore_homoatomic_bonds),
-            ignore_homometallic_bonds,
-            ignore_low_occupancy,
-            export_input,
-            dryrun,
-            cluster_adjacent_sbus,
-            export_clusters,
-            skip_minimize,
-            Set{Int}(dimensions),
-            ignore_types,
-            export_net
-        )
-    end
-end
-
-function Options(options::Options; kwargs...)
-    isempty(kwargs) && return options
-    base = Dict{Symbol,Any}([x => getfield(options, x) for x in fieldnames(Options)])
-    for (kwarg, val) in kwargs
-        T = fieldtype(Options, kwarg)
-        val = if isconcretetype(T) && !(T <: Enum)
-            T <: Set ? union(base[kwarg], T(val)) : T(val)
-        else
-            val
-        end
-        base[kwarg] = val
-    end
-    return Options(; base...)
-end
 
 
 ## EquivalentPosition
@@ -431,7 +274,6 @@ a repeating unit cell of matrix mat.
 The distance is the shortest between all equivalents of u and v.
 """
 function periodic_distance(u, v, mat)
-    dst = 0.0
     x = similar(u)
     #=@inbounds=# for i in 1:3
         diff = u[i] - v[i] + 0.5
@@ -696,11 +538,14 @@ end
 
 
 
-function Crystal(cell, types, clusters, graph, options)
+function Crystal(cell, types, clusters, pos, graph, options)
     if clusters isa Nothing
-        return Crystal{Nothing}(cell, types, graph, options)
+        return Crystal{Nothing}(cell, types, pos, graph, options)
     end
-    return Crystal{Clusters}(cell, types, clusters, graph, options)
+    return Crystal{Clusters}(cell, types, clusters, pos, graph, options)
+end
+function Crystal(c::Crystal; kwargs...)
+    return Crystal(c.cell, c.types, c.clusters, c.pos, c.graph, Options(c.options; kwargs...))
 end
 
 function ==(c1::Crystal{T}, c2::Crystal{T}) where T
@@ -1100,23 +945,29 @@ function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _C
         end
         return clusters, ClusteringMode.MOF
     elseif mode == ClusteringMode.MOFWiderOrganicSBUs
-        clusters = find_sbus(c, Val(2))
+        sbus2 = SBUKinds([
+            [:metal, :actinide, :lanthanide, :metalloid], [:C, :halogen, :nonmetal],
+        ])
+        clusters = find_sbus(c, sbus2)
         if length(clusters.sbus) <= 1
             return find_clusters(c, ClusteringMode.MOFMetalloidIsMetal)
         end
         return clusters, ClusteringMode.MOF
     elseif mode == ClusteringMode.MOFMetalloidIsMetal
-        clusters = find_sbus(c, Val(3))
+        sbus3 = SBUKinds([
+            [:metal, :actinide, :lanthanide, :metalloid], [:C, :halogen], [:nonmetal]
+        ], Set{Int}(3))
+        clusters = find_sbus(c, sbus3)
         if length(clusters.sbus) <= 1
             throw(InvalidSBU("ClusteringMode.MOF leads to a single cluster, choose a different clustering mode."))
         end
         return clusters, ClusteringMode.MOF
     elseif mode == ClusteringMode.Guess
         crystal = Crystal{Nothing}(c)
-        uniquetypes = unique!(sort!(c.types))
-        if (:C ∈ uniquetypes) && any(x -> ismetal[x] for x in uniquetypes)
+        uniquetypes = unique!(sort(c.types))
+        if (:C ∈ uniquetypes) && any(x -> ismetal[atomic_numbers[x]], uniquetypes)
             try
-                return first(find_clusters(crystal, ClusteringMode.MOF)), ClusteringMode.Guess
+                return find_clusters(crystal, ClusteringMode.MOF)
             catch e
                 if !(e isa ClusteringError)
                     rethrow()

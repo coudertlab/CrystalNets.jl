@@ -92,6 +92,7 @@ end
 
 function find_hall_number(hallsymbol, hm, it)
     if hallsymbol != ""
+        hallsymbol = hallsymbol[1]*lowercase(@view hallsymbol[2:end])
         hall = get(SPACE_GROUP_HALL, replace(hallsymbol, ('_' => ' ')), 0)
         if hall ∈ (322, 326, 330)
             if hall == 322
@@ -110,6 +111,7 @@ function find_hall_number(hallsymbol, hm, it)
         @ifwarn @warn "Hall symbol provided but not reckognised: $hallsymbol"
     end
     if hm != ""
+        hm = hm[1]*lowercase(@view hm[2:end])
         dense_hm = replace(join(split(hm)), ('_'=>""))
         hall = get(SPACE_GROUP_HM, dense_hm, 0)
         hall == 0 || return hall

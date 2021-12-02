@@ -184,6 +184,24 @@ const atomic_numbers = Dict{Symbol, Int}(
     :Uue => 119
 )
 
+const element_categories = Symbol[ # populated using PeriodicTable.jl
+    :nonmetal, :noble, :metal, :metal, :metalloid, :nonmetal, :nonmetal,
+    :nonmetal, :halogen, :noble, :metal, :metal, :metal, :metalloid, :nonmetal,
+    :nonmetal, :halogen, :noble, :metal, :metal, :metal, :metal, :metal, :metal,
+    :metal, :metal, :metal, :metal, :metal, :metal, :metal, :metalloid,
+    :metalloid, :nonmetal, :halogen, :noble, :metal, :metal, :metal, :metal,
+    :metal, :metal, :metal, :metal, :metal, :metal, :metal, :metal, :metal,
+    :metal, :metalloid, :metalloid, :halogen, :noble, :metal, :metal,
+    :lanthanide, :lanthanide, :lanthanide, :lanthanide, :lanthanide,
+    :lanthanide, :lanthanide, :lanthanide, :lanthanide, :lanthanide,
+    :lanthanide, :lanthanide, :lanthanide, :lanthanide, :lanthanide, :metal,
+    :metal, :metal, :metal, :metal, :metal, :metal, :metal, :metal, :metal,
+    :metal, :metal, :metal, :halogen, :noble, :metal, :metal, :actinide,
+    :actinide, :actinide, :actinide, :actinide, :actinide, :actinide, :actinide,
+    :actinide, :actinide, :actinide, :actinide, :actinide, :actinide, :actinide,
+    :metal, :metal, :metal, :metal, :metal, :metal, :metal, :metal, :metal,
+    :metal, :metal, :metal, :metal, :halogen, :noble, :metal]
+
 
 """
     soft_widen(::Type)
