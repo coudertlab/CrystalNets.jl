@@ -443,6 +443,29 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}, op
     return invalidatoms
 end
 
+function sanitize_C_metal!(graph, pos, types, mat)
+    toremove = Set{Int}()
+    for (i, typ) in enumerate(types)
+        ismetal[atomic_numbers[typ]] || continue
+        for u in neighbors(graph, i)
+            if types[u.v] === :C
+                u.v ∈ toremove && continue
+                bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
+                bondlength > 1.48 && continue
+                @ifwarn if isempty(toremove)
+                    @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed"
+                end
+                push!(toremove, u.v)
+            end
+        end
+    end
+
+    rem = sort!(collect(toremove))
+    if isempty(rem)
+        return false, Int[]
+    end
+    return true, rem_vertices!(graph, rem)
+end
 
 """
     sanity_checks!(graph, pos, types, mat, options)
@@ -465,9 +488,9 @@ function sanity_checks!(graph, pos, types, mat, options)
             neigh_d = [PeriodicVertex(x.v, x.ofs .+ e.dst.ofs) for x in neighbors(graph, d)]
             for x in intersect(neigh_s, neigh_d) # triangle
                 l1 = norm(mat * (pos[x.v] .+ x.ofs .- pos[d] .- e.dst.ofs))
-                l1 < cutoff || continue
+                l1 < bondlength || continue
                 l2 = norm(mat * (pos[x.v] .+ x.ofs .- pos[s]))
-                l2 < cutoff || continue
+                l2 < bondlength || continue
                 triangle_coeff = 0.8
                 if bondlength > min(3, triangle_coeff*(l1 + l2))
                     push!(removeedges, e)
@@ -656,6 +679,14 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
     graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, mat, pos))
 
     if options.bonding_mode != BondingMode.Input
+        do_permutation, vmap = sanitize_C_metal!(graph, pos, types, mat)
+        if do_permutation
+            types = types[vmap]
+            pos = pos[vmap]
+            if !isempty(attributions)
+                attributions = attributions[vmap]
+            end
+        end
         bad_valence = !isempty(fix_valence!(graph, pos, types, mat, Val(false), options))
         recompute_bonds = bad_valence || sanity_checks!(graph, pos, types, mat, options)
         if recompute_bonds

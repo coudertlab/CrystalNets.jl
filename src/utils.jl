@@ -34,7 +34,8 @@ function tmpexportname(path, pre, name, ext)
     return joinpath(path, x)
 end
 
-function export_default(c, obj=string(typeof(c)), _name=nothing, path=tempdir(), repeats=6)
+export_default(g::PeriodicGraph, args...; kwargs...) = export_default(CrystalNet(g), args...; kwargs...)
+function export_default(c, obj=string(typeof(c)), _name=nothing, path=tempdir(); repeats=6)
     if !isempty(path)
         name = tmpexportname(path, obj*'_', _name, ".vtf")
         truepath = replace(joinpath(path, name), ('\\' => "/"))
