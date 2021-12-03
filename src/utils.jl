@@ -58,7 +58,7 @@ function db_options(; kwargs...)
         @info "Use CrystalNets.toggle_warning(false) or the --no-warn option to remove them"
     end
     # if kwargs explicitly set one of the two, it will take precedence
-    return Options(; export_input="", export_clusters="", kwargs...)
+    return Options(; export_input="", export_attributions="", export_clusters="", kwargs...)
 end
 
 

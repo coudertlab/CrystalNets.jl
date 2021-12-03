@@ -252,7 +252,7 @@ end
 export_cgd(file, c::CrystalNet) = export_cgd(file, change_dimension(PeriodicGraph3D, c.graph))
 
 
-function export_clusters(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tempname()))
+function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tempname()))
     frame = Chemfiles.Frame()
     m = length(crystal.clusters.classes)
     # residues = [Chemfiles.Residue(string(i)) for i in 1:m]

@@ -137,9 +137,12 @@ function fix_sbu_connectivity!(sbus, graph, oldperiodic, potentialnewperiodic)
         empty!(sbus.sbus[j_initial])
         j = j_initial
         toexplore = [PeriodicVertex3D(sbu[1])]
-        explored = Set{Int}(sbu[1])
+        explored = Set{Int}()
         while true
-            seeninthissbu = Dict{Int, SVector{3,Int}}()
+            _u = only(toexplore)
+            push!(explored, _u.v)
+            sbus.offsets[_u.v] = _u.ofs
+            seeninthissbu = Dict{Int, SVector{3,Int}}(_u.v => _u.ofs)
             while !isempty(toexplore)
                 u = pop!(toexplore)
                 push!(sbus.sbus[j], u)
@@ -159,12 +162,11 @@ function fix_sbu_connectivity!(sbus, graph, oldperiodic, potentialnewperiodic)
                     end
                 end
             end
-            if length(explored) < length(sbu)
-                push!(sbus.sbus, PeriodicVertex3D[])
-                j = length(sbus.sbus)
-                push!(sbus.classes, sbus.classes[j_initial])
-                push!(toexplore, PeriodicVertex3D(sbu[findfirst(∉(explored), sbu)]))
-            end
+            length(explored) == length(sbu) && break
+            push!(sbus.sbus, PeriodicVertex3D[])
+            j = length(sbus.sbus)
+            push!(sbus.classes, sbus.classes[j_initial])
+            push!(toexplore, PeriodicVertex3D(sbu[findfirst(∉(explored), sbu)]))
         end
     end
     return periodicsbus
@@ -551,10 +553,10 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
     if ne(graph) == 0
         throw(EmptyGraphException())
     end
-    if !isempty(crystal.options.export_clusters)
-        path = tmpexportname(crystal.options.export_clusters, "clusters_", crystal.options.name, ".pdb")
-        export_clusters(Crystal{Clusters}(crystal, clusters), path)
-        println("Clustering of vertices represented represented at ", replace(path, ('\\'=>'/')))
+    if !isempty(crystal.options.export_attributions)
+        path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")
+        export_attributions(Crystal{Clusters}(crystal, clusters), path)
+        println("Attributions of atoms into SBUs represented represented at ", replace(path, ('\\'=>'/')))
     end
     pos = Vector{SVector{3,Float64}}(undef, n)
     types = Vector{Symbol}(undef, n)
@@ -562,5 +564,7 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
         pos[i] = mean(crystal.pos[x.v] .+ x.ofs for x in sbu)
         types[i] = length(sbu) == 1 ? crystal.types[only(sbu).v] : Symbol(clusters.classes[i]) #Symbol(join(sort!([crystal.types[x.v] for x in sbu])))
     end
-    return Crystal{Nothing}(crystal.cell, types, pos, graph, crystal.options)
+    ret = Crystal{Nothing}(crystal.cell, types, pos, graph, crystal.options)
+    export_default(ret, "clusters", crystal.options.name, crystal.options.export_clusters, 2)
+    return ret
 end

@@ -149,24 +149,26 @@ Base.length(sbus::SBUKinds) = sbus.len
 Different options, passed as keyword arguments:
 - name: a name for the structure
 - export_input: path to the directory in which to store the .vtf representing
-                the parsed structure. Empty string if none.
-- export_clusters: path to the directory in which to store the .pdb representing
-                   the clustering of vertices. Empty string if none.
+            the parsed structure. Empty string if none.
+- export_attributions: path to the directory in which to store the .pdb
+            representing the attribution of vertices into SBUs. Empty if none.
+- export_clusters: path to the directory in which to store the .vtf representing
+            the clustering of vertices. Empty string if none.
 - export_net: path to the directory in which to store the .vtf representing the
-              extracted net on which the topology is computed. Empty string if none.
+            extracted net on which the topology is computed. Empty string if none.
 - bonding_mode: one of the [@BondingMode] options, see above.
 - cutoff_coeff: coefficient used to detect bonds. Default is 0.75, higher
-                values will include bonds that were considered to long before.
+            values will include bonds that were considered to long before.
 - ignore_atoms: set of atom symbols to ignore (for instance [:C,:H] will
-                remove carbohydrate solvent residues).
+            remove carbohydrate solvent residues).
 - skip_minimize: assume that the cell is already the unit cell (default is false).
 - dimensions: the set of crystal net dimensions to consider. For instance, putting
-              Set(3) will ensure that only 3-dimensional nets are considered.
-              Default is empty, meaning that all nets are considered.
-- ignore_types: disregard atom types to compute the topology, making pcu and pcu-b
-                identical for example (default is true)
+            Set(3) will ensure that only 3-dimensional nets are considered.
+            Default is empty, meaning that all nets are considered.
+- ignore_types: disregard atom types to compute the topology, making pcu and
+            pcu-b identical for example (default is true)
 - cluster_adjacent_sbus: if set, inorganic sbus that are only set apart by one
-                         atom are merged into one new inorganic sbu.
+            atom are merged into one new inorganic sbu.
 """
 struct Options
     name::String # used for exports
@@ -186,6 +188,7 @@ struct Options
 
     # Clustering options
     cluster_adjacent_sbus::Bool
+    export_attributions::String
     export_clusters::String
 
     # Topology computation options
@@ -206,6 +209,7 @@ struct Options
                        export_input=(DOEXPORT[] ? tempdir() : ""),
                        dryrun=nothing,
                        cluster_adjacent_sbus=false,
+                       export_attributions="",
                        export_clusters=(DOEXPORT[] ? tempdir() : ""),
                        skip_minimize=false,
                        dimensions=Set{Int}(),
@@ -224,6 +228,7 @@ struct Options
             export_input,
             dryrun,
             cluster_adjacent_sbus,
+            export_attributions,
             export_clusters,
             skip_minimize,
             Set{Int}(dimensions),
