@@ -432,8 +432,8 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}, op
             end
         elseif t === :N
             @reduce_valence 2 4
-        elseif t === :C  # sp1 carbon is not a common occurence
-            @reduce_valence 3 4
+        elseif t === :C
+            @reduce_valence 2 4
         end
     end
     if !isempty(invalidatoms)
@@ -476,6 +476,7 @@ wrong because they are either too short or too long.
 function sanity_checks!(graph, pos, types, mat, options)
     ## Bond length check
     ret = false
+    smallbondsflag = false
     removeedges = PeriodicEdge3D[]
     alreadywarned = Set{Tuple{Symbol,Symbol,Float16}}()
     for e in edges(graph)
@@ -491,7 +492,7 @@ function sanity_checks!(graph, pos, types, mat, options)
                 l1 < bondlength || continue
                 l2 = norm(mat * (pos[x.v] .+ x.ofs .- pos[s]))
                 l2 < bondlength || continue
-                triangle_coeff = 0.8
+                triangle_coeff = 0.75
                 if bondlength > min(3, triangle_coeff*(l1 + l2))
                     push!(removeedges, e)
                     keptbond = false
@@ -511,12 +512,13 @@ function sanity_checks!(graph, pos, types, mat, options)
                 end
             end
         elseif (bondlength < 0.65 && types[s] !== :H && types[d] !== :H)
+            smallbondsflag = true
             push!(removeedges, e)
         end
     end
     if options.bonding_mode == BondingMode.Auto
         if !isempty(removeedges)
-            @ifwarn begin
+            @ifwarn if smallbondsflag
                 @warn "Suspicious small bond lengths found. Such bonds are probably spurious and will be deleted."
                 @info "To force retaining these bonds, use --bond-detect=input or --bond-detect=guess"
             end

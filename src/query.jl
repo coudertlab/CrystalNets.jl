@@ -389,8 +389,9 @@ is the exception preceded by a "FAILED with" mention. Finally, if the input does
 not represent a periodic structure, the result is "non-periodic".
 
 This function is similar to determine_topologies, but targets larger datasets,
-for which performance is critical. In particular, no attempt to separate
-intertwinned subnets will be performed.
+for which performance is critical. In particular, no attempt to reckognise the
+found topologies is performed: only the topological key is returned.
+
 It is strongly recommended to toggle warnings off (through `toggle_warning`) and
 not to export any file since those actions may critically reduce performance,
 especially for numerous files.
@@ -444,28 +445,36 @@ function topologies_dataset(path, save, autoclean, options::Options)
     end
     @threads for f in files
         file = splitdir(f)[2]
-        key = try
-            topological_genome(CrystalNet(parse_chemfile(f, options)))
+
+        genomes::Vector{Tuple{Vector{Int},String}} = try
+            topological_genome(CrystalNetGroup(parse_chemfile(f, options)))
         catch e
-            if e isa InterruptException || (e isa TaskFailedException && e.task.result isa InterruptException)
+            if e isa InterruptException ||
+              (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
-            elseif e isa CrystalNets.NonPeriodicInputException || e isa CrystalNets.EmptyGraphException
-                "non-periodic"
+            end
+            if e isa NonPeriodicInputException || e isa EmptyGraphException
+                [(Int[], "non-periodic")]
             else
-                "FAILED with "*escape_string(string(e))
+                [(Int[], "FAILED with "*escape_string(string(e)))]
             end
         end
-        open(joinpath(resultdir, string(threadid())), "a") do results
-            println(results, file, '/', key)
+        for (j, (_, genome)) in enumerate(genomes)
+            newname = length(genomes) == 1 ? file * '/' : file * '/' * string(j)
+            open(joinpath(resultdir, string(threadid())), "a") do results
+                println(results, newname, '/', genome)
+            end
         end
     end
+
     ret = Pair{String,String}[]
     for _f in readdir(resultdir; join=true)
         basename(_f) == "data" && continue
         for l in eachline(_f)
             isempty(l) && continue
             _i = 1; while l[_i] != '/'; _i+=1; end
-            push!(ret, Pair(l[1:_i-1], l[_i+1:end]))
+            _j = _i+1; while l[_j] != '/'; _j+=1; end
+            push!(ret, Pair(l[1:_j-1-(_i==_j)], l[_j+1:end]))
         end
     end
     result::Dict{String,String} = Dict(ret)
