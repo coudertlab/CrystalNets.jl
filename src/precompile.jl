@@ -1,5 +1,6 @@
 using CrystalNets, PeriodicGraphs, TextWrap, ArgParse, LinearAlgebra, SparseArrays,
-      StaticArrays, Chemfiles, Logging, Tokenize
+      StaticArrays, Logging, Tokenize
+import Chemfiles
 
 const __bodyfunction__ = Dict{Method,Any}()
 

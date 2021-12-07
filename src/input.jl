@@ -1,6 +1,6 @@
 ## Functions to handle input files.
 
-using Chemfiles
+import Chemfiles
 using Statistics: std
 
 include("clustering.jl")
@@ -304,7 +304,7 @@ function attribute_residues(residues, n, assert_use_existing_residues)
 end
 
 @static if !isdefined(Chemfiles, :atoms) # up to 0.9.3 included
-    function atoms(residue::Residue)
+    function atoms(residue::Chemfiles.Residue)
         count = size(residue)
         result = Array{UInt64}(undef, count)
         Chemfiles.__check(Chemfiles.lib.chfl_residue_atoms(Chemfiles.__const_ptr(residue), pointer(result), count))
@@ -660,7 +660,7 @@ function parse_as_chemfile(frame, options, name)
 
     topology = Topology(frame) # Just a precaution since frame was possibly modified
     m = Int(count_residues(topology))
-    residues = [Residue(topology, i) for i in 0:(m-1)]
+    residues = [Chemfiles.Residue(topology, i) for i in 0:(m-1)]
 
     attributions = attribute_residues(residues, n, options.clustering_mode == ClusteringMode.Input)
     return finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)

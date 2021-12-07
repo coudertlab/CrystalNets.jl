@@ -63,7 +63,7 @@ function db_options(; kwargs...)
 end
 
 
-const atomic_numbers = Dict{Symbol, Int}(
+const atomic_numbers = IdDict{Symbol, Int}(
     :H => 1,
     :He => 2,
     :Li => 3,
@@ -410,3 +410,13 @@ function nextword(l, i)
     end
     return (start, n, n)
 end
+
+
+function angle(p1, p2)
+    return acosd(clamp(dot(p1, p2)/(norm(p1)*norm(p2)), -1.0, 1.0))
+end
+function dihedral(p1, p2, p3)
+    β = angle(cross(p1, p2), cross(p2, p3))
+    return isnan(β) ? 0.0 : β
+end
+
