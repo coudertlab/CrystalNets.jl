@@ -103,6 +103,9 @@ julia> sbu_kinds[:Ne] # corresponds to no given SBU kind
 ```
 If no empty set has been explicitly added to `sbus` and an element falls outside
 of the included categories, the returned SBU kind is 0.
+
+An exception is made for nonmetals which are part of an aromatic carbon cycle: those will
+be treated separately and put in the SBU of the corresponding carbons.
 """
 struct SBUKinds
     dict::Dict{Symbol,Int}
@@ -141,6 +144,7 @@ function Base.getindex(sbus::SBUKinds, x::Symbol)
 end
 
 Base.length(sbus::SBUKinds) = sbus.len
+false_sbus(sbus::SBUKinds) = sbus.tomerge
 
 
 """
@@ -167,8 +171,6 @@ Different options, passed as keyword arguments:
             Default is empty, meaning that all nets are considered.
 - ignore_types: disregard atom types to compute the topology, making pcu and
             pcu-b identical for example (default is true)
-- cluster_adjacent_sbus: if set, inorganic sbus that are only set apart by one
-            atom are merged into one new inorganic sbu.
 """
 struct Options
     name::String # used for exports
@@ -187,7 +189,6 @@ struct Options
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
 
     # Clustering options
-    cluster_adjacent_sbus::Bool
     export_attributions::String
     export_clusters::String
 
@@ -208,7 +209,6 @@ struct Options
                        ignore_low_occupancy=false,
                        export_input=(DOEXPORT[] ? tempdir() : ""),
                        dryrun=nothing,
-                       cluster_adjacent_sbus=false,
                        export_attributions="",
                        export_clusters=(DOEXPORT[] ? tempdir() : ""),
                        skip_minimize=false,
@@ -227,7 +227,6 @@ struct Options
             ignore_low_occupancy,
             export_input,
             dryrun,
-            cluster_adjacent_sbus,
             export_attributions,
             export_clusters,
             skip_minimize,

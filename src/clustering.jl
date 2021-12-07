@@ -11,11 +11,6 @@ end
 
 Given a classification of vertices into classes, separate the vertices into clusters
 of contiguous vertices belonging to the same class.
-
-Class 0 is treated separately: each atom belonging to class 0 is considered to be actually of
-class 2, but all its neighbors of classes different than 2 are considered themselves contiguous.
-This is specifically used to merge several inorganic SBUs into one if they share a common
-neighboring atom.
 """
 function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer})
     n = length(classes)
@@ -26,19 +21,18 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
     periodicsbus = Int[0]
     for i in 1:n
         iszero(attributions[i]) || continue
-        class = classes[i] == 0 ? 2 : classes[i]
+        class = classes[i]
         push!(sbus, [PeriodicVertex3D(i)])
         push!(sbu_classes, class)
         attr = length(sbus)
         attributions[i] = attr
         Q = PeriodicVertex3D[PeriodicVertex3D(i)]
-        encounteredclass0 = Set{Int}()
         for u in Q
-            @assert attributions[u.v] == attr || (class != 2 && classes[u.v] == 0)
+            @assert attributions[u.v] == attr
             for neigh in neighbors(graph, u.v)
                 x = neigh.v
                 ofs = neigh.ofs .+ u.ofs
-                if classes[x] == class || (class == 2 && classes[x] == 0)
+                if classes[x] == class
                     attrx = attributions[x]
                     if iszero(attrx)
                         offsets[x] = ofs
@@ -52,9 +46,6 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
                             push!(periodicsbus, attr)
                         end
                     end
-                elseif class != 2 && classes[x] == 0 && x ∉ encounteredclass0
-                    push!(encounteredclass0, x)
-                    push!(Q, PeriodicVertex3D(x, ofs))
                 end
             end
         end
@@ -109,6 +100,139 @@ function delete_target_from_list!(l, v)
     nothing
 end
 
+
+function is_paddlewheel_candidate!(memoized, sbus, i, types, periodicsbus)
+    memo = memoized[i]
+    if memo isa PeriodicVertex3D
+        return memo
+    end
+    if i ∈ periodicsbus
+        memoized[i] = PeriodicVertex3D(0)
+        return PeriodicVertex3D(0)
+    end
+    sbu = sbus[i]
+    4 ≤ length(sbu) ≤ 5 || return PeriodicVertex3D(0)
+    typs = [types[x.v] for x in sbu]
+    metal = PeriodicVertex3D(0)
+    Oflag = false
+    for (j,typ) in enumerate(typs)
+        if typ === :O
+            Oflag = true
+        elseif ismetal[atomic_numbers[typ]]
+            if metal.v != 0
+                return PeriodicVertex3D(0)
+            end
+            metal = sbu[j]
+        else
+            return PeriodicVertex3D(0)
+        end
+    end
+    ret = ((metal.v != 0) & Oflag) ? metal : PeriodicVertex3D(0)
+    memoized[i] = ret
+    return ret
+end
+
+"""
+    function regroup_paddlewheel!(graph, types, clusters)
+
+Identify paddle-wheel patterns made of two opposite SBUs and regroup them into
+one.
+"""
+function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
+    replacements = collect(1:length(clusters.sbus))
+    anypaddlewheel = false
+    memoized = Union{Missing,PeriodicVertex3D}[missing for _ in 1:length(clusters.sbus)]
+    for (i, sbu) in enumerate(clusters.sbus)
+        ismissing(memoized[i]) || continue
+        metal = is_paddlewheel_candidate!(memoized, clusters.sbus, i, types, periodicsbus)
+        thissbu = Set{Int}([y.v for y in sbu])
+        metal.v == 0 && continue
+        metal_candidate = PeriodicVertex3D(0)
+        opposite_sbu = 0
+        ofs_diff = zero(SVector{3,Int})
+        class_sbu = clusters.classes[i]
+        for u in sbu
+            types[u.v] === :O || continue
+            invalid_paddlewheel = false
+            for x in neighbors(graph, u.v)
+                clusters.attributions[x.v] == i && continue
+                if types[x.v] !== :C
+                    invalid_paddlewheel = true
+                    break
+                end
+                for y in neighbors(graph, x.v)
+                    (y.v ∈ thissbu || types[y.v] !== :O) && continue
+                    attr = clusters.attributions[y.v]
+                    class_candidate = clusters.classes[attr]
+                    (class_candidate == class_sbu && attr != opposite_sbu) || continue
+                    metal_candidate = is_paddlewheel_candidate!(memoized, clusters.sbus, attr, types, periodicsbus)
+                    if metal_candidate.v != 0
+                        same_metal = types[metal.v] == types[metal_candidate.v]
+                        if same_metal && clusters.classes[i] == clusters.classes[attr]
+                            if opposite_sbu != 0
+                                invalid_paddlewheel = true
+                                break
+                            end
+                            ofs_diff = u.ofs .+ x.ofs .+ y.ofs .- clusters.offsets[y.v]
+                            opposite_sbu = attr
+                        end
+                    end
+                end
+                invalid_paddlewheel && break
+            end
+            if invalid_paddlewheel
+                opposite_sbu = 0
+                break
+            end
+        end
+        if opposite_sbu == 0
+            memoized[i] = PeriodicVertex3D(0)
+            continue
+        end
+        for u in clusters.sbus[opposite_sbu]
+            newofs = u.ofs .+ ofs_diff 
+            push!(sbu, PeriodicVertex(u.v, newofs))
+            clusters.offsets[u.v] = newofs
+            clusters.attributions[u.v] = i
+        end
+        empty!(clusters.sbus[opposite_sbu])
+        add_edge!(graph, metal.v, PeriodicVertex(metal_candidate.v, metal_candidate.ofs .+ ofs_diff .- metal.ofs))
+        @assert clusters.classes[opposite_sbu] == clusters.classes[i]
+        clusters.classes[opposite_sbu] = 0
+        replacements[opposite_sbu] = i
+        anypaddlewheel = true
+    end
+
+    if anypaddlewheel
+        k = 0
+        removed = Int[]
+        for (i, j) in enumerate(replacements)
+            replacements[i] -= k
+            if j != i
+                k += 1
+                push!(removed, i)
+            end
+        end
+        for rem in removed
+            @assert isempty(clusters.sbus[rem])
+            @assert clusters.classes[rem] == 0
+        end
+        deleteat!(clusters.classes, removed)
+        deleteat!(clusters.sbus, removed)
+        setremoved = Set{Int}(removed)
+        for (i, attr) in enumerate(clusters.attributions)
+            @assert attr ∉ setremoved
+            clusters.attributions[i] = replacements[attr]
+        end
+        newperiodicsbus = [replacements[x] for x in periodicsbus]
+        empty!(periodicsbus)
+        union!(periodicsbus, newperiodicsbus)
+    end
+
+    nothing
+end
+
+
 """
 split_sbu!(sbus, graph, i_sbu, classes)
 
@@ -118,6 +242,7 @@ Return the list of newly-created periodic SBUs, if any.
 """
 function split_sbu!(sbus, graph, i_sbu, classes)
     sbu = [x.v for x in sbus.sbus[i_sbu]]
+    @assert allunique(sbu)
     empty!(sbus.sbus[i_sbu])
     periodicsbus = Set{Int}()
     j = i_sbu
@@ -128,6 +253,7 @@ function split_sbu!(sbus, graph, i_sbu, classes)
         class = classes[_u.v]
         push!(explored, _u.v)
         sbus.offsets[_u.v] = _u.ofs
+        sbus.attributions[_u.v] = j
         seeninthissbu = Dict{Int, SVector{3,Int}}(_u.v => _u.ofs)
         while !isempty(toexplore)
             u = pop!(toexplore)
@@ -158,24 +284,24 @@ function split_sbu!(sbus, graph, i_sbu, classes)
     return periodicsbus
 end
 
-function add_to_merge_or_newclass!(classes, mergeto, graph, sbus, new_class, i_sbu, x)
+function add_to_merge_or_newclass!(classes, mergeto, graph, sbus, periodicsbus, new_class, x)
     otherattr = -1
     ofs = zero(SVector{3,Int})
     for u in neighbors(graph, x.v)
         attr = sbus.attributions[u.v]
-        if attr != i_sbu
+        if attr ∉ periodicsbus
+            curr_ofs = sbus.offsets[u.v] .- u.ofs
             if otherattr == -1
                 otherattr = attr
-                ofs = sbus.offsets[u.v] .- u.ofs
-            elseif otherattr != attr
+                ofs = curr_ofs
+            elseif otherattr != attr || ofs != curr_ofs
                 otherattr = -2
                 break
             end
         end
     end
-    @assert otherattr != -1
     if otherattr ≥ 0
-        push!(mergeto, (PeriodicVertex(x.v, ofs), otherattr))
+        mergeto[x.v] = (ofs, otherattr)
         return false
     else
         classes[x.v] = new_class
@@ -183,6 +309,101 @@ function add_to_merge_or_newclass!(classes, mergeto, graph, sbus, new_class, i_s
     end
 end
 
+
+function small_cycles_around(graph, pos, mat, i, u_init)
+    pos_init = pos[u_init.v]
+    posu = [pos_init]
+    init_vec = mat * (pos_init .+ u_init.ofs .- pos[i])
+    vec = [init_vec]
+    prev_vec = [init_vec]
+    init_vec = .- init_vec
+    angles = [180.0]
+    visited = Int[i]
+    visited_set = Set{Int}(visited)
+    incycles = Set{Int}()
+    parent = [i]
+    toexplore = [u_init]
+    offsets = [zero(SVector{3,Int})]
+    while !isempty(toexplore)
+        u = pop!(toexplore)
+        if u.v ∈ visited_set
+            for (j, x) in enumerate(visited)
+                if x == u.v
+                    union!(incycles, visited[j:end])
+                    break
+                end
+            end
+            continue
+        end
+        last_visited = last(visited)
+        last_parent = pop!(parent)
+        while last_parent != last_visited
+            delete!(visited_set, pop!(visited))
+            last_visited = last(visited)
+        end
+        last_posu = pop!(posu)
+        last_angle = pop!(angles)
+        last_vec = pop!(vec)
+        last_prev_vec = pop!(prev_vec)
+        last_offset = pop!(offsets)
+        push!(visited, u.v)
+        push!(visited_set, u.v)
+        for x in neighbors(graph, u.v)
+            (x.v == last_visited || degree(graph, x.v) == 1) && continue
+            new_vec = mat * (pos[x.v] .+ x.ofs .- last_posu)
+            α = angle(last_vec, .-new_vec)
+            100 < α < 145 || continue
+            β = dihedral(last_prev_vec, last_vec, new_vec)
+            β < 10 || β > 170 || continue
+            ofs = last_offset .+ u.ofs
+            γ = angle(init_vec, mat * (pos[x.v] .+ x.ofs .- pos_init))
+            γ < last_angle || continue
+            push!(toexplore, PeriodicVertex3D(x.v, x.ofs .+ u.ofs))
+            push!(parent, u.v)
+            push!(posu, pos[x.v])
+            push!(angles, γ)
+            push!(prev_vec, last_vec)
+            push!(vec, new_vec)
+            push!(offsets, ofs)
+        end
+    end
+    return incycles
+end
+
+"""
+    in_small_cycles_around(graph, pos, mat, i)
+
+Return the set of atoms belonging to a small cycle to which also belongs atom `i`.
+"""
+function in_small_cycles_around(graph, pos, mat, i)
+    neighs = neighbors(graph, i)
+    _, state = iterate(neighs)
+    incycle = Set{Int}()
+    for u in Base.rest(neighs, state)
+        degree(graph, u.v) == 1 && continue
+        # i == 66 && println('\n')
+        union!(incycle, small_cycles_around(graph, pos, mat, i, u))
+    end
+    return incycle
+end
+ 
+
+function reclassify_in_small_cycles!(classes, graph, pos, mat, Cclass, modifiables)
+    handled = Set{Int}()
+    for (i, class) in enumerate(classes)
+        class == Cclass || continue
+        (i ∈ handled || degree(graph, i) ≤ 1) && continue
+        any(x -> classes[x.v] ∈ modifiables, neighbors(graph, i)) || continue
+        incycle = in_small_cycles_around(graph, pos, mat, i)
+        for j in incycle
+            if classes[j] ∈ modifiables
+                classes[j] = Cclass
+            end
+        end
+        union!(handled, incycle)
+    end
+    nothing
+end
 
 #=
 function fix_sbu_connectivity!(sbus, graph, oldperiodic, potentialnewperiodic)
@@ -238,7 +459,7 @@ const default_sbus = SBUKinds([
     find_sbus(crystal)
 
 This is an automatic clustering function for MOFs.
-Reckognize SBUs using a simple heuristic based on the atom types.
+Reckognize SBUs using a heuristic based on the atom types.
 """
 function find_sbus(crystal, kinds=default_sbus)
     n = nv(crystal.graph)
@@ -261,13 +482,17 @@ function find_sbus(crystal, kinds=default_sbus)
                 throw(MissingAtomInformation("unhandled atom type: $category (for atom $atom_name)."))
             end
         end
-        if class ∈ kinds.tomerge
-            push!(unclassified, i)
-        end
         classes[i] = class
     end
-    #= We now merge `unclassified` elements according to the following rules for
-        the special case where kinds == default_sbus
+    @assert issorted(unclassified)
+
+    reclassify_in_small_cycles!(classes, crystal.graph, crystal.pos, crystal.cell.mat,
+                                kinds[:C], false_sbus(kinds))
+
+    unclassified = [i for i in 1:n if classes[i] ∈ kinds.tomerge]
+    
+    #= We now merge `unclassified` elements according to the following rules
+    (exemplified for the special case where kinds == default_sbus)
       - All elements of class 3 that are connected to each other are replaced by
         a big virtual element of class 3 whose neighbours are the sum of the
         neighbours of each of its constituents.
@@ -276,7 +501,6 @@ function find_sbus(crystal, kinds=default_sbus)
       - Otherwise, it only has neighbours of class 2 and then it becomes of
         class 2.
     =#
-    @assert issorted(unclassified)
     rev_unclassified = zeros(Int, n)
     m = length(unclassified)
     for i in 1:m
@@ -328,23 +552,9 @@ function find_sbus(crystal, kinds=default_sbus)
     end
     # oldlength may be != 0, this means that there are dangling unclassified clusters.
     # These will be eliminated as 0-dimensional residues later.
-    if crystal.options.cluster_adjacent_sbus && kinds == default_sbus
-        # As a last pass, we set a class of 0 for each atom of an organic SBU (class 2)
-        # that is bonded to an inorganic SBU (class 1).
-        organicclass = kinds[:C]
-        inorganicclass = kinds[:metal]
-        for i in 1:n
-            classes[i] == organicclass || continue
-            for x in neighbors(crystal.graph, i)
-                if classes[x.v] == inorganicclass
-                    classes[i] = 0
-                    break
-                end
-            end
-        end
-    end
 
     sbus, periodicsbus = regroup_sbus(crystal.graph, classes)
+    regroup_paddlewheel!(crystal.graph, sbus, crystal.types, periodicsbus)
 
     if length(sbus.sbus) == 1
         return sbus # This is an error but it will be handled at a higher level.
@@ -353,25 +563,25 @@ function find_sbus(crystal, kinds=default_sbus)
     new_class = length(kinds) + 1
     while !isempty(periodicsbus)
         incr_newclass = false
-        mergeto = Tuple{PeriodicVertex3D,Int}[] # List of atoms to merge to the neighboring SBU
+        mergeto = Dict{Int,Tuple{SVector{3,Int},Int}}() # List of atoms to merge to the neighboring SBU
         for i_sbu in periodicsbus
             sbu = sbus.sbus[i_sbu]
-            numneighbors = zeros(Int32, length(sbu))
-            for (i, x) in enumerate(sbu)
-                for u in neighbors(crystal.graph, x.v)
-                    numneighbors[i] += sbus.attributions[u.v] != i_sbu
+            composition = [crystal.types[x.v] for x in sbu]
+            uniquecompo = unique!(sort(composition))
+            if length(uniquecompo) == 1
+                numneighbors = zeros(Int32, length(sbu))
+                for (i, x) in enumerate(sbu)
+                    for u in neighbors(crystal.graph, x.v)
+                        numneighbors[i] += sbus.attributions[u.v] != i_sbu
+                    end
                 end
-            end
-            m, M = extrema(numneighbors)
-            if m != M
-                for (x, num) in zip(sbu, numneighbors)
-                    num == M || continue
-                    incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, new_class, i_sbu, x)
-                end
-            else # always the same number of neighbors in different SBUs
-                composition = [crystal.types[x.v] for x in sbu]
-                uniquecompo = unique!(sort(composition))
-                if length(uniquecompo) == 1
+                m, M = extrema(numneighbors)
+                if m != M
+                    for (x, num) in zip(sbu, numneighbors)
+                        num == M || continue
+                        incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class, x)
+                    end
+                else # always the same number of neighbors in different SBUs
                     # Abandon: atomize the SBU.
                     if length(sbu) == 1
                         # Since this SBU is periodic, it consists in a single
@@ -382,25 +592,25 @@ function find_sbus(crystal, kinds=default_sbus)
                         classes[x.v] = new_class
                         new_class += 1
                     end
-                else # multiple types: pick the least represented to make a new class
-                    hist = Dict{Symbol,Int}([typ => 0 for typ in uniquecompo])
-                    for c in composition
-                        hist[c] += 1
-                    end
-                    minimum_hits = minimum(values(hist))
-                    minority_element = first([k for (k,v) in hist if v == minimum_hits])
-                    for (x, typ) in zip(sbu, composition)
-                        typ == minority_element || continue
-                        incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, new_class, i_sbu, x)
-                    end
+                end
+            else # multiple types: pick the least represented to make a new class
+                hist = Dict{Symbol,Int}([typ => 0 for typ in uniquecompo])
+                for c in composition
+                    hist[c] += 1
+                end
+                minimum_hits = minimum(values(hist))
+                minority_element = first([k for (k,v) in hist if v == minimum_hits])
+                for (x, typ) in zip(sbu, composition)
+                    typ == minority_element || continue
+                    incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class, x)
                 end
             end
 
-            for (x, attr) in mergeto
-                sbus.attributions[x.v] = attr
-                delete_target_from_list!(sbu, x.v)
-                push!(sbus.sbus[attr], x)
-                sbus.offsets[x.v] = x.ofs
+            for (v, (ofs, attr)) in mergeto
+                sbus.attributions[v] = attr
+                delete_target_from_list!(sbu, v)
+                push!(sbus.sbus[attr], PeriodicVertex(v, ofs))
+                sbus.offsets[v] = ofs
             end
             new_class += incr_newclass
         end
@@ -590,8 +800,8 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
             # @assert iszero(newofs)
             # continue
             iszero(newofs) && continue
-            periodicsbuflag = true
-            break
+            # periodicsbuflag = true
+            # break
         end
         push!(edgs, PeriodicEdge3D(atts, attd, newofs))
     end
@@ -625,7 +835,25 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
     types = Vector{Symbol}(undef, n)
     for (i, sbu) in enumerate(clusters.sbus)
         pos[i] = mean(crystal.pos[x.v] .+ x.ofs for x in sbu)
-        types[i] = length(sbu) == 1 ? crystal.types[only(sbu).v] : Symbol(clusters.classes[i]) #Symbol(join(sort!([crystal.types[x.v] for x in sbu])))
+        name = sort!([crystal.types[x.v] for x in sbu])
+        push!(name, Symbol(""))
+        newname = Union{Symbol,Int}[]
+        counter = 1
+        for j in 2:length(name)
+            if name[j] == name[j-1]
+                counter += 1
+            else
+                sym = name[j-1]
+                f! = ismetal[atomic_numbers[sym]] ? pushfirst! : push!
+                if counter == 1
+                    f!(newname, sym)
+                else
+                    f!(newname, sym, counter)
+                    counter = 1
+                end
+            end
+        end
+        types[i] = length(sbu) == 1 ? crystal.types[only(sbu).v] : Symbol(join(newname)) # Symbol(clusters.classes[clusters.attributions[i]])
     end
     ret = Crystal{Nothing}(crystal.cell, types, pos, graph, crystal.options)
     export_default(ret, "clusters", crystal.options.name,
