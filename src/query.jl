@@ -35,7 +35,9 @@ function topological_genome(net::CrystalNet{D,T})::String where {D,T}
             return topological_genome(newnet)
         end
     end
-    export_default(net, "net", net.options.name, net.options.export_net)
+    if isempty(net.options._pos) # could not be exported before
+        export_default(net, "net", net.options.name, net.options.export_net; repeats=2)
+    end
     try
         return string(last(topological_key(net)))
     catch e

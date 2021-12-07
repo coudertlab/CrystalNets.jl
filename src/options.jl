@@ -146,6 +146,13 @@ end
 Base.length(sbus::SBUKinds) = sbus.len
 false_sbus(sbus::SBUKinds) = sbus.tomerge
 
+function ifbooltempdirorempty(x)::String
+    if x isa Bool
+        x ? tempdir() : ""
+    else
+        x
+    end
+end
 
 """
     Options
@@ -198,6 +205,9 @@ struct Options
     ignore_types::Bool
     export_net::String
 
+    # Internal
+    _pos::Vector{SVector{3,Float64}}
+
     function Options(; name="unnamed",
                        bonding_mode=BondingMode.Auto,
                        clustering_mode=ClusteringMode.Auto,
@@ -207,14 +217,22 @@ struct Options
                        ignore_homoatomic_bonds=Set{Symbol}(),
                        ignore_homometallic_bonds=clustering_mode == ClusteringMode.MOF,
                        ignore_low_occupancy=false,
-                       export_input=(DOEXPORT[] ? tempdir() : ""),
+                       export_input=DOEXPORT[],
                        dryrun=nothing,
                        export_attributions="",
-                       export_clusters=(DOEXPORT[] ? tempdir() : ""),
+                       export_clusters="",
                        skip_minimize=false,
                        dimensions=Set{Int}(),
                        ignore_types=true,
-                       export_net="")
+                       export_net=DOEXPORT[],
+                       _pos=SVector{3,Float64}[],
+                    )
+
+        _export_input = ifbooltempdirorempty(export_input)
+        _export_attributions = ifbooltempdirorempty(export_attributions)
+        _export_clusters = ifbooltempdirorempty(export_clusters)
+        _export_net = ifbooltempdirorempty(export_net)
+
         new(
             name,
             bonding_mode,
@@ -225,14 +243,15 @@ struct Options
             Set{Symbol}(ignore_homoatomic_bonds),
             ignore_homometallic_bonds,
             ignore_low_occupancy,
-            export_input,
+            _export_input,
             dryrun,
-            export_attributions,
-            export_clusters,
+            _export_attributions,
+            _export_clusters,
             skip_minimize,
             Set{Int}(dimensions),
             ignore_types,
-            export_net
+            _export_net,
+            _pos,
         )
     end
 end
@@ -243,7 +262,11 @@ function Options(options::Options; kwargs...)
     for (kwarg, val) in kwargs
         T = fieldtype(Options, kwarg)
         val = if isconcretetype(T) && !(T <: Enum)
-            T <: Set ? union(base[kwarg], T(val)) : T(val)
+            if T <: Set
+                union(base[kwarg], T(val))
+            else
+                T(val)
+            end
         else
             val
         end

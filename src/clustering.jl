@@ -787,7 +787,7 @@ transformed into a new vertex.
 function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.clustering_mode, _attempt=1)
     clusters, clustering = find_clusters(crystal, mode)
     if clustering == ClusteringMode.EachVertex
-        return Crystal{Nothing}(crystal)
+        return Crystal{Nothing}(crystal; _pos=crystal.pos)
     end
     periodicsbuflag = false
     edgs = PeriodicEdge3D[]
@@ -855,7 +855,7 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
         end
         types[i] = length(sbu) == 1 ? crystal.types[only(sbu).v] : Symbol(join(newname)) # Symbol(clusters.classes[clusters.attributions[i]])
     end
-    ret = Crystal{Nothing}(crystal.cell, types, pos, graph, crystal.options)
+    ret = Crystal{Nothing}(crystal.cell, types, pos, graph, Options(crystal.options; _pos=pos))
     export_default(ret, "clusters", crystal.options.name,
                    crystal.options.export_clusters; repeats=2)
     return ret

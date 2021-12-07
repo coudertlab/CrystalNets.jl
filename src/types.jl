@@ -553,14 +553,23 @@ function ==(c1::Crystal{T}, c2::Crystal{T}) where T
     c1.pos == c2.pos && c1.graph == c2.graph && c1.options == c2.options
 end
 
-Crystal{Nothing}(c::Crystal{Nothing}) = c
-function Crystal{Nothing}(c::Crystal{Clusters})
-    Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, c.options)
+function Crystal{Nothing}(c::Crystal{T}; kwargs...) where T
+    if isempty(kwargs)
+        if T === Nothing
+            return c
+        end
+        return Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, c.options)
+    end
+    return Crystal{Nothing}(c.cell, c.types, c.pos, c.graph,
+                            Options(c.options; kwargs...))
 end
-function Crystal{Clusters}(c::Crystal, clusters::Clusters)
-    Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph, c.options)
+function Crystal{Clusters}(c::Crystal, clusters::Clusters; kwargs...)
+    if isempty(kwargs)
+        return Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph, c.options)
+    end
+    return Crystal{Nothing}(c.cell, c.types, clusters, c.pos, c.graph,
+                            Options(c.options; kwargs...))
 end
-
 
 trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(coalesce_sbus(c, c.clusters))
 function trimmed_crystal(c::Crystal{Nothing})
@@ -793,6 +802,11 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
     initialvmap, graph = trim_topology(PeriodicGraphs.change_dimension(PeriodicGraph3D, graph))
     types = types[initialvmap]
     remove_homoatomic_bonds!(graph, types, opts.ignore_homoatomic_bonds)
+    if !isempty(opts.export_net) && !isempty(opts._pos)
+        pos = opts._pos[initialvmap]
+        export_default(Crystal{Nothing}(cell, types, pos, graph, opts), 
+                       "net", opts.name, opts.export_net; repeats=2)
+    end
     dimensions = PeriodicGraphs.dimensionality(graph)
 
     if haskey(dimensions, 0)
