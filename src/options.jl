@@ -135,12 +135,15 @@ struct SBUKinds
     end
 end
 
+function Base.getindex(sbus::SBUKinds, i::Int)
+    get(sbus.dict, element_categories[i], sbus.default)
+end
 function Base.getindex(sbus::SBUKinds, x::Symbol)
     ret = get(sbus.dict, x, 0)
     ret == 0 || return ret
     num = get(atomic_numbers, x, 0)
     num == 0 && throw(MissingAtomInformation("unknown atom name: $x."))
-    return get(sbus.dict, element_categories[num], sbus.default)
+    return sbus[num]
 end
 
 Base.length(sbus::SBUKinds) = sbus.len
@@ -172,6 +175,7 @@ Different options, passed as keyword arguments:
             values will include bonds that were considered to long before.
 - ignore_atoms: set of atom symbols to ignore (for instance [:C,:H] will
             remove carbohydrate solvent residues).
+- bond_adjacent_sbus: bond together SBUs which are only separated by a single C atom.
 - skip_minimize: assume that the cell is already the unit cell (default is false).
 - dimensions: the set of crystal net dimensions to consider. For instance, putting
             Set(3) will ensure that only 3-dimensional nets are considered.
@@ -196,6 +200,7 @@ struct Options
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
 
     # Clustering options
+    bond_adjacent_sbus::Bool
     export_attributions::String
     export_clusters::String
 
@@ -215,10 +220,11 @@ struct Options
                        authorize_pruning=true,
                        ignore_atoms=Set{Symbol}(),
                        ignore_homoatomic_bonds=Set{Symbol}(),
-                       ignore_homometallic_bonds=clustering_mode == ClusteringMode.MOF,
+                       ignore_homometallic_bonds=clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal, ClusteringMode.MOFWiderOrganicSBUs),
                        ignore_low_occupancy=false,
                        export_input=DOEXPORT[],
                        dryrun=nothing,
+                       bond_adjacent_sbus=clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal, ClusteringMode.MOFWiderOrganicSBUs),
                        export_attributions="",
                        export_clusters="",
                        skip_minimize=false,
@@ -245,6 +251,7 @@ struct Options
             ignore_low_occupancy,
             _export_input,
             dryrun,
+            bond_adjacent_sbus,
             _export_attributions,
             _export_clusters,
             skip_minimize,

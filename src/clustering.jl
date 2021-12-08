@@ -774,6 +774,24 @@ function find_sbus(crystal, kinds=default_sbus)
 end
 
 
+function split_O_sbu!(graph, sbus, types)
+    for sbu in sbus
+        length(sbu) == 1 || continue
+        a = only(sbu).v
+        types[a] === :O || continue
+        neighs = reverse(neighbors(graph, a))
+        n = length(neighs)
+        for (i, x) in enumerate(neighs)
+            rem_edge!(graph, a, x)
+            for j in (i+1):n
+                y = neighs[j]
+                add_edge!(graph, x.v, PeriodicVertex(y.v, y.ofs .- x.ofs))
+            end
+        end
+    end
+end
+
+
 struct InvalidSBU <: ClusteringError
     msg::String
 end
@@ -789,21 +807,36 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
     if clustering == ClusteringMode.EachVertex
         return Crystal{Nothing}(crystal; _pos=crystal.pos)
     end
+    if clustering == ClusteringMode.MOF
+        split_O_sbu!(crystal.graph, clusters.sbus, crystal.types)
+    end
     periodicsbuflag = false
     edgs = PeriodicEdge3D[]
-    for e in edges(crystal.graph)
-        s, d, of = src(e), dst(e), PeriodicGraphs.ofs(e)
+    for s in vertices(crystal.graph)
         atts = clusters.attributions[s]
-        attd = clusters.attributions[d]
-        newofs = of .+ clusters.offsets[s] .- clusters.offsets[d]
-        if atts == attd
-            # @assert iszero(newofs)
-            # continue
-            iszero(newofs) && continue
-            # periodicsbuflag = true
-            # break
+        for x in neighbors(crystal.graph, s)
+            d = x.v
+            if crystal.options.bond_adjacent_sbus && crystal.types[d] === :C
+                for y in neighbors(crystal.graph, d)
+                    atty = clusters.attributions[y.v]
+                    atts == atty && continue
+                    newofs = x.ofs .+ y.ofs .+ clusters.offsets[s] .- clusters.offsets[y.v]
+                    push!(edgs, PeriodicEdge3D(atts, atty, newofs))
+                end
+            end
+            if d > s
+                attd = clusters.attributions[d]
+                newofs = x.ofs .+ clusters.offsets[s] .- clusters.offsets[d]
+                if atts == attd
+                    # @assert iszero(newofs)
+                    # continue
+                    iszero(newofs) && continue
+                    periodicsbuflag = true
+                    break
+                end
+                push!(edgs, PeriodicEdge3D(atts, attd, newofs))
+            end
         end
-        push!(edgs, PeriodicEdge3D(atts, attd, newofs))
     end
     if periodicsbuflag || isempty(edgs)
         if _attempt == 1 && clustering == ClusteringMode.MOF
