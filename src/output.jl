@@ -40,8 +40,9 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
                 string(numencounteredtypes+=1)
             end : string(i)
             str_ty = string(ty)
-            atomnum = get(atomic_numbers, length(str_ty) ≥ 2 && str_ty[2] > 'Z' ? 
-                                                Symbol(str_ty[1:2]) : Symbol(str_ty[1]), 0)
+            atomnum = isempty(str_ty) ? i :
+                      get(atomic_numbers, length(str_ty) ≥ 2 && str_ty[2] > 'Z' ? 
+                            Symbol(str_ty[1:2]) : Symbol(str_ty[1]), i)
             push!(atomnums, atomnum)
             resid = colorname ? i : 0
             println(f, "atom $(i-1) type $sty name $name resid $resid atomicnumber $atomnum")
