@@ -326,6 +326,12 @@ function small_cycles_around(graph, pos, mat, i, u_init)
     offsets = [zero(SVector{3,Int})]
     while !isempty(toexplore)
         u = pop!(toexplore)
+        last_visited = last(visited)
+        last_parent = pop!(parent)
+        while last_parent != last_visited
+            delete!(visited_set, pop!(visited))
+            last_visited = last(visited)
+        end
         if u.v ∈ visited_set
             for (j, x) in enumerate(visited)
                 if x == u.v
@@ -334,12 +340,6 @@ function small_cycles_around(graph, pos, mat, i, u_init)
                 end
             end
             continue
-        end
-        last_visited = last(visited)
-        last_parent = pop!(parent)
-        while last_parent != last_visited
-            delete!(visited_set, pop!(visited))
-            last_visited = last(visited)
         end
         last_posu = pop!(posu)
         last_angle = pop!(angles)
@@ -355,10 +355,10 @@ function small_cycles_around(graph, pos, mat, i, u_init)
             100 < α < 145 || continue
             β = dihedral(last_prev_vec, last_vec, new_vec)
             β < 10 || β > 170 || continue
-            ofs = last_offset .+ u.ofs
-            γ = angle(init_vec, mat * (pos[x.v] .+ x.ofs .- pos_init))
+            ofs = last_offset .+ x.ofs
+            γ = angle(init_vec, mat * (pos[x.v] .+ ofs .- pos_init))
             γ < last_angle || continue
-            push!(toexplore, PeriodicVertex3D(x.v, x.ofs .+ u.ofs))
+            push!(toexplore, PeriodicVertex3D(x.v, ofs))
             push!(parent, u.v)
             push!(posu, pos[x.v])
             push!(angles, γ)
@@ -367,6 +367,7 @@ function small_cycles_around(graph, pos, mat, i, u_init)
             push!(offsets, ofs)
         end
     end
+    # !isempty(incycles) && @show incycles
     return incycles
 end
 
@@ -393,7 +394,14 @@ function reclassify_in_small_cycles!(classes, graph, pos, mat, Cclass, modifiabl
     for (i, class) in enumerate(classes)
         class == Cclass || continue
         (i ∈ handled || degree(graph, i) ≤ 1) && continue
-        any(x -> classes[x.v] ∈ modifiables, neighbors(graph, i)) || continue
+        skipflag = true
+        for x in neighbors(graph, i)
+            if classes[x.v] ∈ modifiables && degree(graph, x.v) > 1
+                skipflag = false
+                break
+            end
+        end
+        skipflag && continue
         incycle = in_small_cycles_around(graph, pos, mat, i)
         for j in incycle
             if classes[j] ∈ modifiables
@@ -559,7 +567,7 @@ function find_sbus(crystal, kinds=default_sbus)
     if length(sbus.sbus) == 1
         return sbus # This is an error but it will be handled at a higher level.
     end
-    
+
     new_class = length(kinds) + 1
     while !isempty(periodicsbus)
         incr_newclass = false
@@ -599,7 +607,22 @@ function find_sbus(crystal, kinds=default_sbus)
                     hist[c] += 1
                 end
                 minimum_hits = minimum(values(hist))
-                minority_element = first([k for (k,v) in hist if v == minimum_hits])
+                minority_elements = [k for (k,v) in hist if v == minimum_hits]
+                minority_element = if length(minority_elements) == 1
+                    minority_elements[1]
+                else
+                    metallics = [k for k in minority_elements if ismetal[atomic_numbers[k]]]
+                    if isempty(metallics)
+                        noCNO = [k for k in minority_elements if k ∉ (:C, :N, :O)]
+                        if isempty(noCNO)
+                            first(minority_elements)
+                        else
+                            first(noCNO)
+                        end
+                    else
+                        first(metallics)
+                    end
+                end
                 for (x, typ) in zip(sbu, composition)
                     typ == minority_element || continue
                     incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class, x)
@@ -780,12 +803,16 @@ function split_O_sbu!(graph, sbus, types)
         a = only(sbu).v
         types[a] === :O || continue
         neighs = reverse(neighbors(graph, a))
+        degs = [degree(graph, x.v) for x in neighs]
         n = length(neighs)
         for (i, x) in enumerate(neighs)
             rem_edge!(graph, a, x)
-            for j in (i+1):n
-                y = neighs[j]
-                add_edge!(graph, x.v, PeriodicVertex(y.v, y.ofs .- x.ofs))
+            if degs[i] > 1
+                for j in (i+1):n
+                    y = neighs[j]
+                    degs[j] == 1 && continue
+                    add_edge!(graph, x.v, PeriodicVertex(y.v, y.ofs .- x.ofs))
+                end
             end
         end
     end
@@ -824,10 +851,10 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
                     push!(edgs, PeriodicEdge3D(atts, atty, newofs))
                 end
             end
-            if d > s
+            if d > s || (d == s && x.ofs > zero(SVector{3,Int}))
                 attd = clusters.attributions[d]
                 newofs = x.ofs .+ clusters.offsets[s] .- clusters.offsets[d]
-                if atts == attd
+                if atts == attd && d != s
                     # @assert iszero(newofs)
                     # continue
                     iszero(newofs) && continue
@@ -870,23 +897,20 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
         pos[i] = mean(crystal.pos[x.v] .+ x.ofs for x in sbu)
         name = sort!([crystal.types[x.v] for x in sbu])
         push!(name, Symbol(""))
-        newname = Union{Symbol,Int}[]
+        newname = Tuple{Int,String}[]
         counter = 1
         for j in 2:length(name)
             if name[j] == name[j-1]
                 counter += 1
             else
                 sym = name[j-1]
-                f! = ismetal[atomic_numbers[sym]] ? pushfirst! : push!
-                if counter == 1
-                    f!(newname, sym)
-                else
-                    f!(newname, sym, counter)
-                    counter = 1
-                end
+                str_sym = counter == 1 ? string(sym) : string(sym, counter)
+                anum = sym === :O ? 6 : sym === :N ? 7 : sym === :C ? 8 : atomic_numbers[sym]
+                push!(newname, (anum, str_sym))
             end
         end
-        types[i] = length(sbu) == 1 ? crystal.types[only(sbu).v] : Symbol(join(newname)) # Symbol(clusters.classes[clusters.attributions[i]])
+        sort!(newname; by=first, rev=true)
+        types[i] = length(sbu) == 1 ? crystal.types[only(sbu).v] : Symbol(join(last.(newname))) # Symbol(clusters.classes[clusters.attributions[i]])
     end
     ret = Crystal{Nothing}(crystal.cell, types, pos, graph, Options(crystal.options; _pos=pos))
     export_default(ret, "clusters", crystal.options.name,
