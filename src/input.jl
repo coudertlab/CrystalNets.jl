@@ -443,6 +443,10 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}, op
     return invalidatoms
 end
 
+"""
+Special handling of C atoms suspiciously close to metallic atoms (can arise from an
+improper cleaning of the file)
+"""
 function sanitize_C_metal!(graph, pos, types, mat)
     toremove = Set{Int}()
     for (i, typ) in enumerate(types)
@@ -451,7 +455,7 @@ function sanitize_C_metal!(graph, pos, types, mat)
             if types[u.v] === :C
                 u.v ∈ toremove && continue
                 bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
-                bondlength > 1.48 && continue
+                bondlength > 1.45 && continue
                 @ifwarn if isempty(toremove)
                     @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed"
                 end
@@ -492,8 +496,7 @@ function sanity_checks!(graph, pos, types, mat, options)
                 l1 < bondlength || continue
                 l2 = norm(mat * (pos[x.v] .+ x.ofs .- pos[s]))
                 l2 < bondlength || continue
-                triangle_coeff = 0.75
-                if bondlength > min(3, triangle_coeff*(l1 + l2))
+                if bondlength*bondlength > min(9.0, l1*l1 + l2*l2)
                     push!(removeedges, e)
                     keptbond = false
                     break
@@ -763,7 +766,7 @@ function parse_chemfile(_path, options::Options)
         end
         return parse_as_cif(cif, options, name)
     end
-    frame = read(Trajectory(path))
+    frame = read(Chemfiles.Trajectory(path))
     return parse_as_chemfile(frame, options, name)
 end
 parse_chemfile(path; kwargs...) = parse_chemfile(path, Options(; kwargs...))

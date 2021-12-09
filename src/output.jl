@@ -24,6 +24,7 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
     invcorres = [PeriodicVertex3D(i) for i in 1:n]
     corres = Dict{PeriodicVertex3D,Int}([invcorres[i]=>i for i in 1:n])
     encounteredtypes = Dict{Symbol,String}()
+    atomnums = Int[]
     numencounteredtypes = 0
     open(file, write=true) do f
         println(f, """
@@ -38,7 +39,12 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
             name = colorname ? get!(encounteredtypes, ty) do
                 string(numencounteredtypes+=1)
             end : string(i)
-            println(f, "atom $(i-1) type $sty name $name resid $(i-1)")
+            str_ty = string(ty)
+            atomnum = get(atomic_numbers, length(str_ty) ≥ 2 && str_ty[2] > 'Z' ? 
+                                                Symbol(str_ty[1:2]) : Symbol(str_ty[1]), 0)
+            push!(atomnums, atomnum)
+            resid = colorname ? i : 0
+            println(f, "atom $(i-1) type $sty name $name resid $resid atomicnumber $atomnum")
         end
         j = n + 1
         for _ in 1:repeatedges
@@ -60,7 +66,9 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
             ty = c.types[v]
             sty = ty === Symbol("") ? string(i) : string(ty)
             name = colorname ? encounteredtypes[ty] : string(v)
-            println(f, "atom $(i-1) type $sty name $name resid $v")
+            atomnum = atomnums[v]
+            resid = colorname ? i : PeriodicGraphs.hash_position(ofs)
+            println(f, "atom $(i-1) type $sty name $name resid $resid atomicnumber $atomnum")
         end
         println(f)
 

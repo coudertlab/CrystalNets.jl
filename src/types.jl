@@ -386,7 +386,8 @@ function expand_symmetry(c::CIF)
         return CIF(cif.cifinfo, deepcopy(cif.cell), cif.ids, cif.types, cif.pos, cif.bonds)
     end
     n = length(cif.ids)
-    _oldbonds = Dict((cif.ids[i],cif.ids[j]) => cif.bonds[i,j] for i in 1:n for j in (i+1):n if cif.bonds[i,j] < Inf32)
+    _oldbonds = Dict{Tuple{Int64, Int64}, Float32}((cif.ids[i],cif.ids[j]) => cif.bonds[i,j]
+                    for i in 1:n for j in (i+1):n if cif.bonds[i,j] < Inf32)
     knownbondlengths = !any(iszero, values(_oldbonds))
     
     if !isempty(_oldbonds) && !knownbondlengths
