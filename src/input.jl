@@ -99,29 +99,29 @@ CIF(file::AbstractString) = CIF(parse_cif(file))
 function CIF(parsed::Dict{String, Union{Vector{String},String}})
     natoms = length(parsed["atom_site_label"])
     equivalentpositions = haskey(parsed, "symmetry_equiv_pos_as_xyz") ?
-        pop!(parsed, "symmetry_equiv_pos_as_xyz") : 
+        pop!(parsed, "symmetry_equiv_pos_as_xyz")::Vector{String} : 
         haskey(parsed, "space_group_symop_operation_xyz") ?
-            pop!(parsed, "space_group_symop_operation_xyz") : EquivalentPosition[]
+            pop!(parsed, "space_group_symop_operation_xyz")::Vector{String} : String[]
     refid = find_refid(equivalentpositions)
     hall = find_hall_number(
             haskey(parsed, "space_group_name_Hall") ?
-                pop!(parsed, "space_group_name_Hall") :
+                pop!(parsed, "space_group_name_Hall")::String :
                 haskey(parsed, "symmetry_space_group_name_Hall") ?
-                    pop!(parsed, "symmetry_space_group_name_Hall") : "",
+                    pop!(parsed, "symmetry_space_group_name_Hall")::String : "",
             haskey(parsed, "space_group_name_H-M_alt") ?
-                pop!(parsed, "space_group_name_H-M_alt") :
+                pop!(parsed, "space_group_name_H-M_alt")::String :
                 haskey(parsed, "symmetry_space_group_name_H-M") ?
-                    pop!(parsed, "symmetry_space_group_name_H-M") : "",
+                    pop!(parsed, "symmetry_space_group_name_H-M")::String : "",
             haskey(parsed, "symmetry_Int_Tables_number") ?
-                parse(Int, pop!(parsed, "symmetry_Int_Tables_number")) :
+                parse(Int, pop!(parsed, "symmetry_Int_Tables_number")::String) :
                 haskey(parsed, "space_group.IT_number") ? 
-                    parse(Int, pop!(parsed, "space_group.IT_number")) : 0)
-    cell = Cell(hall, (parsestrip(pop!(parsed, "cell_length_a")),
-                       parsestrip(pop!(parsed, "cell_length_b")),
-                       parsestrip(pop!(parsed, "cell_length_c"))),
-                      (parsestrip(pop!(parsed, "cell_angle_alpha")),
-                       parsestrip(pop!(parsed, "cell_angle_beta")),
-                       parsestrip(pop!(parsed, "cell_angle_gamma"))),
+                    parse(Int, pop!(parsed, "space_group.IT_number")::String) : 0)
+    cell = Cell(hall, (parsestrip(pop!(parsed, "cell_length_a")::String),
+                       parsestrip(pop!(parsed, "cell_length_b")::String),
+                       parsestrip(pop!(parsed, "cell_length_c")::String)),
+                      (parsestrip(pop!(parsed, "cell_angle_alpha")::String),
+                       parsestrip(pop!(parsed, "cell_angle_beta")::String),
+                       parsestrip(pop!(parsed, "cell_angle_gamma")::String)),
                 parse.(EquivalentPosition, equivalentpositions, Ref(refid)))
 
     haskey(parsed, "symmetry_equiv_pos_site_id") && pop!(parsed, "symmetry_equiv_pos_site_id")
@@ -138,17 +138,17 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     end
     @assert removed_identity
 
-    labels =  pop!(parsed, "atom_site_label")
+    labels =  pop!(parsed, "atom_site_label")::Vector{String}
     _symbols = haskey(parsed, "atom_site_type_symbol") ?
-                    pop!(parsed, "atom_site_type_symbol") : copy(labels)
+                    pop!(parsed, "atom_site_type_symbol")::Vector{String} : copy(labels)
     symbols = String[]
     @inbounds for x in _symbols
         i = findfirst(!isletter, x)
         push!(symbols, isnothing(i) ? x : x[1:i-1])
     end
-    pos_x = pop!(parsed, "atom_site_fract_x")
-    pos_y = pop!(parsed, "atom_site_fract_y")
-    pos_z = pop!(parsed, "atom_site_fract_z")
+    pos_x = pop!(parsed, "atom_site_fract_x")::Vector{String}
+    pos_y = pop!(parsed, "atom_site_fract_y")::Vector{String}
+    pos_z = pop!(parsed, "atom_site_fract_z")::Vector{String}
 
 
     types = Symbol[]
@@ -168,16 +168,16 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     bonds = fill(Inf32, natoms, natoms)
     if haskey(parsed, "geom_bond_atom_site_label_1") &&
        haskey(parsed, "geom_bond_atom_site_label_2")
-        bond_a = pop!(parsed, "geom_bond_atom_site_label_1")
-        bond_b = pop!(parsed, "geom_bond_atom_site_label_2")
-        dists = haskey(parsed, "geom_bond_distance") ? 
-                    parsestrip.(Float32, pop!(parsed, "geom_bond_distance")) :
-                    fill(zero(Float32), length(bond_a))
+        bond_a = pop!(parsed, "geom_bond_atom_site_label_1")::Vector{String}
+        bond_b = pop!(parsed, "geom_bond_atom_site_label_2")::Vector{String}
+        dists = (haskey(parsed, "geom_bond_distance") ? 
+                    parsestrip.(Float32, pop!(parsed, "geom_bond_distance")::Vector{String}) :
+                    fill(zero(Float32), length(bond_a)))
         for i in 1:length(bond_a)
             try
                 x = correspondence[bond_a[i]]
                 y = correspondence[bond_b[i]]
-                bonds[x,y] = bonds[y,x] = dists[i]
+                bonds[x,y] = bonds[y,x] = 1.001*dists[i] # to avoid rounding errors
             catch e
                 if e isa KeyError
                     @ifwarn @warn "Atom $(e.key) will be ignored since it has no placement in the CIF file."
@@ -589,7 +589,7 @@ function parse_as_cif(cif::CIF, options, name)
 
         bonds = guess_bonds(pos, types, Float64.(cif.cell.mat), options)
     else
-        bonds = Tuple{Int,Int}[]
+        bonds = Tuple{Int,Int,Float32}[]
         _i = 1 # correction to i based on ignored atoms
         current_ignored_i = get(ignored, 1, 0)
         for i in 1:n
@@ -606,8 +606,9 @@ function parse_as_cif(cif::CIF, options, name)
                     current_ignored_j = get(ignored, _j, 0)
                     continue
                 end
-                if cif.bonds[i,j] < Inf32
-                    push!(bonds, (i - _i + 1, j - _j + 1))
+                dist = cif.bonds[i,j]
+                if dist < Inf32
+                    push!(bonds, (i - _i + 1, j - _j + 1, dist))
                 end
             end
         end
@@ -631,7 +632,7 @@ function parse_as_chemfile(frame, options, name)
     end
 
     _pos = collect(eachcol(positions(frame)))
-    cell = Cell(SMatrix{3,3,BigFloat}(matrix(UnitCell(frame)))')
+    cell = Cell(SMatrix{3,3,BigFloat}(matrix(Chemfiles.UnitCell(frame)))')
 
     pos::Vector{SVector{3,Float64}} = Ref(inv(cell.mat)) .* _pos
 
@@ -649,22 +650,22 @@ function parse_as_chemfile(frame, options, name)
 
     n = length(pos)
     guessed_bonds = false
-    topology = Topology(frame)
-    if bonds_count(topology) == 0
+    topology = Chemfiles.Topology(frame)
+    if Chemfiles.bonds_count(topology) == 0
         guessed_bonds = true
         bonds = guess_bonds(pos, types, Float64.(cell.mat), options)
-        for (u,v) in bonds
-            add_bond!(frame, u-1, v-1)
+        for (u, v, _) in bonds
+            Chemfiles.add_bond!(frame, u-1, v-1)
         end
     else
-        bonds = [(a+1, b+1) for (a,b) in eachcol(Chemfiles.bonds(topology))]
+        bonds = [(a+1, b+1, -1f0) for (a,b) in eachcol(Chemfiles.bonds(topology))]
         if !(options.dryrun isa Nothing) && options.bonding_mode == BondingMode.Auto
             options.dryrun[:try_Input_bonds] = nothing
         end
     end
 
-    topology = Topology(frame) # Just a precaution since frame was possibly modified
-    m = Int(count_residues(topology))
+    topology = Chemfiles.Topology(frame) # Just a precaution since frame was possibly modified
+    m = Int(Chemfiles.count_residues(topology))
     residues = [Chemfiles.Residue(topology, i) for i in 0:(m-1)]
 
     attributions = attribute_residues(residues, n, options.clustering_mode == ClusteringMode.Input)
@@ -675,13 +676,8 @@ end
 function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
     n = length(pos)
 
-    adjacency = falses(n, n)
-    for (a,b) in bonds
-        adjacency[a, b] = true
-        adjacency[b, a] = true
-    end
-    mat = Float64.(cell.mat)
-    graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, mat, pos))
+        mat = Float64.(cell.mat)
+    graph = PeriodicGraph3D(n, edges_from_bonds(bonds, mat, pos))
 
     if options.bonding_mode != BondingMode.Input
         do_permutation, vmap = sanitize_C_metal!(graph, pos, types, mat)
@@ -702,12 +698,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
                 end
                 bonds = guess_bonds(pos, types, mat, options)
                 guessed_bonds = true
-                adjacency = falses(n, n)
-                for (a,b) in bonds
-                    adjacency[a, b] = true
-                    adjacency[b, a] = true
-                end
-                graph = PeriodicGraph3D(n, edges_from_bonds(adjacency, cell.mat, pos))
+                graph = PeriodicGraph3D(n, edges_from_bonds(bonds, cell.mat, pos))
             end
             invalidatoms = fix_valence!(graph, pos, types, mat, Val(true), options)
             remaining_not_fixed = !isempty(invalidatoms)
