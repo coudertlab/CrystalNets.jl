@@ -431,7 +431,11 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}, op
                 @reduce_valence 0 2
             end
         elseif t === :N
-            @reduce_valence 2 4
+            if options.clustering_mode == ClusteringMode.MOF
+                @reduce_valence 2 5
+            else
+                @reduce_valence 2 4
+            end
         elseif t === :C
             @reduce_valence 2 4
         end

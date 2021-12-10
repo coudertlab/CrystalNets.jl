@@ -111,11 +111,12 @@ function is_paddlewheel_candidate!(memoized, sbus, i, types, periodicsbus)
         return PeriodicVertex3D(0)
     end
     sbu = sbus[i]
-    4 ≤ length(sbu) ≤ 5 || return PeriodicVertex3D(0)
+    4 ≤ length(sbu) ≤ 6 || return PeriodicVertex3D(0)
     typs = [types[x.v] for x in sbu]
     metal = PeriodicVertex3D(0)
     Oflag = false
-    for (j,typ) in enumerate(typs)
+    singleexception = false
+    for (j, typ) in enumerate(typs)
         if typ === :O
             Oflag = true
         elseif ismetal[atomic_numbers[typ]]
@@ -124,9 +125,11 @@ function is_paddlewheel_candidate!(memoized, sbus, i, types, periodicsbus)
             end
             metal = sbu[j]
         else
-            return PeriodicVertex3D(0)
+            singleexception && return PeriodicVertex3D(0)
+            singleexception = true
         end
     end
+    length(sbu) == 6 && !singleexception && return PeriodicVertex3D(0)
     ret = ((metal.v != 0) & Oflag) ? metal : PeriodicVertex3D(0)
     memoized[i] = ret
     return ret
@@ -798,24 +801,22 @@ end
 
 
 function split_O_sbu!(graph, sbus, types)
-    for sbu in sbus
+    toremove = Int[]
+    for (k, sbu) in enumerate(sbus)
         length(sbu) == 1 || continue
         a = only(sbu).v
         types[a] === :O || continue
-        neighs = reverse(neighbors(graph, a))
-        degs = [degree(graph, x.v) for x in neighs]
+        push!(toremove, k)
+        neighs = reverse(neighbors(graph, k))
         n = length(neighs)
         for (i, x) in enumerate(neighs)
-            rem_edge!(graph, a, x)
-            if degs[i] > 1
-                for j in (i+1):n
-                    y = neighs[j]
-                    degs[j] == 1 && continue
-                    add_edge!(graph, x.v, PeriodicVertex(y.v, y.ofs .- x.ofs))
-                end
+            for j in (i+1):n
+                y = neighs[j]
+                add_edge!(graph, x.v, PeriodicVertex(y.v, y.ofs .- x.ofs))
             end
         end
     end
+    return rem_vertices!(graph, toremove)
 end
 
 
@@ -834,9 +835,6 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
     if clustering == ClusteringMode.EachVertex
         return Crystal{Nothing}(crystal; _pos=crystal.pos)
     end
-    if clustering == ClusteringMode.MOF
-        split_O_sbu!(crystal.graph, clusters.sbus, crystal.types)
-    end
     periodicsbuflag = false
     edgs = PeriodicEdge3D[]
     for s in vertices(crystal.graph)
@@ -844,11 +842,14 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
         for x in neighbors(crystal.graph, s)
             d = x.v
             if crystal.options.bond_adjacent_sbus && crystal.types[d] === :C
-                for y in neighbors(crystal.graph, d)
-                    atty = clusters.attributions[y.v]
-                    atts == atty && continue
-                    newofs = x.ofs .+ y.ofs .+ clusters.offsets[s] .- clusters.offsets[y.v]
-                    push!(edgs, PeriodicEdge3D(atts, atty, newofs))
+                neighs = [u for u in neighbors(crystal.graph, d) if degree(crystal.graph, u.v) != 1]
+                if length(neighs) > 2
+                    for y in neighs
+                        atty = clusters.attributions[y.v]
+                        atts == atty && continue
+                        newofs = x.ofs .+ y.ofs .+ clusters.offsets[s] .- clusters.offsets[y.v]
+                        push!(edgs, PeriodicEdge3D(atts, atty, newofs))
+                    end
                 end
             end
             if d > s || (d == s && x.ofs > zero(SVector{3,Int}))
@@ -886,6 +887,11 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
     if ne(graph) == 0
         throw(EmptyGraphException())
     end
+    sbus = if clustering == ClusteringMode.MOF
+        clusters.sbus[split_O_sbu!(graph, clusters.sbus, crystal.types)]
+    else
+        clusters.sbus
+    end
     if !isempty(crystal.options.export_attributions)
         path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")
         export_attributions(Crystal{Clusters}(crystal, clusters), path)
@@ -893,7 +899,7 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
     end
     pos = Vector{SVector{3,Float64}}(undef, n)
     types = Vector{Symbol}(undef, n)
-    for (i, sbu) in enumerate(clusters.sbus)
+    for (i, sbu) in enumerate(sbus)
         pos[i] = mean(crystal.pos[x.v] .+ x.ofs for x in sbu)
         name = sort!([crystal.types[x.v] for x in sbu])
         push!(name, Symbol(""))
