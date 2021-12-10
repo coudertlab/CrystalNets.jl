@@ -354,13 +354,7 @@ function least_plausible_neighbours(Δs, n)
     m = length(Δs)
     m ≤ n && return collect(1:m) # may happen because H bonds cannot be removed
     p::Vector{Int} = sortperm(Δs)
-    # If we should only remove n neighbours, remove those which minimize
-    # the dispersion among the remaining others
-    m == n+1 && return p[2:end] # only one remaining neighbour: keep the closest
-    if std(Δs[p[n+1:end]]) > 0.9std(Δs[p[1:end-n]])
-        return p[end-n+1:end]
-    end
-    return p[1:n]
+    return p[end-n+1:end]
 end
 
 macro reduce_valence(n)
