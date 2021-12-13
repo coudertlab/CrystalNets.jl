@@ -201,6 +201,8 @@ struct Options
 
     # Clustering options
     bond_adjacent_sbus::Bool
+    detect_paddlewheels::Bool
+    detect_heterocycles::Bool
     export_attributions::String
     export_clusters::String
 
@@ -224,7 +226,9 @@ struct Options
                        ignore_low_occupancy=false,
                        export_input=DOEXPORT[],
                        dryrun=nothing,
-                       bond_adjacent_sbus=clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal, ClusteringMode.MOFWiderOrganicSBUs),
+                       bond_adjacent_sbus=false,
+                       detect_paddlewheels=true,
+                       detect_heterocycles=true,
                        export_attributions="",
                        export_clusters="",
                        skip_minimize=false,
@@ -252,6 +256,8 @@ struct Options
             _export_input,
             dryrun,
             bond_adjacent_sbus,
+            detect_paddlewheels,
+            detect_heterocycles,
             _export_attributions,
             _export_clusters,
             skip_minimize,

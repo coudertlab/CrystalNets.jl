@@ -7,18 +7,31 @@ function Base.showerror(io::IO, e::ClusteringError)
 end
 
 """
-    regroup_sbus(graph::PeriodicGraphs.PeriodicGraph3D, classes::AbstractVector{<:Integer})
+    regroup_sbus(graph::PeriodicGraphs.PeriodicGraph3D, classes::AbstractVector{<:Integer},
+                 keeptogether=Dict{Int,Vector{PeriodicVertex3D}}())
 
 Given a classification of vertices into classes, separate the vertices into clusters
 of contiguous vertices belonging to the same class.
+`keeptogether` contains lists of vertices that must additionally belong to the same SBU.
 """
-function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer})
+function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer},
+                      keeptogether=Vector{PeriodicVertex3D}[])
     n = length(classes)
     sbus = Vector{PeriodicVertex3D}[]
     sbu_classes = Int[]
     attributions = zeros(Int, n)
     offsets = zeros(SVector{3,Int}, n)
     periodicsbus = Int[0]
+    graph = isempty(keeptogether) ? graph : deepcopy(graph)
+    for group in keeptogether
+        for i in 1:length(group)
+            x = group[i]
+            for j in (i+1):length(group)
+                y = group[j]
+                add_edge!(graph, x.v, PeriodicVertex3D(y.v, y.ofs .- x.ofs))
+            end
+        end
+    end
     for i in 1:n
         iszero(attributions[i]) || continue
         class = classes[i]
@@ -139,34 +152,44 @@ end
 
 function is_paddlewheel_candidate!(memoized, sbus, i, types, periodicsbus)
     memo = memoized[i]
-    if memo isa PeriodicVertex3D
+    if memo isa Tuple{Symbol,PeriodicVertex3D}
         return memo
     end
     if i ∈ periodicsbus
-        memoized[i] = PeriodicVertex3D(0)
-        return PeriodicVertex3D(0)
+        memoized[i] = Symbol(""), PeriodicVertex3D(0)
+        return Symbol(""), PeriodicVertex3D(0)
     end
     sbu = sbus[i]
-    4 ≤ length(sbu) ≤ 6 || return PeriodicVertex3D(0)
+    4 ≤ length(sbu) ≤ 6 || return Symbol(""), PeriodicVertex3D(0)
     typs = [types[x.v] for x in sbu]
     metal = PeriodicVertex3D(0)
-    Oflag = false
+    nonmetalcounter = IdDict{Symbol,Int}()
     singleexception = false
     for (j, typ) in enumerate(typs)
-        if typ === :O
-            Oflag = true
+        if element_categories[atomic_numbers[typ]] === :nonmetal
+            nonmetalcounter[typ] = get(nonmetalcounter, typ, 0) + 1
         elseif ismetal[atomic_numbers[typ]]
             if metal.v != 0
-                return PeriodicVertex3D(0)
+                return Symbol(""), PeriodicVertex3D(0)
             end
             metal = sbu[j]
         else
-            singleexception && return PeriodicVertex3D(0)
+            singleexception && return Symbol(""), PeriodicVertex3D(0)
             singleexception = true
         end
     end
-    length(sbu) == 6 && !singleexception && return PeriodicVertex3D(0)
-    ret = ((metal.v != 0) & Oflag) ? metal : PeriodicVertex3D(0)
+    n = length(nonmetalcounter)
+    (n == 0 || n ≥ 3) && return Symbol(""), PeriodicVertex3D(0)
+    nonmetal = if n == 2
+        singleexception && return Symbol(""), PeriodicVertex3D(0)
+        singleexception = true
+        x1, x2 = nonmetalcounter
+        x1[2] > x2[2] ? x1[1] : x2[1]
+    else
+        first(nonmetalcounter)[1]
+    end
+    length(sbu) == 6 && !singleexception && return Symbol(""), PeriodicVertex3D(0)
+    ret = metal.v == 0 ? (Symbol(""), PeriodicVertex3D(0)) : (nonmetal, metal)
     memoized[i] = ret
     return ret
 end
@@ -180,19 +203,21 @@ one.
 function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
     replacements = collect(1:length(clusters.sbus))
     anypaddlewheel = false
-    memoized = Union{Missing,PeriodicVertex3D}[missing for _ in 1:length(clusters.sbus)]
+    memoized = Union{Missing,Tuple{Symbol,PeriodicVertex3D}}[missing for _ in 1:length(clusters.sbus)]
     for (i, sbu) in enumerate(clusters.sbus)
         ismissing(memoized[i]) || continue
-        metal = is_paddlewheel_candidate!(memoized, clusters.sbus, i, types, periodicsbus)
-        thissbu = Set{Int}([y.v for y in sbu])
+        nonmetal, metal = is_paddlewheel_candidate!(memoized, clusters.sbus, i, types, periodicsbus)
         metal.v == 0 && continue
+        thissbu = Set{Int}([y.v for y in sbu])
         metal_candidate = PeriodicVertex3D(0)
         opposite_sbu = 0
         ofs_diff = zero(SVector{3,Int})
         class_sbu = clusters.classes[i]
+        singleexception = false
         for u in sbu
-            types[u.v] === :O || continue
+            types[u.v] === nonmetal || continue
             invalid_paddlewheel = false
+            contact = false
             for x in neighbors(graph, u.v)
                 clusters.attributions[x.v] == i && continue
                 if types[x.v] !== :C
@@ -200,21 +225,37 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
                     break
                 end
                 for y in neighbors(graph, x.v)
-                    (y.v ∈ thissbu || types[y.v] !== :O) && continue
+                    (y.v ∈ thissbu || types[y.v] !== nonmetal) && continue
                     attr = clusters.attributions[y.v]
                     class_candidate = clusters.classes[attr]
-                    (class_candidate == class_sbu && attr != opposite_sbu) || continue
-                    metal_candidate = is_paddlewheel_candidate!(memoized, clusters.sbus, attr, types, periodicsbus)
+                    class_candidate == class_sbu || continue
+                    if attr == opposite_sbu
+                        if u.ofs .+ x.ofs .+ y.ofs .- clusters.offsets[y.v] != ofs_diff
+                            invalid_paddlewheel = true
+                            break
+                        end
+                        contact = true
+                        continue
+                    end
+                    _, metal_candidate = is_paddlewheel_candidate!(memoized, clusters.sbus, attr, types, periodicsbus)
                     if metal_candidate.v != 0
                         same_metal = types[metal.v] == types[metal_candidate.v]
-                        if same_metal && clusters.classes[i] == clusters.classes[attr]
+                        if same_metal
                             if opposite_sbu != 0
                                 invalid_paddlewheel = true
                                 break
                             end
                             ofs_diff = u.ofs .+ x.ofs .+ y.ofs .- clusters.offsets[y.v]
                             opposite_sbu = attr
+                            contact = true
                         end
+                    end
+                end
+                if !contact
+                    if singleexception
+                        invalid_paddlewheel = true
+                    else
+                        singleexception = true
                     end
                 end
                 invalid_paddlewheel && break
@@ -225,7 +266,7 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
             end
         end
         if opposite_sbu == 0
-            memoized[i] = PeriodicVertex3D(0)
+            memoized[i] = Symbol(""), PeriodicVertex3D(0)
             continue
         end
         for u in clusters.sbus[opposite_sbu]
@@ -349,7 +390,7 @@ function add_to_merge_or_newclass!(classes, mergeto, graph, sbus, periodicsbus, 
 end
 
 
-function small_cycles_around(graph, pos, mat, i, u_init)
+function small_cycles_around(graph, pos, mat, i, u_init, classes, acceptedclasses)
     pos_init = pos[u_init.v]
     posu = [pos_init]
     init_vec = mat * (pos_init .+ u_init.ofs .- pos[i])
@@ -357,6 +398,7 @@ function small_cycles_around(graph, pos, mat, i, u_init)
     prev_vec = [init_vec]
     init_vec = .- init_vec
     angles = [180.0]
+    diffangles = [0.0]
     visited = Int[i]
     visited_set = Set{Int}(visited)
     incycles = Set{Int}()
@@ -382,6 +424,7 @@ function small_cycles_around(graph, pos, mat, i, u_init)
         end
         last_posu = pop!(posu)
         last_angle = pop!(angles)
+        last_diffangle = pop!(diffangles)
         last_vec = pop!(vec)
         last_prev_vec = pop!(prev_vec)
         last_offset = pop!(offsets)
@@ -389,6 +432,7 @@ function small_cycles_around(graph, pos, mat, i, u_init)
         push!(visited_set, u.v)
         for x in neighbors(graph, u.v)
             (x.v == last_visited || degree(graph, x.v) == 1) && continue
+            classes[x.v] ∈ acceptedclasses || continue
             new_vec = mat * (pos[x.v] .+ x.ofs .- last_posu)
             α = angle(last_vec, .-new_vec)
             100 < α < 145 || continue
@@ -396,11 +440,18 @@ function small_cycles_around(graph, pos, mat, i, u_init)
             β < 10 || β > 170 || continue
             ofs = last_offset .+ x.ofs
             γ = angle(init_vec, mat * (pos[x.v] .+ ofs .- pos_init))
+            if last_parent == i
+                last_diffangle = (180 - γ)/2
+                last_angle = γ + last_diffangle
+            end
             γ < last_angle || continue
+            diffangle = last_angle - γ
+            abs(diffangle - last_diffangle) < last_diffangle/5 || continue
             push!(toexplore, PeriodicVertex3D(x.v, ofs))
             push!(parent, u.v)
             push!(posu, pos[x.v])
             push!(angles, γ)
+            push!(diffangles, diffangle)
             push!(prev_vec, last_vec)
             push!(vec, new_vec)
             push!(offsets, ofs)
@@ -411,25 +462,28 @@ function small_cycles_around(graph, pos, mat, i, u_init)
 end
 
 """
-    in_small_cycles_around(graph, pos, mat, i)
+    in_small_cycles_around(graph, pos, mat, i, classes, acceptedclasses)
 
 Return the set of atoms belonging to a small cycle to which also belongs atom `i`.
+This cycle must only contain atoms whose class is in `acceptedclasses`
 """
-function in_small_cycles_around(graph, pos, mat, i)
+function in_small_cycles_around(graph, pos, mat, i, classes, acceptedclasses)
     neighs = neighbors(graph, i)
     _, state = iterate(neighs)
     incycle = Set{Int}()
     for u in Base.rest(neighs, state)
         degree(graph, u.v) == 1 && continue
         # i == 66 && println('\n')
-        union!(incycle, small_cycles_around(graph, pos, mat, i, u))
+        union!(incycle, small_cycles_around(graph, pos, mat, i, u, classes, acceptedclasses))
     end
     return incycle
 end
  
 
-function reclassify_in_small_cycles!(classes, graph, pos, mat, Cclass, modifiables)
+function detect_heterocycles(classes, graph, pos, mat, Cclass, modifiables)
     handled = Set{Int}()
+    cycles = Set{Int}[]
+    acceptedclasses = union(modifiables, Cclass)
     for (i, class) in enumerate(classes)
         class == Cclass || continue
         (i ∈ handled || degree(graph, i) ≤ 1) && continue
@@ -441,15 +495,71 @@ function reclassify_in_small_cycles!(classes, graph, pos, mat, Cclass, modifiabl
             end
         end
         skipflag && continue
-        incycle = in_small_cycles_around(graph, pos, mat, i)
-        for j in incycle
-            if classes[j] ∈ modifiables
-                classes[j] = Cclass
+        incycle = in_small_cycles_around(graph, pos, mat, i, classes, acceptedclasses)
+        if !isempty(incycle)
+            union!(handled, incycle)
+            push!(cycles, incycle)
+        end
+    end
+    return cycles
+end
+
+"""
+    group_cycle_C(heterocycle, types, graph)
+
+Return a list of Vector{PeriodicVertex3D} where each sublist consists in C atoms belonging
+to the same heterocycle, and which should thus belong to the same vertex eventually.
+"""
+function group_cycle_C(heterocycle, types, graph)
+    _same_SBU_C = Dict{Int,Vector{Int}}() # For each atom, the list cycles it belongs to
+    for (i, cycle) in enumerate(heterocycle)
+        for x in cycle
+            types[x] === :C || continue
+            push!(get!(_same_SBU_C, x, Int[]), i)
+        end
+    end
+    m = length(heterocycle)
+    union_find_cycles = [i for i in 1:m]
+    rev_union_find_cycles = [Int[i] for i in 1:m]
+    for v in values(_same_SBU_C)
+        length(v) == 1 && continue
+        sort!(v)
+        minsbu = minimum([union_find_cycles[vj] for vj in v])
+        for j in 1:length(v)
+            k = union_find_cycles[j]
+            (k == minsbu || isempty(rev_union_find_cycles[k])) && continue
+            union_find_cycles[j] = k
+            for j2 in rev_union_find_cycles[k]
+                union_find_cycles[j2] = minsbu
+            end
+            append!(rev_union_find_cycles[minsbu], rev_union_find_cycles[k])
+            empty!(rev_union_find_cycles[k])
+        end
+    end
+    groups = Vector{PeriodicVertex3D}[]
+    for cycles in rev_union_find_cycles
+        isempty(cycles) && continue
+        group_v = Set{Int}()
+        for i_cycle in cycles
+            union!(group_v, heterocycle[i_cycle])
+        end
+        i = pop!(group_v)
+        Q = [PeriodicVertex3D(i)]
+        group = PeriodicVertex3D[]
+        while !isempty(Q)
+            u = pop!(Q)
+            if types[u.v] === :C
+                push!(group, u)
+            end
+            for x in neighbors(graph, u.v)
+                x.v ∈ group_v || continue
+                delete!(group_v, x.v)
+                pushfirst!(Q, PeriodicVertex3D(x.v, x.ofs .+ u.ofs))
             end
         end
-        union!(handled, incycle)
+        push!(groups, group)
     end
-    return !isempty(handled)
+    return groups
 end
 
 #=
@@ -533,11 +643,16 @@ function find_sbus(crystal, kinds=default_sbus)
     end
     @assert issorted(unclassified)
 
-    has_heterocycle = reclassify_in_small_cycles!(classes, crystal.graph, crystal.pos,
-                                crystal.cell.mat, kinds[:C], false_sbus(kinds))
+    same_SBU_C = if crystal.options.detect_heterocycles
+        heterocycle = detect_heterocycles(classes, crystal.graph, crystal.pos,
+                                    crystal.cell.mat, kinds[:C], false_sbus(kinds))
+        group_cycle_C(heterocycle, crystal.types, crystal.graph)
+    else
+        Vector{PeriodicVertex3D}[]
+    end
 
     unclassified = [i for i in 1:n if classes[i] ∈ kinds.tomerge]
-    
+
     #= We now merge `unclassified` elements according to the following rules
     (exemplified for the special case where kinds == default_sbus)
       - All elements of class 3 that are connected to each other are replaced by
@@ -600,8 +715,10 @@ function find_sbus(crystal, kinds=default_sbus)
     # oldlength may be != 0, this means that there are dangling unclassified clusters.
     # These will be eliminated as 0-dimensional residues later.
 
-    sbus, periodicsbus = regroup_sbus(crystal.graph, classes)
-    regroup_paddlewheel!(crystal.graph, sbus, crystal.types, periodicsbus)
+    sbus, periodicsbus = regroup_sbus(crystal.graph, classes, same_SBU_C)
+    if crystal.options.detect_paddlewheels
+        regroup_paddlewheel!(crystal.graph, sbus, crystal.types, periodicsbus)
+    end
 
     if length(sbus.sbus) == 1
         return sbus # This is an error but it will be handled at a higher level.
@@ -931,6 +1048,7 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
     else
         clusters.sbus
     end
+    n = length(sbus)
     if !isempty(crystal.options.export_attributions)
         path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")
         export_attributions(Crystal{Clusters}(crystal, clusters), path)
