@@ -35,11 +35,15 @@ function tmpexportname(path, pre, name, ext)
 end
 
 export_default(g::PeriodicGraph, args...; kwargs...) = export_default(CrystalNet(g), args...; kwargs...)
-function export_default(c, obj=string(typeof(c)), _name=nothing, path=tempdir(); repeats=6)
+function export_default(c, obj=nothing, _name=nothing, path=tempdir(); repeats=6)
     if !isempty(path)
-        name = tmpexportname(path, obj*'_', _name, ".vtf")
+        name = tmpexportname(path, (obj isa Nothing ? string(typeof(c)) : obj)*'_', _name, ".vtf")
         truepath = replace(joinpath(path, name), ('\\' => "/"))
-        println("Export of $obj is enabled: saving file at $truepath")
+        if obj isa Nothing
+            println("Saving file (representing $(typeof(c))) at $truepath")
+        else
+            println("Export of $obj is enabled: saving file at $truepath")
+        end
         try
             export_vtf(truepath, c, repeats)
         catch e

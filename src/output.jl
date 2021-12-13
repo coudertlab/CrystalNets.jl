@@ -36,6 +36,9 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
         for i in 1:n
             ty = c.types[i]
             sty = ty === Symbol("") ? string(i) : string(ty)
+            if length(sty) > 16
+                sty = sty[1:13]*"etc" # otherwise VMD fails to load the .vtf
+            end
             name = colorname ? get!(encounteredtypes, ty) do
                 string(numencounteredtypes+=1)
             end : string(i)
@@ -66,6 +69,9 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
             ofs = invcorres[i].ofs
             ty = c.types[v]
             sty = ty === Symbol("") ? string(i) : string(ty)
+            if length(sty) > 16
+                sty = sty[1:13]*"etc"
+            end
             name = colorname ? encounteredtypes[ty] : string(v)
             atomnum = atomnums[v]
             resid = colorname ? i : PeriodicGraphs.hash_position(ofs)
