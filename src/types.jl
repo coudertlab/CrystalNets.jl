@@ -521,6 +521,31 @@ end
 
 Base.isempty(c::Clusters) = c.attributions == 1:length(c.attributions)
 
+function Base.getindex(c::Clusters, vmap::AbstractVector{<:Integer})
+    rev_vmap = zeros(Int, length(c.attributions))
+    for (i, j) in enumerate(vmap)
+        rev_vmap[j] = i
+    end
+    sbus = Vector{PeriodicVertex3D}[]
+    sbu_vmap = Int[]
+    for (i, sbu) in enumerate(c.sbus)
+        newsbu = PeriodicVertex3D[]
+        for x in sbu
+            y = rev_vmap[x.v]
+            y == 0 && continue
+            push!(newsbu, PeriodicVertex3D(y, x.ofs))
+        end
+        if !isempty(sbu)
+            push!(sbu_vmap, i)
+            push!(sbus, newsbu)
+        end
+    end
+    offsets = [c.offsets[i] for i in vmap]
+    attributions = sbu_vmap[c.attributions[vmap]]
+    classes = c.classes[sbu_vmap]
+    return Clusters(sbus, classes, attributions, offsets)
+end
+
 ## Crystal
 
 """

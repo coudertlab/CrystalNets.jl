@@ -86,6 +86,42 @@ function find_sbus_naive(crystal)
 end
 
 
+function _trim_monovalent!(graph)
+    flag = true
+    vmap = collect(1:nv(graph))
+    while flag
+        flag = false
+        toremove = Int[]
+        for i in vertices(graph)
+            if degree(graph, i) ≤ 1
+                push!(toremove, i)
+            end
+        end
+        if !isempty(toremove)
+            flag = true
+            vmap = vmap[rem_vertices!(graph, toremove)]
+        end
+    end
+    return vmap
+end
+"""
+    trim_monovalent(crystal)
+
+Repeatedly remove monovalent atoms from the crystal until none is left.
+"""
+function trim_monovalent(crystal::Crystal{T}) where T
+    graph = deepcopy(crystal.graph)
+    vmap = _trim_monovalent!(graph)
+    types = crystal.types[vmap]
+    pos = crystal.pos[vmap]
+    if T === Nothing
+        return Crystal{Nothing}(crystal.cell, types, pos, graph, crystal.options)
+    else
+        clusters = crystal.clusters[vmap]
+        return Crystal{Clusters}(crystal.cell, types, clusters, pos, graph, crystal.options)
+    end
+end
+
 function delete_target_from_list!(l, v)
     len = length(l)
     for (j, x) in enumerate(l)
@@ -413,7 +449,7 @@ function reclassify_in_small_cycles!(classes, graph, pos, mat, Cclass, modifiabl
         end
         union!(handled, incycle)
     end
-    nothing
+    return !isempty(handled)
 end
 
 #=
@@ -497,8 +533,8 @@ function find_sbus(crystal, kinds=default_sbus)
     end
     @assert issorted(unclassified)
 
-    reclassify_in_small_cycles!(classes, crystal.graph, crystal.pos, crystal.cell.mat,
-                                kinds[:C], false_sbus(kinds))
+    has_heterocycle = reclassify_in_small_cycles!(classes, crystal.graph, crystal.pos,
+                                crystal.cell.mat, kinds[:C], false_sbus(kinds))
 
     unclassified = [i for i in 1:n if classes[i] ∈ kinds.tomerge]
     
@@ -587,7 +623,7 @@ function find_sbus(crystal, kinds=default_sbus)
                     end
                 end
                 m, M = extrema(numneighbors)
-                if m != M
+                if m != M && M != 1
                     for (x, num) in zip(sbu, numneighbors)
                         num == M || continue
                         incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class, x)
@@ -830,7 +866,8 @@ end
 Return the new crystal corresponding to the input where each cluster has been
 transformed into a new vertex.
 """
-function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.clustering_mode, _attempt=1)
+function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mode, _attempt=1)
+    crystal = trim_monovalent(c)
     clusters, clustering = find_clusters(crystal, mode)
     if clustering == ClusteringMode.EachVertex
         return Crystal{Nothing}(crystal; _pos=crystal.pos)
@@ -839,14 +876,16 @@ function coalesce_sbus(crystal::Crystal, mode::_ClusteringMode=crystal.options.c
     edgs = PeriodicEdge3D[]
     for s in vertices(crystal.graph)
         atts = clusters.attributions[s]
-        for x in neighbors(crystal.graph, s)
+        neigh0 = neighbors(crystal.graph, s)
+        @assert length(neigh0) ≥ 2
+        for x in neigh0
             d = x.v
-            if crystal.options.bond_adjacent_sbus && crystal.types[d] === :C
-                neighs = [u for u in neighbors(crystal.graph, d) if degree(crystal.graph, u.v) != 1]
+            if crystal.options.bond_adjacent_sbus && crystal.types[d] === :C && crystal.types[s] !== :C
+                neighs = neighbors(crystal.graph, d)
                 if length(neighs) > 2
                     for y in neighs
                         atty = clusters.attributions[y.v]
-                        atts == atty && continue
+                        (atts == atty || crystal.types[y.v] === :C) && continue
                         newofs = x.ofs .+ y.ofs .+ clusters.offsets[s] .- clusters.offsets[y.v]
                         push!(edgs, PeriodicEdge3D(atts, atty, newofs))
                     end
