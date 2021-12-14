@@ -364,10 +364,10 @@ function split_sbu!(sbus, graph, i_sbu, classes)
     return periodicsbus
 end
 
-function add_to_merge_or_newclass!(classes, mergeto, graph, sbus, periodicsbus, new_class, x)
+function add_to_merge_or_newclass!(classes, mergeto, graph, sbus, periodicsbus, new_class, v)
     otherattr = -1
     ofs = zero(SVector{3,Int})
-    for u in neighbors(graph, x.v)
+    for u in neighbors(graph, v)
         attr = sbus.attributions[u.v]
         if attr ∉ periodicsbus
             curr_ofs = sbus.offsets[u.v] .- u.ofs
@@ -381,12 +381,41 @@ function add_to_merge_or_newclass!(classes, mergeto, graph, sbus, periodicsbus, 
         end
     end
     if otherattr ≥ 0
-        mergeto[x.v] = (ofs, otherattr)
+        mergeto[v] = (ofs, otherattr)
         return false
-    else
-        classes[x.v] = new_class
-        return true
     end
+    classes[v] = new_class
+    current_attribution = sbus.attributions[v]
+    global_encountered = Set{Int}()
+    for u_init in neighbors(graph, v)
+        sbus.attributions[u_init.v] == current_attribution || continue
+        u_init.v ∈ global_encountered && continue
+        encountered = Set{Int}([v, u_init.v])
+        periodicflag = false
+        Q = [PeriodicVertex3D(u_init.v, sbus.offsets[u_init.v])]
+        while !isempty(Q)
+            u = pop!(Q)
+            for x in neighbors(graph, u.v)
+                sbus.attributions[x.v] == current_attribution || continue
+                if x.v == v
+                    push!(global_encountered, u.v)
+                end
+                if !periodicflag && sbus.offsets[x.v] != x.ofs .+ u.ofs
+                    periodicflag = true
+                end
+                if x.v ∉ encountered
+                    push!(encountered, x.v)
+                    push!(Q, x)
+                end
+            end
+        end
+        if !periodicflag
+            for x in encountered
+                classes[x] = new_class
+            end
+        end
+    end
+    return true
 end
 
 
@@ -743,7 +772,7 @@ function find_sbus(crystal, kinds=default_sbus)
                 if m != M && M != 1
                     for (x, num) in zip(sbu, numneighbors)
                         num == M || continue
-                        incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class, x)
+                        incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class, x.v)
                     end
                 else # always the same number of neighbors in different SBUs
                     # Abandon: atomize the SBU.
@@ -781,7 +810,7 @@ function find_sbus(crystal, kinds=default_sbus)
                 end
                 for (x, typ) in zip(sbu, composition)
                     typ == minority_element || continue
-                    incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class, x)
+                    incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class, x.v)
                 end
             end
 
