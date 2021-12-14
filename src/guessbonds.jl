@@ -43,7 +43,7 @@ function guess_bonds(pos, types, mat, options)
     typs = [atomic_numbers[t] for t in types]
     mof = options.clustering_mode == ClusteringMode.MOF ||
           options.clustering_mode == ClusteringMode.Guess
-    radii = [vdwradii[t]*(1 + mof*ismetal[t]*0.5) for t in typs]
+    radii = [vdwradii[t]*(1 + mof*ismetalormetalloid[t]*0.5) for t in typs]
     cutoff = 3*(options.cutoff_coeff^3.1) * max(maximum(radii), 0.833)
     cutoff2 = 13*options.cutoff_coeff/15
     n = length(pos)

@@ -340,6 +340,30 @@ function check_collision(pos, mat)
     return toremove
 end
 
+function fix_atom_on_a_bond!(graph, pos, mat)
+    for i in vertices(graph)
+        neighs = neighbors(graph, i)
+        flag = length(neighs) > 1
+        while flag
+            flag = false
+            p = pos[i]
+            for (j1, u1) in enumerate(neighs)
+                vec1 = mat * (pos[u1.v] .+ u1.ofs .- p)
+                for j2 in (j1+1):length(neighs)
+                    u2 = neighs[j2]
+                    vec2 = mat * (pos[u2.v] .+ u2.ofs .- p)
+                    if angle(vec1, vec2) < 10
+                        furthest = norm(vec1) < norm(vec2) ? u2 : u1
+                        rem_edge!(graph, i, furthest)
+                        flag = true
+                        break
+                    end
+                end
+                flag && break
+            end
+        end
+    end
+end
 
 
 """
@@ -410,27 +434,31 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}, op
     n = length(types)
     invalidatoms = Set{Symbol}()
     # First pass over H, since those are likely bonded to their closest neighbor
+    passO = Int[]
+    passCN = Int[]
     for i in 1:n
         t = types[i]
         if t === :H
             @reduce_valence 1
+        elseif t === :O
+            push!(passO, i)
+        elseif t === :C || t === :N
+            push!(passCN, i)
         end
     end
-    for i in 1:n
+    for i in passO
+        t = :O
+        if options.clustering_mode == ClusteringMode.MOF
+            @reduce_valence 0 4 # oxo-clusters
+        else
+            @reduce_valence 0 2
+        end
+    end
+    for i in passCN
         t = types[i]
-        if t === :O
-            if options.clustering_mode == ClusteringMode.MOF
-                @reduce_valence 0 4 # oxo-clusters
-            else
-                @reduce_valence 0 2
-            end
-        elseif t === :N
-            if options.clustering_mode == ClusteringMode.MOF
-                @reduce_valence 2 5
-            else
-                @reduce_valence 2 4
-            end
-        elseif t === :C
+        if options.clustering_mode == ClusteringMode.MOF
+            @reduce_valence 2 5
+        else
             @reduce_valence 2 4
         end
     end
@@ -442,22 +470,40 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}, op
 end
 
 """
-Special handling of C atoms suspiciously close to metallic atoms (can arise from an
-improper cleaning of the file)
+    sanitize_removeatoms!(graph, pos, types, mat)
+
+Special heuristics to remove atoms that seem to arise from an improper cleaning of the file.
+Currently implmented:
+- C atoms suspiciously close to metallic atoms.
+- O atoms with 4 coplanar bonds.
 """
-function sanitize_C_metal!(graph, pos, types, mat)
+function sanitize_removeatoms!(graph::PeriodicGraph{N}, pos, types, mat, options) where N
     toremove = Set{Int}()
-    for (i, typ) in enumerate(types)
-        ismetal[atomic_numbers[typ]] || continue
-        for u in neighbors(graph, i)
-            if types[u.v] === :C
-                u.v ∈ toremove && continue
-                bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
-                bondlength > 1.45 && continue
-                @ifwarn if isempty(toremove)
-                    @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed"
+    flag = true
+    dofix = true # for the @reduce_valence macro
+    for (i, t) in enumerate(types)
+        if t === :O
+            continue
+            @reduce_valence 0 4
+            # at this point, the valence is 4 since @reduce_valence would continue otherwise
+            neighs = neighbors(graph, i)
+            p = pos[i]
+            lengths = [norm(mat * (pos[u.v] .+ u.ofs .- p)) for u in neighs]
+            if flag && any(>(2.6), lengths)
+                @show options.name
+                flag = false
+            end
+        elseif ismetal[atomic_numbers[t]]
+            for u in neighbors(graph, i)
+                if types[u.v] === :C
+                    u.v ∈ toremove && continue
+                    bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
+                    bondlength > 1.45 && continue
+                    @ifwarn if isempty(toremove)
+                        @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed"
+                    end
+                    push!(toremove, u.v)
                 end
-                push!(toremove, u.v)
             end
         end
     end
@@ -467,6 +513,72 @@ function sanitize_C_metal!(graph, pos, types, mat)
         return false, Int[]
     end
     return true, rem_vertices!(graph, rem)
+end
+
+
+function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, options) where N
+    preprocessed = Dict{PeriodicEdge{N},Tuple{Float64,Bool}}()
+    removeedges = Dict{PeriodicEdge{N},Tuple{PeriodicEdge{N},PeriodicEdge{N}}}()
+    rev_removeedges = Dict{PeriodicEdge{N},Set{PeriodicEdge{N}}}()
+    toinvestigate = collect(edges(graph))
+    while !isempty(toinvestigate)
+        new_toinvestigate = Set{PeriodicEdge{N}}()
+        for e in toinvestigate
+            s, d = e.src, e.dst.v
+            bondlength, supcutoff = get!(preprocessed, e) do
+                cutoff = ismetal[atomic_numbers[types[s]]] || ismetal[atomic_numbers[types[d]]] ? 2.5 : 3.0
+                _bondlength = norm(mat * (pos[d] .+ e.dst.ofs .- pos[s]))
+                _bondlength, _bondlength > cutoff
+            end
+            if supcutoff
+                neigh_s = neighbors(graph, s)
+                neigh_d = [PeriodicVertex{N}(x.v, x.ofs .+ e.dst.ofs) for x in neighbors(graph, d)]
+                for x in intersect(neigh_s, neigh_d) # triangle
+                    l1 = norm(mat * (pos[x.v] .+ x.ofs .- pos[d] .- e.dst.ofs))
+                    l1 < bondlength || continue
+                    l2 = norm(mat * (pos[x.v] .+ x.ofs .- pos[s]))
+                    l2 < bondlength || continue
+                    if bondlength*bondlength > min(9.0, l1*l1 + l2*l2)
+                        e1 = PeriodicEdge(s, x)
+                        e1 = PeriodicGraphs.isindirectedge(e1) ? reverse(e1) : e1
+                        if haskey(removeedges, e1)
+                            push!(new_toinvestigate, e)
+                            continue
+                        end
+                        e2 = PeriodicEdge(d, x.v, .- e.dst.ofs .- x.ofs)
+                        e2 = PeriodicGraphs.isindirectedge(e2) ? reverse(e2) : e2
+                        if haskey(removeedges, e2)
+                            push!(new_toinvestigate, e)
+                            continue
+                        end
+                        removeedges[e] = (e1, e2)
+                        push!(get!(rev_removeedges, e1, Set{PeriodicEdge{N}}()), e)
+                        push!(get!(rev_removeedges, e2, Set{PeriodicEdge{N}}()), e)
+                        invalidate = get(rev_removeedges, e, nothing)
+                        if invalidate isa Set{PeriodicEdge{N}}
+                            # This means that e was part of some triangles but no longer exists
+                            for ex in invalidate
+                                ea, eb = removeedges[ex]
+                                ey = ea == e ? eb : ea
+                                delete!(rev_removeedges[ey], ex)
+                                delete!(removeedges, ex)
+                                push!(new_toinvestigate, ex)
+                            end
+                            delete!(rev_removeedges, e)
+                        end
+                        break
+                    end
+                end
+            end
+        end
+        for e in keys(removeedges)
+            rem_edge!(graph, e)
+        end
+        empty!(removeedges)
+        empty!(rev_removeedges)
+        toinvestigate = collect(new_toinvestigate)
+    end
+    return preprocessed
 end
 
 """
@@ -481,26 +593,12 @@ function sanity_checks!(graph, pos, types, mat, options)
     smallbondsflag = false
     removeedges = PeriodicEdge3D[]
     alreadywarned = Set{Tuple{Symbol,Symbol,Float16}}()
+    preprocessed = remove_triangles!(graph, pos, types, mat, options)
     for e in edges(graph)
         s, d = e.src, e.dst.v
-        bondlength = norm(mat * (pos[d] .+ e.dst.ofs .- pos[s]))
-        cutoff = ismetal[atomic_numbers[types[s]]] || ismetal[atomic_numbers[types[d]]] ? 2.5 : 3
-        if bondlength > cutoff # This bond could be spurious
-            keptbond = true
-            neigh_s = neighbors(graph, s)
-            neigh_d = [PeriodicVertex(x.v, x.ofs .+ e.dst.ofs) for x in neighbors(graph, d)]
-            for x in intersect(neigh_s, neigh_d) # triangle
-                l1 = norm(mat * (pos[x.v] .+ x.ofs .- pos[d] .- e.dst.ofs))
-                l1 < bondlength || continue
-                l2 = norm(mat * (pos[x.v] .+ x.ofs .- pos[s]))
-                l2 < bondlength || continue
-                if bondlength*bondlength > min(9.0, l1*l1 + l2*l2)
-                    push!(removeedges, e)
-                    keptbond = false
-                    break
-                end
-            end
-            if keptbond && bondlength > 3 && options.cutoff_coeff ≤ 0.8
+        bondlength, supcutoff = preprocessed[e]
+        if supcutoff # This bond could be spurious
+            if bondlength > 3 && options.cutoff_coeff ≤ 0.8
                 (order_s, order_d), blength = minmax(types[s], types[d]), Float16(bondlength)
                 if (order_s, order_d, blength) ∉ alreadywarned
                     push!(alreadywarned, (order_s, order_d, blength))
@@ -678,7 +776,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
     graph = PeriodicGraph3D(n, edges_from_bonds(bonds, mat, pos))
 
     if options.bonding_mode != BondingMode.Input
-        do_permutation, vmap = sanitize_C_metal!(graph, pos, types, mat)
+        do_permutation, vmap = sanitize_removeatoms!(graph, pos, types, mat, options)
         if do_permutation
             types = types[vmap]
             pos = pos[vmap]
@@ -686,6 +784,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
                 attributions = attributions[vmap]
             end
         end
+        fix_atom_on_a_bond!(graph, pos, mat)
         bad_valence = !isempty(fix_valence!(graph, pos, types, mat, Val(false), options))
         recompute_bonds = bad_valence || sanity_checks!(graph, pos, types, mat, options)
         if recompute_bonds
