@@ -917,7 +917,7 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol},
         error(ArgumentError("Multiple intertwinned $D-dimensional structures. Cannot handle this as a single CrystalNet, use CrystalNetGroup instead."))
     end
     @separategroups D group begin
-        return last(only(group))
+        return last(first(group))
     end
 end
 
