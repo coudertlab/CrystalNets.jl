@@ -107,7 +107,12 @@ end
 
 function export_cif(file, c::Union{Crystal, CIF})
     mkpath(splitdir(file)[1])
-    info = c isa CIF ? copy(c.cifinfo) : Dict{String,Union{String,Vector{String}}}("data"=>last(splitdir(file)))
+    info = if c isa CIF
+        c = expand_symmetry(c)
+        copy(c.cifinfo)
+    else
+        Dict{String,Union{String,Vector{String}}}("data"=>last(splitdir(file)))
+    end
     loops = Dict{Int, Tuple{Vector{String}, Vector{Vector{String}}}}()
     open(file, write=true) do f
         print(f, "data_"); println(f, pop!(info, "data")*"\n\n")
@@ -139,19 +144,16 @@ function export_cif(file, c::Union{Crystal, CIF})
         _cell_angle_beta\t\t$β
         _cell_angle_gamma\t\t$γ
 
-        _symmetry_space_group_name_H-M\t'$(c.cell.spacegroup)'""")
-        if c.cell.tablenumber != 0
-            println(f, "_symmetry_Int_Tables_number\t$(c.cell.tablenumber)")
-        end
-        if c.cell.latticesystem !== Symbol("")
-            println(f, "_symmetry_cell_setting\t$(c.cell.latticesystem)")
-        end
+        _symmetry_space_group_name_H-M\t'P 1'
+        _symmetry_Int_Tables_number\t1
+        _symmetry_cell_setting\ttriclinic
+        """)
 
         println(f, """
-
         loop_
         _symmetry_equiv_pos_as_xyz
         x,y,z""")
+
         for eq in c.cell.equivalents
             println(f, eq)
         end
@@ -165,7 +167,7 @@ function export_cif(file, c::Union{Crystal, CIF})
                 ["atom_site_label", "atom_site_type_symbol",
                  "atom_site_fract_x", "atom_site_fract_y", "atom_site_fract_z"])
         labels = String[string(c.types[c isa CIF ? c.ids[i] : i])*string(i) for i in 1:n]
-        pos = string.(round.(c.pos; sigdigits=6))
+        pos = string.(round.(reduce(hcat, c.pos); sigdigits=6))
         append!(loops[n][2], [labels, string.(c.types[x] for x in (c isa CIF ? c.ids : collect(1:n))),
                 pos[1,:], pos[2,:], pos[3,:]])
 
