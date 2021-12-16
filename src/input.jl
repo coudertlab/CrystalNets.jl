@@ -677,7 +677,7 @@ function parse_as_cif(cif::CIF, options, name)
         push!(pos, cif.pos[:,i])
         #push!(pos, cif.cell.mat * cif.pos[:,i])
     end
-    if all(==(Inf32), cif.bonds)
+    if all(==(Inf32), cif.bonds) || options.bonding_mode == BondingMode.Guess
         if options.bonding_mode == BondingMode.Input
             throw(ArgumentError("Cannot use input bonds since there are none. Use another option for --bonds-detect or provide bonds in the CIF file."))
         end

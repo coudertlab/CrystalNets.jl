@@ -197,6 +197,8 @@ function Cell(hall, (a, b, c), (α, β, γ), eqs=EquivalentPosition[])
                                   0   0       c*ω/sinγ ])
     if isempty(eqs)
         eqs = get_symmetry_equivalents(hall)
+        id = popfirst!(eqs)
+        @assert isone(id.mat) && iszero(id.ofs)
     end
     return Cell(hall, mat, eqs)
 end
