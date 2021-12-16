@@ -843,26 +843,50 @@ function find_sbus(crystal, kinds=default_sbus)
                     else
                         Set{Symbol}(metallics)
                     end
-                    _classof = if length(_singulars) == 1
-                        el = first(_singulars)
-                        degrees = Set{Int}()
-                        for x in sbu
-                            if crystal.types[x.v] === el
-                                push!(degrees, degree(crystal.graph, x.v))
+                    max_degree = 0
+                    max_degree_types = Set{Symbol}()
+                    min_degree = 16
+                    min_degree_per_type = Dict{Symbol,Int}([t => 16 for t in _singulars])
+                    for x in sbu
+                        _typ = crystal.types[x.v]
+                        if _typ ∈ _singulars
+                            deg = degree(crystal.graph, x.v)
+                            if deg ≥ max_degree
+                                if deg == max_degree
+                                    push!(max_degree_types, _typ)
+                                else
+                                    max_degree = deg
+                                    empty!(max_degree_types)
+                                    push!(max_degree_types, _typ)
+                                end
+                            end
+                            _min_degree = min_degree_per_type[_typ]
+                            if deg < _min_degree
+                                min_degree_per_type[_typ] = deg
+                                min_degree = min(min_degree, deg)
                             end
                         end
-                        _m2, _M2 = extrema(degrees)
-                        if _m2 == _M2
-                            Dict{Symbol,Int}(el => 0)
+                    end
+                    _classof::Dict{Symbol,Int} = if min_degree == max_degree
+                        if length(_singulars) == 1
+                            Dict{Symbol,Int}(first(_singulars) => 0)
                         else
-                            Dict{Symbol,Int}(el => -_M2)
+                            __classof = Vector{Pair{Symbol,Int}}(undef, length(_singulars))
+                            for (i, t) in enumerate(_singulars)
+                                new_class += 1
+                                __classof[i] = (t => new_class)
+                            end
+                            Dict{Symbol,Int}(__classof)
                         end
                     else
                         __classof = Vector{Pair{Symbol,Int}}(undef, length(_singulars))
                         for (i, t) in enumerate(_singulars)
-                            new_class += 1
-                            __classof[i] = (t => new_class)
-                        end                            
+                            __classof[i] = (t => if t ∈ max_degree_types
+                                m = max_degree == min_degree_per_type[t] ? 0 : -max_degree
+                            else
+                                -1
+                            end)
+                        end
                         Dict{Symbol,Int}(__classof)
                     end
                     #if crystal.options.unify_sbu_decomposition
@@ -875,44 +899,32 @@ function find_sbus(crystal, kinds=default_sbus)
                         end
                         append!(list_periodicsbus, setdiff(toadd, periodicsbus))
                     #end
+                    # @show _classof
                     _classof
                 end
 
                 composition = compositions[i_sbu]
-                if length(classof) == 1
-                    el, val = first(classof)
-                    if val < 0 # A kind of atom designated by its type and degree is selected
-                        new_class += 1
-                        val = -val
-                        @assert val > 2
-                        # targets = Int[]
-                        handled = Int[]
-                        for (i, (x, typ)) in enumerate(zip(sbu, compositions[i_sbu]))
-                            (typ === el && degree(crystal.graph, x.v) == val) || continue
-                            # push!(targets, x.v)
-                            push!(handled, i)
-                            classes[x.v] = new_class
-                        end
-                        #=for v in targets
-                            for x in neighbors(crystal.graph, v)
-                                flag = true
-                                for y in neighbors(crystal.graph, x.v)
-                                    y.v == v && continue
-                                    if classes[y.v] == new_class
-                                        flag = false
-                                        break
-                                    end
-                                end
-                                if flag
-                                    classes[x.v] = new_class
-                                end
+                if first(classof)[2] ≤ 0
+                    for (t, val) in classof
+                        if val < -1
+                            # A kind of atom designated by its type and degree is selected
+                            new_class += 1
+                            val = -val
+                            @assert length(_singulars) == 1 || val > 2
+                            # targets = Int[]
+                            handled = Int[]
+                            for (i, (x, typ)) in enumerate(zip(sbu, composition))
+                                (typ === t && degree(crystal.graph, x.v) == val) || continue
+                                # push!(targets, x.v)
+                                push!(handled, i)
+                                classes[x.v] = new_class
                             end
-                        end=#
-                        new_class += 1
-                        classof[el] = new_class # class of the atoms of type `el` but with degree != val
-                        deleteat!(composition, handled)
-                        sbu = copy(sbu)
-                        deleteat!(sbu, handled)
+                            new_class += 1
+                            classof[t] = new_class # class of the atoms of type `t` but with degree != val
+                            deleteat!(composition, handled)
+                            sbu = copy(sbu)
+                            deleteat!(sbu, handled)
+                        end
                     end
                 end
                 for (x, typ) in zip(sbu, composition)
