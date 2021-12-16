@@ -365,6 +365,105 @@ function split_sbu!(sbus, graph, i_sbu, classes)
 end
 
 """
+reclassify!(classes, graph, sbus, new_class, types, classof, sbu)
+
+Reclassify the atoms of `sbu` according to the following algorithm:
+- Let's call "target atom" any atom of type `typ` where `(typ => deg) ∈ classof` and either
+  `deg == 0` or `deg > 0` and the degree of the atom is `deg`.
+- Assign a new SBU for each target atom (one new per atom).
+- Look at the connected components of atoms in `sbu` which are not target atoms.
+  For each connected component that is finite (aperiodic) and has only one neighbor
+  which is a target atom, put that component in the same SBU as the neighbor.
+"""
+function reclassify!(sbus, newperiodicsbus, newclass, graph, types, classof, i_sbu)
+    @show classof
+    sbu = sbus.sbus[i_sbu]
+    targets = Dict{Int,Int}() # New SBU number of each target atom
+    newsbus = Vector{PeriodicVertex3D}[]
+    handled = Set{Int}()
+    for u_init in sbu
+        v = u_init.v
+        deg = get(classof, types[v], -1)
+        deg == -1 && continue
+        if deg == 0 || degree(graph, v) == deg
+            push!(newsbus, [PeriodicVertex3D(v)])
+            targets[v] = length(newsbus)
+            push!(handled, v)
+        end
+    end
+    @assert !isempty(newsbus)
+    max_inclassof_sbu_counter = length(newsbus)
+    periodicsbus = Int[]
+    for u_init in sbu
+        v_init = u_init.v
+        v_init ∈ handled && continue
+        sbu_counter = length(newsbus)
+        seeninthissbu = Dict{Int, SVector{3,Int}}(v_init => zero(SVector{3,Int}))
+        Q::Vector{PeriodicVertex3D} = [PeriodicVertex3D(v_init)]
+        periodicsbuflag = false
+        newsbu_neighbors = Set{Pair{Int,SVector{3,Int}}}()
+        for u in Q
+            for x in neighbors(graph, u.v)
+                sbus.attributions[x.v] == i_sbu || continue
+                seenofs = get(seeninthissbu, x.v, nothing)
+                if seenofs isa SVector{3,Int}
+                    if !periodicsbuflag && u.ofs .+ x.ofs != seenofs
+                        periodicsbuflag = true
+                    end
+                    continue
+                end
+                targetsbu = get(targets, x.v, 0)
+                newofs = u.ofs .+ x.ofs
+                if targetsbu != 0
+                    push!(newsbu_neighbors, (targetsbu => .-newofs))
+                else
+                    seeninthissbu[x.v] = newofs
+                    push!(Q, PeriodicVertex3D(x.v, u.ofs .+ x.ofs))
+                end
+            end
+        end
+        newsbu = [PeriodicVertex3D(x, o) for (x, o) in seeninthissbu]
+        union!(handled, keys(seeninthissbu))
+        if periodicsbuflag
+            push!(periodicsbus, length(sbus.sbus) + sbu_counter)
+        elseif length(newsbu_neighbors) == 1
+            targetsbu, ofs = first(newsbu_neighbors)
+            append!(newsbus[targetsbu], [PeriodicVertex3D(x.v, x.ofs .+ ofs) for x in newsbu])
+            continue
+        end
+        push!(newsbus, newsbu)
+    end
+
+    curr_class = sbus.classes[i_sbu]
+    for i in 1:length(newsbus)
+        sbu = newsbus[i]
+        this_new_class = i > max_inclassof_sbu_counter ? newclass : curr_class
+        idx = if i < length(newsbus)
+            push!(sbus.sbus, sbu)
+            push!(sbus.classes, this_new_class)
+            length(sbus.sbus)
+        else
+            sbus.sbus[i_sbu] = sbu
+            sbus.classes[i_sbu] = this_new_class
+            i_sbu
+        end
+
+        for x in sbu
+            sbus.attributions[x.v] = idx
+            sbus.offsets[x.v] = x.ofs
+        end
+    end
+
+    if !isempty(periodicsbus)
+        if periodicsbus[end] == length(sbus.sbus) + 1
+            periodicsbus[end] = i_sbu
+        end
+        union!(newperiodicsbus, periodicsbus)
+    end
+    return length(newsbus) > max_inclassof_sbu_counter
+end
+
+"""
     add_to_newclass!(classes, graph, sbus, new_class, v, types, noneighborof)
 
 Set the class of `v` to `new_class`. Then, grow the newly created class by adding connected
@@ -795,6 +894,7 @@ function find_sbus(crystal, kinds=default_sbus)
         unique_compositions = [unique!(sort(x)) for x in compositions]
         elements_for_composition = Vector{Dict{Symbol,Int}}(undef, length(sbus.sbus))
         list_periodicsbus = collect(periodicsbus)
+        newperiodicsbus = Set{Int}()
         for i_sbu in list_periodicsbus
             sbu = sbus.sbus[i_sbu]
             uniquecompo = unique_compositions[i_sbu]
@@ -823,6 +923,17 @@ function find_sbus(crystal, kinds=default_sbus)
                         classes[x.v] = new_class
                     end
                 end
+
+                for (v, (ofs, attr)) in mergeto
+                    sbus.attributions[v] = attr
+                    delete_target_from_list!(sbu, v)
+                    push!(sbus.sbus[attr], PeriodicVertex(v, ofs))
+                    sbus.offsets[v] = ofs
+                end
+                new_class += incr_newclass
+
+                union!(newperiodicsbus, split_sbu!(sbus, crystal.graph, i_sbu, classes))
+
             else # multiple types
                 classof::Dict{Symbol,Int} = if isassigned(elements_for_composition, i_sbu)
                     @inbounds elements_for_composition[i_sbu]
@@ -868,21 +979,15 @@ function find_sbus(crystal, kinds=default_sbus)
                         end
                     end
                     _classof::Dict{Symbol,Int} = if min_degree == max_degree
-                        if length(_singulars) == 1
-                            Dict{Symbol,Int}(first(_singulars) => 0)
-                        else
-                            __classof = Vector{Pair{Symbol,Int}}(undef, length(_singulars))
-                            for (i, t) in enumerate(_singulars)
-                                new_class += 1
-                                __classof[i] = (t => new_class)
-                            end
-                            Dict{Symbol,Int}(__classof)
-                        end
+                        Dict{Symbol,Int}([(t => 0) for t in _singulars])
                     else
+                        anyeq = any(t -> min_degree_per_type[t] == max_degree,
+                                      max_degree_types)
                         __classof = Vector{Pair{Symbol,Int}}(undef, length(_singulars))
                         for (i, t) in enumerate(_singulars)
                             __classof[i] = (t => if t ∈ max_degree_types
-                                m = max_degree == min_degree_per_type[t] ? 0 : -max_degree
+                                max_degree == min_degree_per_type[t] ? 0 : anyeq ?
+                                    -1 : max_degree
                             else
                                 -1
                             end)
@@ -903,54 +1008,12 @@ function find_sbus(crystal, kinds=default_sbus)
                     _classof
                 end
 
-                composition = compositions[i_sbu]
-                if first(classof)[2] ≤ 0
-                    for (t, val) in classof
-                        if val < -1
-                            # A kind of atom designated by its type and degree is selected
-                            new_class += 1
-                            val = -val
-                            @assert length(_singulars) == 1 || val > 2
-                            # targets = Int[]
-                            handled = Int[]
-                            for (i, (x, typ)) in enumerate(zip(sbu, composition))
-                                (typ === t && degree(crystal.graph, x.v) == val) || continue
-                                # push!(targets, x.v)
-                                push!(handled, i)
-                                classes[x.v] = new_class
-                            end
-                            new_class += 1
-                            classof[t] = new_class # class of the atoms of type `t` but with degree != val
-                            deleteat!(composition, handled)
-                            sbu = copy(sbu)
-                            deleteat!(sbu, handled)
-                        end
-                    end
-                end
-                for (x, typ) in zip(sbu, composition)
-                    this_new_class = get(classof, typ, -1)
-                    this_new_class == -1 && continue
-                    if this_new_class == 0
-                        new_class += 1
-                        this_new_class = new_class
-                    end
-                    add_to_newclass!(classes, crystal.graph, sbus, this_new_class, x.v, crystal.types, keys(classof))
-                end
-            end
+                new_class += reclassify!(sbus, newperiodicsbus, new_class, crystal.graph,
+                                         crystal.types, classof, i_sbu)
 
-            for (v, (ofs, attr)) in mergeto
-                sbus.attributions[v] = attr
-                delete_target_from_list!(sbu, v)
-                push!(sbus.sbus[attr], PeriodicVertex(v, ofs))
-                sbus.offsets[v] = ofs
             end
-            new_class += incr_newclass
         end
 
-        newperiodicsbus = Set{Int}()
-        for i_sbu in list_periodicsbus
-            union!(newperiodicsbus, split_sbu!(sbus, crystal.graph, i_sbu, classes))
-        end
         periodicsbus = newperiodicsbus
 #        export_default(Crystal{Nothing}(crystal.cell, Symbol.(classes), crystal.pos, crystal.graph, crystal.options))
     end
