@@ -384,7 +384,7 @@ function add_to_newclass!(classes, graph, sbus, new_class, v, types, noneighboro
         u_init.v ∈ global_encountered && continue
         if types isa Vector{Symbol}
             typ = types[u_init.v]
-            typ != typv && typ ∈ noneighborof && continue
+            typ !== typv && typ ∈ noneighborof && continue
         end
         encountered = Set{Int}([v, u_init.v])
         forbidden = Set{Int}()
@@ -395,13 +395,13 @@ function add_to_newclass!(classes, graph, sbus, new_class, v, types, noneighboro
             u = pop!(Q)
             for x in neighbors(graph, u.v)
                 sbus.attributions[x.v] == current_attribution || continue
+                if !periodicflag && x.ofs .+ u.ofs != init_offset
+                    periodicflag = true
+                end
                 if x.v == v
                     push!(global_encountered, u.v)
                     #if types isa Vector{Symbol} && 
                     #push!(authorized, u.v)
-                    if !periodicflag && x.ofs .+ u.ofs != init_offset
-                        periodicflag = true
-                    end
                 else
                     condition = x.v ∉ encountered
                     if condition && types isa Vector{Symbol}
@@ -787,7 +787,7 @@ function find_sbus(crystal, kinds=default_sbus)
         return sbus # This is an error but it will be handled at a higher level.
     end
 
-    new_class = length(kinds)
+    new_class::Int = length(kinds)
     while !isempty(periodicsbus)
         incr_newclass = false
         mergeto = Dict{Int,Tuple{SVector{3,Int},Int}}() # List of atoms to merge to the neighboring SBU
@@ -805,10 +805,10 @@ function find_sbus(crystal, kinds=default_sbus)
                         numneighbors[i] += sbus.attributions[u.v] != i_sbu
                     end
                 end
-                m, M = extrema(numneighbors)
-                if m != M && M != 1
+                _m, _M = extrema(numneighbors)
+                if _m != _M && _M != 1
                     for (x, num) in zip(sbu, numneighbors)
-                        num == M || continue
+                        num == _M || continue
                         incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class+1, x.v)
                     end
                 else # always the same number of neighbors in different SBUs
@@ -819,7 +819,8 @@ function find_sbus(crystal, kinds=default_sbus)
                     end
                     # Abandon: atomize the SBU.
                     for x in sbu
-                        classes[x.v] = (new_class+=1)
+                        new_class += 1
+                        classes[x.v] = new_class
                     end
                 end
             else # multiple types
@@ -850,14 +851,19 @@ function find_sbus(crystal, kinds=default_sbus)
                                 push!(degrees, degree(crystal.graph, x.v))
                             end
                         end
-                        _m, _M = extrema(degrees)
-                        if _m == _M
+                        _m2, _M2 = extrema(degrees)
+                        if _m2 == _M2
                             Dict{Symbol,Int}(el => 0)
                         else
-                            Dict{Symbol,Int}(el => -_M)
+                            Dict{Symbol,Int}(el => -_M2)
                         end
                     else
-                        Dict{Symbol,Int}([t => (new_class+=1) for t in _singulars])
+                        __classof = Vector{Pair{Symbol,Int}}(undef, length(_singulars))
+                        for (i, t) in enumerate(_singulars)
+                            new_class += 1
+                            __classof[i] = (t => new_class)
+                        end                            
+                        Dict{Symbol,Int}(__classof)
                     end
                     #if crystal.options.unify_sbu_decomposition
                         toadd = Int[]
@@ -902,7 +908,8 @@ function find_sbus(crystal, kinds=default_sbus)
                                 end
                             end
                         end=#
-                        classof[el] = (new_class+=1) # class of the atoms of type `el` but with degree != val
+                        new_class += 1
+                        classof[el] = new_class # class of the atoms of type `el` but with degree != val
                         deleteat!(composition, handled)
                         sbu = copy(sbu)
                         deleteat!(sbu, handled)
@@ -911,7 +918,10 @@ function find_sbus(crystal, kinds=default_sbus)
                 for (x, typ) in zip(sbu, composition)
                     this_new_class = get(classof, typ, -1)
                     this_new_class == -1 && continue
-                    this_new_class == 0 && (this_new_class = (new_class+=1))
+                    if this_new_class == 0
+                        new_class += 1
+                        this_new_class = new_class
+                    end
                     add_to_newclass!(classes, crystal.graph, sbus, this_new_class, x.v, crystal.types, keys(classof))
                 end
             end
@@ -1084,20 +1094,42 @@ function find_sbus(crystal, kinds=default_sbus)
     return sbus
 end
 
+function _split_this_sbu!(toremove, graph, k)
+    push!(toremove, k)
+    neighs = reverse(neighbors(graph, k))
+    n = length(neighs)
+    for (i, x) in enumerate(neighs)
+        for j in (i+1):n
+            y = neighs[j]
+            add_edge!(graph, x.v, PeriodicVertex(y.v, y.ofs .- x.ofs))
+        end
+    end
+end
 
-function split_O_sbu!(graph, sbus, types)
+function split_special_sbu!(graph, sbus, types)
     toremove = Int[]
     for (k, sbu) in enumerate(sbus)
         length(sbu) == 1 || continue
         a = first(sbu).v
-        types[a] === :O || continue
-        push!(toremove, k)
-        neighs = reverse(neighbors(graph, k))
-        n = length(neighs)
-        for (i, x) in enumerate(neighs)
-            for j in (i+1):n
-                y = neighs[j]
-                add_edge!(graph, x.v, PeriodicVertex(y.v, y.ofs .- x.ofs))
+        typ = types[a]
+        if types[a] === :O
+            _split_this_sbu!(toremove, graph, k)
+        else
+            flag = typ === :C
+            if !flag
+                strty = string(typ)
+                if length(strty) ≥ 2 && strty[1] == 'C' && !('1' <= strty[2] <= '9')
+                    flag = true
+                    for c in strty[2:end]
+                        if c != 'O' && c != 'N' && !('1' <= strty[2] <= '6')
+                            flag = false
+                            break
+                        end
+                    end
+                end
+            end
+            if flag
+                _split_this_sbu!(toremove, graph, k)
             end
         end
     end
@@ -1117,6 +1149,8 @@ transformed into a new vertex.
 """
 function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mode, _attempt=1)
     crystal = trim_monovalent(c)
+    export_default(crystal, "trimmed", crystal.options.name,
+                   crystal.options.export_input; repeats=2)
     clusters, clustering = find_clusters(crystal, mode)
     if clustering == ClusteringMode.EachVertex
         return Crystal{Nothing}(crystal; _pos=crystal.pos)
@@ -1176,7 +1210,7 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
         throw(EmptyGraphException())
     end
     sbus = if clustering == ClusteringMode.MOF
-        clusters.sbus[split_O_sbu!(graph, clusters.sbus, crystal.types)]
+        clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.types)]
     else
         clusters.sbus
     end
