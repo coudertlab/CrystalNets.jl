@@ -330,6 +330,7 @@ function split_sbu!(sbus, graph, i_sbu, classes)
     explored = Set{Int}()
     while true
         _u = only(toexplore)
+        @assert iszero(_u.ofs)
         class = classes[_u.v]
         push!(explored, _u.v)
         sbus.offsets[_u.v] = _u.ofs
@@ -376,7 +377,6 @@ Reclassify the atoms of `sbu` according to the following algorithm:
   which is a target atom, put that component in the same SBU as the neighbor.
 """
 function reclassify!(sbus, newperiodicsbus, newclass, graph, types, classof, i_sbu)
-    @show classof
     sbu = sbus.sbus[i_sbu]
     targets = Dict{Int,Int}() # New SBU number of each target atom
     newsbus = Vector{PeriodicVertex3D}[]
@@ -391,13 +391,12 @@ function reclassify!(sbus, newperiodicsbus, newclass, graph, types, classof, i_s
             push!(handled, v)
         end
     end
-    @assert !isempty(newsbus)
+    isempty(newsbus) && return false
     max_inclassof_sbu_counter = length(newsbus)
     periodicsbus = Int[]
     for u_init in sbu
         v_init = u_init.v
         v_init ∈ handled && continue
-        sbu_counter = length(newsbus)
         seeninthissbu = Dict{Int, SVector{3,Int}}(v_init => zero(SVector{3,Int}))
         Q::Vector{PeriodicVertex3D} = [PeriodicVertex3D(v_init)]
         periodicsbuflag = false
@@ -425,7 +424,7 @@ function reclassify!(sbus, newperiodicsbus, newclass, graph, types, classof, i_s
         newsbu = [PeriodicVertex3D(x, o) for (x, o) in seeninthissbu]
         union!(handled, keys(seeninthissbu))
         if periodicsbuflag
-            push!(periodicsbus, length(sbus.sbus) + sbu_counter)
+            push!(periodicsbus, length(sbus.sbus) + length(newsbus) + 1)
         elseif length(newsbu_neighbors) == 1
             targetsbu, ofs = first(newsbu_neighbors)
             append!(newsbus[targetsbu], [PeriodicVertex3D(x.v, x.ofs .+ ofs) for x in newsbu])
@@ -476,7 +475,7 @@ function add_to_newclass!(classes, graph, sbus, new_class, v, types, noneighboro
     classes[v] = new_class
     current_attribution = sbus.attributions[v]
     global_encountered = Set{Int}()
-    init_offset = sbus.offsets[v]
+    init_offset = zero(SVector{3,Int})
     typv = types isa Vector{Symbol} ? types[v] : Symbol("")
     for u_init in neighbors(graph, v)
         sbus.attributions[u_init.v] == current_attribution || continue
@@ -487,9 +486,9 @@ function add_to_newclass!(classes, graph, sbus, new_class, v, types, noneighboro
         end
         encountered = Set{Int}([v, u_init.v])
         forbidden = Set{Int}()
-        authorized = Set{Int}()
+        #authorized = Set{Int}()
         periodicflag = false
-        Q = [PeriodicVertex3D(u_init.v, sbus.offsets[u_init.v])]
+        Q = [u_init]
         while !isempty(Q)
             u = pop!(Q)
             for x in neighbors(graph, u.v)
@@ -520,7 +519,8 @@ function add_to_newclass!(classes, graph, sbus, new_class, v, types, noneighboro
             end
         end
         if !periodicflag
-            for x in union!(authorized, setdiff!(encountered, forbidden))
+            #for x in union!(authorized, setdiff!(encountered, forbidden))
+            for x in setdiff!(encountered, forbidden)
                 classes[x] = new_class
             end
         end
@@ -533,11 +533,10 @@ function add_to_merge_or_newclass!(classes, mergeto, graph, sbus, periodicsbus, 
     for u in neighbors(graph, v)
         attr = sbus.attributions[u.v]
         if attr ∉ periodicsbus
-            curr_ofs = sbus.offsets[u.v] .- u.ofs
             if otherattr == -1
                 otherattr = attr
-                ofs = curr_ofs
-            elseif otherattr != attr || ofs != curr_ofs
+                ofs = sbus.offsets[u.v] .- u.ofs
+            elseif otherattr != attr || ofs != sbus.offsets[u.v] .- u.ofs
                 otherattr = -2
                 break
             end
@@ -798,7 +797,7 @@ function find_sbus(crystal, kinds=default_sbus)
                 Please use a file format containing at least the atom types and in order to use MOF reckognition.
                 """))
             else
-                throw(MissingAtomInformation("unhandled atom type: $category (for atom $atom_name)."))
+                throw(MissingAtomInformation("unhandled atom type: $(element_categories[atomic_numbers[atom_name]]) (for atom $atom_name)."))
             end
         end
         classes[i] = class
@@ -941,7 +940,7 @@ function find_sbus(crystal, kinds=default_sbus)
                     _ats = [atomic_numbers[k] for k in uniquecompo]
                     metallics = [k for (at, k) in zip(_ats, uniquecompo) if ismetal[at]]
                     if isempty(metallics)
-                        metallics = [k for (at, k) in zip(_ats, uniquecompo) if ismetalormetalloid[at]]
+                        metallics = [k for (at, k) in zip(_ats, uniquecompo) if ismetalloid[at]]
                     end
                     _singulars = if isempty(metallics)
                         # pick the least represented to make a new class

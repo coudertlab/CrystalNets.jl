@@ -23,15 +23,13 @@ const ismetal = Bool[0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1,
                      1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1]
 
-# Si is considered not to be a metalloid below to allow Si-Si bonds
-const ismetalormetalloid = Bool[0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
-                                0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                1, 1, 1, 1, 0, 0, 1]
+const ismetalloid = Bool[0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 
 function guess_bonds(pos, types, mat, options)
@@ -44,7 +42,7 @@ function guess_bonds(pos, types, mat, options)
     typs = [atomic_numbers[t] for t in types]
     mof = options.clustering_mode == ClusteringMode.MOF ||
           options.clustering_mode == ClusteringMode.Guess
-    radii = [vdwradii[t]*(1 + mof*ismetalormetalloid[t]*0.5) for t in typs]
+    radii = [vdwradii[t]*(1 + mof*(ismetal[t]|ismetalloid[t])*0.5) for t in typs]
     cutoff = 3*(options.cutoff_coeff^3.1) * max(maximum(radii), 0.833)
     cutoff2 = 13*options.cutoff_coeff/15
     n = length(pos)
@@ -52,11 +50,16 @@ function guess_bonds(pos, types, mat, options)
         radius_i = radii[i]
         posi = pos[i]
         typi = types[i]
+        #ignoreifmetallic = typi === :C
+        #ignoreifC = ismetal[atomic_numbers[typi]]
         skiphomoatomic = typi ∈ options.ignore_homoatomic_bonds ||
                          (options.ignore_homometallic_bonds &&
-                          ismetalormetalloid[atomic_numbers[typi]])
+                          ismetal[atomic_numbers[typi]])
         for j in (i+1):n
+            #typj = types[j]
             skiphomoatomic && types[j] === typi && continue
+            #(ignoreifC & (typj === :C)) && continue
+            #ignoreifmetallic && ismetal[atomic_numbers[typj]] && continue
             radius_j = radii[j]
             posj = pos[j]
             d1 = periodic_distance(posi, posj, mat)
