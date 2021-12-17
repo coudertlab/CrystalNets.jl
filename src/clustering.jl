@@ -377,12 +377,11 @@ Reclassify the atoms of `sbu` according to the following algorithm:
   which is a target atom, put that component in the same SBU as the neighbor.
 """
 function reclassify!(sbus, newperiodicsbus, newclass, graph, types, classof, i_sbu)
-    sbu = sbus.sbus[i_sbu]
+    thissbu = Set{Int}(x.v for x in sbus.sbus[i_sbu])
     targets = Dict{Int,Int}() # New SBU number of each target atom
     newsbus = Vector{PeriodicVertex3D}[]
     handled = Set{Int}()
-    for u_init in sbu
-        v = u_init.v
+    for v in thissbu
         deg = get(classof, types[v], -1)
         deg == -1 && continue
         if deg == 0 || degree(graph, v) == deg
@@ -392,45 +391,70 @@ function reclassify!(sbus, newperiodicsbus, newclass, graph, types, classof, i_s
         end
     end
     isempty(newsbus) && return false
+    delete!(thissbu, keys(targets))
     max_inclassof_sbu_counter = length(newsbus)
     periodicsbus = Int[]
-    for u_init in sbu
-        v_init = u_init.v
-        v_init ∈ handled && continue
-        seeninthissbu = Dict{Int, SVector{3,Int}}(v_init => zero(SVector{3,Int}))
-        Q::Vector{PeriodicVertex3D} = [PeriodicVertex3D(v_init)]
-        periodicsbuflag = false
-        newsbu_neighbors = Set{Pair{Int,SVector{3,Int}}}()
-        for u in Q
-            for x in neighbors(graph, u.v)
-                sbus.attributions[x.v] == i_sbu || continue
-                seenofs = get(seeninthissbu, x.v, nothing)
-                if seenofs isa SVector{3,Int}
-                    if !periodicsbuflag && u.ofs .+ x.ofs != seenofs
-                        periodicsbuflag = true
+    neighbor_configurations = Dict{Set{Pair{Int,SVector{3,Int}}},Int}()
+    iterlist = collect(keys(targets))
+    push!(iterlist, 0)
+    for t_init in iterlist
+        neighs = t_init == 0 ? [PeriodicVertex3D(x) for x in thissbu] :
+                               neighbors(graph, t_init)
+        for u_init in neighs
+            v_init = u_init.v
+            v_init ∈ thissbu || continue
+            v_init ∈ handled && continue
+            seeninthissbu = Dict{Int, SVector{3,Int}}(v_init => u_init.ofs)
+            Q::Vector{PeriodicVertex3D} = [u_init]
+            periodicsbuflag = false
+            newsbu_neighbors = Set{Pair{Int,SVector{3,Int}}}()
+            for u in Q
+                for x in neighbors(graph, u.v)
+                    sbus.attributions[x.v] == i_sbu || continue
+                    seenofs = get(seeninthissbu, x.v, nothing)
+                    if seenofs isa SVector{3,Int}
+                        if !periodicsbuflag && u.ofs .+ x.ofs != seenofs
+                            periodicsbuflag = true
+                        end
+                        continue
                     end
-                    continue
-                end
-                targetsbu = get(targets, x.v, 0)
-                newofs = u.ofs .+ x.ofs
-                if targetsbu != 0
-                    push!(newsbu_neighbors, (targetsbu => .-newofs))
-                else
-                    seeninthissbu[x.v] = newofs
-                    push!(Q, PeriodicVertex3D(x.v, u.ofs .+ x.ofs))
+                    targetsbu = get(targets, x.v, 0)
+                    newofs = u.ofs .+ x.ofs
+                    if targetsbu != 0
+                        push!(newsbu_neighbors, (targetsbu => .-newofs))
+                    else
+                        seeninthissbu[x.v] = newofs
+                        push!(Q, PeriodicVertex3D(x.v, u.ofs .+ x.ofs))
+                    end
                 end
             end
+            newsbu = [PeriodicVertex3D(x, o) for (x, o) in seeninthissbu]
+            union!(handled, keys(seeninthissbu))
+            setdiff!(thissbu, keys(seeninthissbu))
+            if periodicsbuflag
+                push!(periodicsbus, length(sbus.sbus) + length(newsbus) + 1)
+            elseif length(newsbu_neighbors) == 1
+                targetsbu, ofs = first(newsbu_neighbors)
+                append!(newsbus[targetsbu], [PeriodicVertex3D(x.v, x.ofs .+ ofs) for x in newsbu])
+                continue
+            end
+            newsbunumber = length(newsbus)+1
+            dest = if periodicsbuflag
+                newsbunumber
+            else
+                if length(newsbu) == 1 && types[first(newsbu).v] === :O
+                    # Special case since those special SBUs are handled separately
+                    newsbunumber
+                else
+                    get!(neighbor_configurations, newsbu_neighbors, length(newsbus)+1)
+                end
+            end
+            if dest == length(newsbus)+1
+                push!(newsbus, newsbu)
+            else
+                append!(newsbus[dest], newsbu)
+            end
         end
-        newsbu = [PeriodicVertex3D(x, o) for (x, o) in seeninthissbu]
-        union!(handled, keys(seeninthissbu))
-        if periodicsbuflag
-            push!(periodicsbus, length(sbus.sbus) + length(newsbus) + 1)
-        elseif length(newsbu_neighbors) == 1
-            targetsbu, ofs = first(newsbu_neighbors)
-            append!(newsbus[targetsbu], [PeriodicVertex3D(x.v, x.ofs .+ ofs) for x in newsbu])
-            continue
-        end
-        push!(newsbus, newsbu)
     end
 
     curr_class = sbus.classes[i_sbu]
@@ -1183,29 +1207,40 @@ end
 function split_special_sbu!(graph, sbus, types)
     toremove = Int[]
     for (k, sbu) in enumerate(sbus)
-        length(sbu) == 1 || continue
-        a = first(sbu).v
-        typ = types[a]
-        if types[a] === :O
-            _split_this_sbu!(toremove, graph, k)
-        else
-            flag = typ === :C
-            if !flag
-                strty = string(typ)
-                if length(strty) ≥ 2 && strty[1] == 'C' && !('1' <= strty[2] <= '9')
-                    flag = true
-                    for c in strty[2:end]
-                        if c != 'O' && c != 'N' && !('1' <= strty[2] <= '6')
-                            flag = false
-                            break
-                        end
-                    end
-                end
-            end
-            if flag
-                _split_this_sbu!(toremove, graph, k)
+        uniquetypes = :O
+        for x in sbu
+            typ = types[x.v]
+            if (typ === :C) | (typ === :N)
+                uniquetypes = :C
+            elseif typ !== :O
+                uniquetypes = Symbol("")
+                break
             end
         end
+        uniquetypes === Symbol("") && continue
+        if uniquetypes === :O || (uniquetypes === :C && length(sbu) == 1)
+            _split_this_sbu!(toremove, graph, k)
+        end
+        # if typ === :O
+        #     _split_this_sbu!(toremove, graph, k)
+        # else
+        #     flag = typ === :C
+        #     if !flag
+        #         strty = string(typ)
+        #         if length(strty) ≥ 2 && strty[1] == 'C' && !('1' <= strty[2] <= '9')
+        #             flag = true
+        #             for c in strty[2:end]
+        #                 if c != 'O' && c != 'N' && !('1' <= strty[2] <= '6')
+        #                     flag = false
+        #                     break
+        #                 end
+        #             end
+        #         end
+        #     end
+        #     if flag
+        #         _split_this_sbu!(toremove, graph, k)
+        #     end
+        # end
     end
     return rem_vertices!(graph, toremove)
 end
