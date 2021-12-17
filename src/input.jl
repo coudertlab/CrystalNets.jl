@@ -340,6 +340,11 @@ function check_collision(pos, mat)
     return toremove
 end
 
+"""
+    fix_atom_on_a_bond!(graph, pos, mat)
+
+Remove bonds that are intercepted by an atom. 
+"""
 function fix_atom_on_a_bond!(graph, pos, mat)
     for i in vertices(graph)
         neighs = neighbors(graph, i)
@@ -352,7 +357,7 @@ function fix_atom_on_a_bond!(graph, pos, mat)
                 for j2 in (j1+1):length(neighs)
                     u2 = neighs[j2]
                     vec2 = mat * (pos[u2.v] .+ u2.ofs .- p)
-                    if angle(vec1, vec2) < 10
+                    if angle(vec1, vec2) < 15
                         furthest = norm(vec1) < norm(vec2) ? u2 : u1
                         rem_edge!(graph, i, furthest)
                         flag = true
@@ -381,39 +386,37 @@ function least_plausible_neighbours(Δs, n)
     return p[end-n+1:end]
 end
 
-macro reduce_valence(n)
+macro reduce_valence_to1()
     return esc(quote
-        neighs = neighbors(graph, i)
-        m = length(neighs)
-        m == $n && continue
-        (!dofix || m < $n) && push!(invalidatoms, t)
-        if dofix && m > $n
-            posi = pos[i]
-            Δs = [norm(mat * (pos[x.v] .+ x.ofs - posi)) for x in neighs]
-            toremove = least_plausible_neighbours(Δs, m - $n)
-            neighs = copy(neighs) # otherwise the list is modified by rem_edge!
-            for v in toremove
-                rem_edge!(graph, PeriodicEdge{N}(i, neighs[v]))
+        ___neighs = neighbors(graph, i)
+        ___m = length(___neighs)
+        if ___m > 1
+            ___posi = pos[i]
+            ___Δs = [norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___neighs]
+            ___toremove = least_plausible_neighbours(___Δs, ___m - 1)
+            ___neighs = copy(___neighs) # otherwise the list is modified by rem_edge!
+            for v in ___toremove
+                rem_edge!(graph, PeriodicEdge3D(i, ___neighs[v]))
             end
         end
     end)
 end
 
-macro reduce_valence(n1, n2)
-    comparison = n1 == 0 ? :(m ≤ $n2) : :($n1 ≤ m ≤ $n2)
-    invalidcond = n1 == 0 ? :(!dofix) : :(!dofix || m < $n1)
+macro reduce_valence(dofix, n1, n2)
+    comparison = n1 == 0 ? :(___m ≤ $n2) : :($n1 ≤ ___m ≤ $n2)
+    invalidcond = n1 == 0 ? :(!$dofix) : :(!$dofix || ___m < $n1)
     return esc(quote
-        neighs = neighbors(graph, i)
-        m = length(neighs)
+        ___neighs = neighbors(graph, i)
+        ___m = length(___neighs)
         $comparison && continue
         ($invalidcond) && push!(invalidatoms, t)
-        if dofix && m > $n2
-            posi = pos[i]
-            noHatoms = [x for x in neighs if types[x.v] !== :H]
-            Δs = [norm(mat * (pos[x.v] .+ x.ofs - posi)) for x in noHatoms]
-            toremove = least_plausible_neighbours(Δs, m - $n2)
-            for v in toremove
-                rem_edge!(graph, PeriodicEdge{N}(i, noHatoms[v]))
+        if $dofix && ___m > $n2
+            ___posi = pos[i]
+            ___noHatoms = [x for x in ___neighs if types[x.v] !== :H]
+            ___Δs = [norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___noHatoms]
+            ___toremove = least_plausible_neighbours(___Δs, ___m - $n2)
+            for v in ___toremove
+                rem_edge!(graph, PeriodicEdge{N}(i, ___noHatoms[v]))
             end
         end
     end)
@@ -429,37 +432,26 @@ These atoms are H, halogens, O, N and C.
 if `dofix` is set, actually modify the graph; otherwise, only emit a warning.
 In both cases, return a list of atoms with invalid coordinence.
 """
-function fix_valence!(graph::PeriodicGraph{N}, pos, types, mat, ::Val{dofix}, options) where {N,dofix}
+function fix_valence!(graph::PeriodicGraph{N}, pos, types, passO, passCN, mat,
+                      ::Val{dofix}, options) where {N,dofix}
     # Small atoms valence check
     n = length(types)
     invalidatoms = Set{Symbol}()
     # First pass over H, since those are likely bonded to their closest neighbor
-    passO = Int[]
-    passCN = Int[]
-    for i in 1:n
-        t = types[i]
-        if t === :H
-            @reduce_valence 1
-        elseif t === :O
-            push!(passO, i)
-        elseif t === :C || t === :N
-            push!(passCN, i)
-        end
-    end
     for i in passO
         t = :O
         if options.clustering_mode == ClusteringMode.MOF
-            @reduce_valence 0 4 # oxo-clusters
+            @reduce_valence dofix 0 4 # oxo-clusters
         else
-            @reduce_valence 0 2
+            @reduce_valence dofix 0 2
         end
     end
     for i in passCN
         t = types[i]
         if options.clustering_mode == ClusteringMode.MOF
-            @reduce_valence 2 5
+            @reduce_valence dofix 2 5
         else
-            @reduce_valence 2 4
+            @reduce_valence dofix 2 4
         end
     end
     if !isempty(invalidatoms)
@@ -480,11 +472,10 @@ Currently implmented:
 function sanitize_removeatoms!(graph::PeriodicGraph{N}, pos, types, mat, options) where N
     toremove = Set{Int}()
     flag = true
-    dofix = true # for the @reduce_valence macro
     for (i, t) in enumerate(types)
         if t === :O
-            continue
-            @reduce_valence 0 4
+            #continue
+            @reduce_valence true 0 4
             # at this point, the valence is 4 since @reduce_valence would continue otherwise
             neighs = neighbors(graph, i)
             p = pos[i]
@@ -516,6 +507,12 @@ function sanitize_removeatoms!(graph::PeriodicGraph{N}, pos, types, mat, options
 end
 
 
+"""
+    remove_triangles!(graph::PeriodicGraph, pos, types, mat, options)
+
+In a configuration where atoms A, B and C are pairwise bonded, remove the longest of the
+three bonds if it is suspicious (too large and too close to the third atom).
+"""
 function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, options) where N
     preprocessed = Dict{PeriodicEdge{N},Tuple{Float64,Bool}}()
     removeedges = Dict{PeriodicEdge{N},Tuple{PeriodicEdge{N},PeriodicEdge{N}}}()
@@ -526,11 +523,17 @@ function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, options) wh
         for e in toinvestigate
             s, d = e.src, e.dst.v
             bondlength, supcutoff = get!(preprocessed, e) do
-                cutoff = ismetal[atomic_numbers[types[s]]] || ismetal[atomic_numbers[types[d]]] ? 2.5 : 3.0
+                ats = atomic_numbers[types[s]]
+                atd = atomic_numbers[types[d]]
+                cutoff = ismetal[ats] || ismetal[atd] ? 2.5 : 2.9
                 _bondlength = norm(mat * (pos[d] .+ e.dst.ofs .- pos[s]))
                 _bondlength, _bondlength > cutoff
             end
             if supcutoff
+                typs = types[s]; typd = types[d]
+                bypass = (typs === typd && ismetalloid[atomic_numbers[typs]]) ||
+                         (typs === :C && ismetal[atomic_numbers[typd]]) ||
+                         (typd === :C && ismetal[atomic_numbers[typs]])
                 neigh_s = neighbors(graph, s)
                 neigh_d = [PeriodicVertex{N}(x.v, x.ofs .+ e.dst.ofs) for x in neighbors(graph, d)]
                 for x in intersect(neigh_s, neigh_d) # triangle
@@ -538,7 +541,7 @@ function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, options) wh
                     l1 < bondlength || continue
                     l2 = norm(mat * (pos[x.v] .+ x.ofs .- pos[s]))
                     l2 < bondlength || continue
-                    if bondlength*bondlength > min(9.0, l1*l1 + l2*l2)
+                    if bypass | (bondlength*bondlength > min(9.0, l1*l1 + l2*l2))
                         e1 = PeriodicEdge(s, x)
                         e1 = PeriodicGraphs.isindirectedge(e1) ? reverse(e1) : e1
                         if haskey(removeedges, e1)
@@ -581,6 +584,69 @@ function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, options) wh
     return preprocessed
 end
 
+
+function _detect_bent_bond(graph, pos, s, d, mat)
+    neighs = neighbors(graph, s)
+    ((length(neighs) == 3) | (length(neighs) == 4)) || return false
+    otherneighs = PeriodicVertex3D[]
+    ofsd = zero(SVector{3,Int})
+    for x in neighs
+        if x.v == d
+            ofsd = x.ofs
+        else
+            push!(otherneighs, x)
+        end
+    end
+    length(otherneighs) == length(neighs) - 1 || return false
+    poss = mat * pos[s]
+    p1 = mat * (pos[otherneighs[1].v] .+ otherneighs[1].ofs); Δ1 = p1 .- poss
+    p2 = mat * (pos[otherneighs[2].v] .+ otherneighs[2].ofs); Δ2 = p2 .- poss
+    α3 = angle(Δ1, Δ2)
+    α3 > 140 && return false
+    Δsd = (mat * (pos[d] .+ ofsd)) .- poss
+    nsd = norm(Δsd)
+    np1 = norm(Δ1)
+    abs(nsd - np1) < np1/10 && return false
+    np2 = norm(Δ2)
+    abs(nsd - np2) < np2/10 && return false
+    if length(otherneighs) == 2
+        60 < α3 < 120 && return false
+        meandist = (np1 + np2)/2
+        abs(nsd - meandist) < meandist/10 && return false
+        barycentre = (Δ1 .+ Δ2) ./2
+        γ = angle(barycentre, Δsd)
+        return 75 < γ < 105
+    end
+    p3 = mat * (pos[otherneighs[3].v] .+ otherneighs[3].ofs); Δ3 = p3 .- poss
+    α2 = angle(Δ1, Δ3)
+    α2 > 140 && return false
+    α1 = angle(Δ2, Δ3)
+    α1 > 140 && return false
+    np3 = norm(Δ3)
+    abs(nsd - np3) < np3/10 && return false
+    meandist = (np1 + np2 + np3)/3
+    abs(nsd - meandist) < meandist/10 && return false
+    m, imin = findmin([α1, α2, α3])
+    M, imax = findmax([α1, α2, α3])
+    iother = min(7 - (1<<(imin-1)) - (1<<(imax-1)), 3)
+    pother = iother == 1 ? p1 : ifelse(iother==2, p2, p3)
+    if M > 1.6*m # square-plan missing a third atom
+        β = angle(pother .- poss, Δsd)
+        abs(β - M) < M/5 && return false
+    end
+    barycentre = (Δ1 .+ Δ2 .+ Δ3) ./3
+    γ = angle(barycentre, Δsd)
+    (γ > 160 || γ < 20) && return false
+    if norm(barycentre) < min(np1, np2, np3)/2 
+        70 < dihedral(p2 .- p1, Δ2, Δsd) < 110 && return false
+    end
+    return true
+end
+function detect_bent_bond(graph, pos, s, d, mat)
+    _detect_bent_bond(graph, pos, s, d, mat) || _detect_bent_bond(graph, pos, d, s, mat)
+end
+
+
 """
     sanity_checks!(graph, pos, types, mat, options)
 
@@ -600,13 +666,17 @@ function sanity_checks!(graph, pos, types, mat, options)
         if supcutoff # This bond could be spurious
             if bondlength > 3 && options.cutoff_coeff ≤ 0.8
                 (order_s, order_d), blength = minmax(types[s], types[d]), Float16(bondlength)
+                bent_bond = detect_bent_bond(graph, pos, s, d, mat)
+                #bent_bond && ((@show s, d); return false)
+                removeflag = bent_bond | (bondlength > 4)
                 if (order_s, order_d, blength) ∉ alreadywarned
                     push!(alreadywarned, (order_s, order_d, blength))
-                    @ifwarn @warn "Suspiciously large bond found: $blength pm between $order_s and $order_d." *
-                        (bondlength > 4 ? " Such bonds are probably spurious and will be deleted." : "")
+                    bentmsg = bent_bond ? " and bent" : ""
+                    @ifwarn @warn "Suspiciously large$bentmsg bond found: $blength pm between $order_s and $order_d." *
+                        (removeflag ? " Such bonds are probably spurious and will be deleted." : "")
                     ret = true
                 end
-                if bondlength > 4
+                if removeflag
                     push!(removeedges, e)
                 end
             end
@@ -772,7 +842,7 @@ end
 function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
     n = length(pos)
 
-        mat = Float64.(cell.mat)
+    mat = Float64.(cell.mat)
     graph = PeriodicGraph3D(n, edges_from_bonds(bonds, mat, pos))
 
     if options.bonding_mode != BondingMode.Input
@@ -784,8 +854,19 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
                 attributions = attributions[vmap]
             end
         end
+        passO = Int[]
+        passCN = Int[]
+        for (i, t) in enumerate(types)
+            if t === :H
+                @reduce_valence_to1
+            elseif t === :O
+                push!(passO, i)
+            elseif t === :C || t === :N
+                push!(passCN, i)
+            end
+        end
         fix_atom_on_a_bond!(graph, pos, mat)
-        bad_valence = !isempty(fix_valence!(graph, pos, types, mat, Val(false), options))
+        bad_valence = !isempty(fix_valence!(graph, pos, types, passO, passCN, mat, Val(false), options))
         recompute_bonds = bad_valence || sanity_checks!(graph, pos, types, mat, options)
         if recompute_bonds
             if !guessed_bonds
@@ -797,7 +878,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
                 guessed_bonds = true
                 graph = PeriodicGraph3D(n, edges_from_bonds(bonds, cell.mat, pos))
             end
-            invalidatoms = fix_valence!(graph, pos, types, mat, Val(true), options)
+            invalidatoms = fix_valence!(graph, pos, types, passO, passCN, mat, Val(true), options)
             remaining_not_fixed = !isempty(invalidatoms)
             @ifwarn if remaining_not_fixed
                 @warn "Remaining atoms with invalid valence. Proceeding anyway."
