@@ -525,7 +525,7 @@ function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, options) wh
             bondlength, supcutoff = get!(preprocessed, e) do
                 ats = atomic_numbers[types[s]]
                 atd = atomic_numbers[types[d]]
-                cutoff = ismetal[ats] || ismetal[atd] ? 2.5 : 2.9
+                cutoff = ismetal[ats] || ismetal[atd] ? 2.4 : 2.9
                 _bondlength = norm(mat * (pos[d] .+ e.dst.ofs .- pos[s]))
                 _bondlength, _bondlength > cutoff
             end

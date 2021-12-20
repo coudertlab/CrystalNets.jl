@@ -155,41 +155,44 @@ function is_paddlewheel_candidate!(memoized, sbus, i, types, periodicsbus)
     if memo isa Tuple{Symbol,PeriodicVertex3D}
         return memo
     end
+    default_return = (Symbol(""), PeriodicVertex3D(0))
     if i ∈ periodicsbus
-        memoized[i] = Symbol(""), PeriodicVertex3D(0)
-        return Symbol(""), PeriodicVertex3D(0)
+        memoized[i] = default_return
+        return default_return
     end
     sbu = sbus[i]
-    4 ≤ length(sbu) ≤ 6 || return Symbol(""), PeriodicVertex3D(0)
+    4 ≤ length(sbu) ≤ 6 || return default_return
     typs = [types[x.v] for x in sbu]
     metal = PeriodicVertex3D(0)
     nonmetalcounter = IdDict{Symbol,Int}()
     singleexception = false
     for (j, typ) in enumerate(typs)
-        if element_categories[atomic_numbers[typ]] === :nonmetal
+        typ === :C && return default_return
+        eltyp = element_categories[atomic_numbers[typ]]
+        if ((eltyp === :nonmetal) | (eltyp === :halogen))
             nonmetalcounter[typ] = get(nonmetalcounter, typ, 0) + 1
         elseif ismetal[atomic_numbers[typ]]
             if metal.v != 0
-                return Symbol(""), PeriodicVertex3D(0)
+                return default_return
             end
             metal = sbu[j]
         else
-            singleexception && return Symbol(""), PeriodicVertex3D(0)
+            singleexception && return default_return
             singleexception = true
         end
     end
     n = length(nonmetalcounter)
-    (n == 0 || n ≥ 3) && return Symbol(""), PeriodicVertex3D(0)
+    (n == 0 || n ≥ 3) && return default_return
     nonmetal = if n == 2
-        singleexception && return Symbol(""), PeriodicVertex3D(0)
+        singleexception && return default_return
         singleexception = true
         x1, x2 = nonmetalcounter
-        x1[2] > x2[2] ? x1[1] : x2[1]
+        x1[2] > x2[2] ? x1[1] : x1[2] == x2[2] ? Symbol("") : x2[1]
     else
         first(nonmetalcounter)[1]
     end
-    length(sbu) == 6 && !singleexception && return Symbol(""), PeriodicVertex3D(0)
-    ret = metal.v == 0 ? (Symbol(""), PeriodicVertex3D(0)) : (nonmetal, metal)
+    length(sbu) == 6 && !singleexception && return default_return
+    ret = metal.v == 0 ? (default_return) : (nonmetal, metal)
     memoized[i] = ret
     return ret
 end
@@ -201,21 +204,27 @@ Identify paddle-wheel patterns made of two opposite SBUs and regroup them into
 one.
 """
 function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
-    replacements = collect(1:length(clusters.sbus))
+    n = length(clusters.sbus)
+    replacements = collect(1:n)
     anypaddlewheel = false
-    memoized = Union{Missing,Tuple{Symbol,PeriodicVertex3D}}[missing for _ in 1:length(clusters.sbus)]
+    memoized = Union{Missing,Tuple{Symbol,PeriodicVertex3D}}[missing for _ in 1:n]
+    opposite_sbus = zeros(Int, n)
+    opposite_ofs = Vector{SVector{3,Int}}(undef, n)
+    metals = Vector{Tuple{PeriodicVertex3D,PeriodicVertex3D}}(undef, n)
     for (i, sbu) in enumerate(clusters.sbus)
-        ismissing(memoized[i]) || continue
         nonmetal, metal = is_paddlewheel_candidate!(memoized, clusters.sbus, i, types, periodicsbus)
-        metal.v == 0 && continue
+        if metal.v == 0
+            opposite_sbus[i] = -1
+            continue
+        end
         thissbu = Set{Int}([y.v for y in sbu])
         metal_candidate = PeriodicVertex3D(0)
         opposite_sbu = 0
         ofs_diff = zero(SVector{3,Int})
         class_sbu = clusters.classes[i]
-        singleexception = false
+        num_contact = 0
         for u in sbu
-            types[u.v] === nonmetal || continue
+            types[u.v] === nonmetal || nonmetal === Symbol("") || continue
             invalid_paddlewheel = false
             contact = false
             for x in neighbors(graph, u.v)
@@ -225,7 +234,8 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
                     break
                 end
                 for y in neighbors(graph, x.v)
-                    (y.v ∈ thissbu || types[y.v] !== nonmetal) && continue
+                    y.v ∈ thissbu && continue
+                    types[y.v] !== nonmetal && nonmetal !== Symbol("") && continue
                     attr = clusters.attributions[y.v]
                     class_candidate = clusters.classes[attr]
                     class_candidate == class_sbu || continue
@@ -251,36 +261,54 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
                         end
                     end
                 end
-                if !contact
-                    if singleexception
-                        invalid_paddlewheel = true
-                    else
-                        singleexception = true
-                    end
-                end
                 invalid_paddlewheel && break
             end
+            num_contact += contact
             if invalid_paddlewheel
                 opposite_sbu = 0
                 break
             end
         end
-        if opposite_sbu == 0
-            memoized[i] = Symbol(""), PeriodicVertex3D(0)
+        if opposite_sbu == 0 || num_contact ≤ 1
+            opposite_sbus[i] = -1
             continue
         end
-        for u in clusters.sbus[opposite_sbu]
-            newofs = u.ofs .+ ofs_diff 
-            push!(sbu, PeriodicVertex(u.v, newofs))
-            clusters.offsets[u.v] = newofs
-            clusters.attributions[u.v] = i
+        if opposite_sbus[opposite_sbu] != i && opposite_sbus[opposite_sbu] != 0
+            opposite_sbus[opposite_sbu] = -1
+            opposite_sbus[i] = -1
+        else
+            opposite_sbus[i] = opposite_sbu
+            opposite_ofs[i] = ofs_diff
+            metals[i] = (metal, metal_candidate)
+            anypaddlewheel = true
         end
-        empty!(clusters.sbus[opposite_sbu])
-        add_edge!(graph, metal.v, PeriodicVertex(metal_candidate.v, metal_candidate.ofs .+ ofs_diff .- metal.ofs))
-        @assert clusters.classes[opposite_sbu] == clusters.classes[i]
-        clusters.classes[opposite_sbu] = 0
-        replacements[opposite_sbu] = i
-        anypaddlewheel = true
+    end
+
+    if anypaddlewheel
+        anypaddlewheel = false
+        for (i, (opposite_sbu, ofs_diff, (metal, metal_candidate))) in
+                enumerate(zip(opposite_sbus, opposite_ofs, metals))
+            opposite_sbu ≤ 0 && continue
+            opp = opposite_sbus[opposite_sbu]
+            if opp != i
+                @assert opp == -1
+                continue
+            end
+            anypaddlewheel = true
+            opposite_sbus[opposite_sbu] = 0
+            sbu = clusters.sbus[i]
+            for u in clusters.sbus[opposite_sbu]
+                newofs = u.ofs .+ ofs_diff 
+                push!(sbu, PeriodicVertex(u.v, newofs))
+                clusters.offsets[u.v] = newofs
+                clusters.attributions[u.v] = i
+            end
+            empty!(clusters.sbus[opposite_sbu])
+            add_edge!(graph, metal.v, PeriodicVertex(metal_candidate.v, metal_candidate.ofs .+ ofs_diff .- metal.ofs))
+            @assert clusters.classes[opposite_sbu] == clusters.classes[i]
+            clusters.classes[opposite_sbu] = 0
+            replacements[opposite_sbu] = i
+        end
     end
 
     if anypaddlewheel
@@ -1259,7 +1287,7 @@ transformed into a new vertex.
 function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mode, _attempt=1)
     crystal = trim_monovalent(c)
     export_default(crystal, "trimmed", crystal.options.name,
-                   crystal.options.export_input; repeats=2)
+                   crystal.options.export_input)
     clusters, clustering = find_clusters(crystal, mode)
     if clustering == ClusteringMode.EachVertex
         return Crystal{Nothing}(crystal; _pos=crystal.pos)
