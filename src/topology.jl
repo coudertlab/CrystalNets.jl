@@ -8,24 +8,42 @@ function Base.showerror(io::IO, e::UnstableNetException)
     print(io, "The net is unstable, hence it cannot be analyzed.")
 end
 
-function check_dimensionality(c::CrystalNet{D,T}) where {D,T}
+"""
+    check_dimensionality(c::CrystalNet{D}) where D
+
+Check that the dimensionality of the net (i.e. the number of independent axes along which
+it is periodic) is equal to `D`, or throw an ArgumentError otherwise.
+"""
+function check_dimensionality(c::CrystalNet{D}) where {D}
     edgs = [c.pos[dst(e)] .+ PeriodicGraphs.ofs(e) .- c.pos[src(e)] for e in edges(c.graph)]
     sort!(edgs)
     unique!(edgs)
     mat = reduce(hcat, edgs)
-    if D == 3 && !isrank3(mat)
-        throw(ArgumentError("the input net does not have dimensionality 3, so it cannot be analyzed."))
-    elseif D == 2 && !isrank2(mat)
-        throw(ArgumentError("the input net does not have dimensionality 2, so it cannot be analyzed."))
-    elseif D == 1 && !isrank1(mat)
-        throw(ArgumentError("the input net does not have dimensionality 1, so it cannot be analyzed."))
+    if D == 3
+        isrank3(mat) || throw(ArgumentError("the input net does not have dimensionality 3, so it cannot be analyzed."))
+    elseif D == 2
+        isrank2(mat) || throw(ArgumentError("the input net does not have dimensionality 2, so it cannot be analyzed."))
+    elseif D == 1
+        isrank1(mat) || throw(ArgumentError("the input net does not have dimensionality 1, so it cannot be analyzed."))
     else
         throw(AssertionError("1 ≤ D ≤ 3"))
     end
     nothing
 end
 
-function check_valid_translation(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, r=nothing) where {D,T}
+
+"""
+    check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, r=nothing) where {D,T}
+
+Check that the net is identical to that rotated by `r` (if it is not `nothing`) then
+translated by `t`.
+
+If so, return the vmap between the initial vertices and their translated images.
+Otherwise, return `nothing`.
+
+See also: [`possible_translations`](@ref), [`find_all_valid_translations`](@ref)
+"""
+function check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, r=nothing) where {D,T}
     U = soft_widen(T)
     n = length(c.pos)
     vmap = Int[]
@@ -57,8 +75,21 @@ function check_valid_translation(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:I
     return vmap
 end
 
+"""
+    possible_translations(c::CrystalNet)
+
+Return a list of tuples `(nz, i_max_den, max_den, t)` where
+- `t` is a translation mapping at the origin vertex to another one in the unit cell.
+- `max_den` is the maximum denominator in the `D` coefficients of `t`.
+- `i_max_den` is the index.
+- `nz` is the number of zeros in `t`.
+
+The list is guaranteed to contain all the possible valid translations but may contain some
+invalid translations.
+
+See also: [`check_valid_symmetry`](@ref), [`find_all_valid_translations`](@ref)
+"""
 function possible_translations(c::CrystalNet{D,T}) where {D,T}
-    n = length(c.pos)
     ts = Tuple{Int, Int, Int, SVector{D,T}}[]
     sortedpos = copy(c.pos)
     origin = popfirst!(sortedpos)
@@ -77,19 +108,38 @@ end
 # TODO: remove?
 function find_first_valid_translations(c::CrystalNet)
     for (nz, i_max_den, max_den, t) in possible_translations(c)
-        !isnothing(check_valid_translation(c, t)) && return (nz, i_max_den, max_den, t)
+        !isnothing(check_valid_symmetry(c, t)) && return (nz, i_max_den, max_den, t)
     end
     return nothing
 end
 
+
+"""
+    find_all_valid_translations(c::CrystalNet{D}) where D
+
+Return a `D`-tuple of list of tuples `(i_max_den, max_den, t)` (see
+[`possible_translations`](@ref) for interpretation) where the `n`-th list contains all
+valid translations of the net having exactly `n-1` zeros.
+
+A translation is valid if it maps exactly each vertex to a vertex and each edge to an edge.
+
+See also: [`check_valid_symmetry`](@ref), [`possible_translations`](@ref)
+"""
 function find_all_valid_translations(c::CrystalNet{D,T}) where {D,T}
     ret = NTuple{D, Vector{Tuple{Int, Int, SVector{D,T}}}}(ntuple(_->[], Val(D)))
     for (nz, i_max_den, max_den, t) in possible_translations(c)
-        !isnothing(check_valid_translation(c, t)) && push!(ret[nz+1], (i_max_den, max_den, t))
+        !isnothing(check_valid_symmetry(c, t)) && push!(ret[nz+1], (i_max_den, max_den, t))
     end
     return ret
 end
 
+"""
+    minimal_volume_matrix(translations::NTuple{D}) where {D}
+
+Given the output of [`find_all_valid_translations`](@ref), compute the transformation that
+allows reducing the net to its minimal cell.
+"""
+function minimal_volume_matrix end
 
 function minimal_volume_matrix(translations::Tuple{T}) where T
     nz0 = translations[1]
@@ -222,6 +272,13 @@ function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
     return ret
 end
 
+
+"""
+    reduce_with_matrix(c::CrystalNet{D}, mat) where {D}
+
+Given the net and the output of `minimal_volume_matrix` computed on the valid translations
+of the net, return the new CrystalNet representing the initial net in the computed unit cell.
+"""
 function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
     U = widen(T)
     lengths = degree(c.graph)
@@ -267,6 +324,15 @@ function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
     return CrystalNet(cell, c.types[I_kept], sortedcol, graph, c.options)
 end
 
+
+"""
+    minimize(net::CrystalNet)
+
+Return a CrystalNet representing the same net as the input, but in a unit cell.
+
+The computed unit cell may depend on the representation of the input, i.e. it is not
+topologicallly invariant.
+"""
 function minimize(net::CrystalNet)
     translations = find_all_valid_translations(net)
     while !all(isempty.(translations))
@@ -276,6 +342,8 @@ function minimize(net::CrystalNet)
     end
     return net
 end
+
+
 
 function findfirstbasis(offsets)
     newbasis = normal_basis_rational(offsets)
@@ -336,21 +404,38 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{D,T}}}) where {D,T}
 end
 
 
+"""
+    candidate_key(net::CrystalNet, u, basis, minimal_edgs)
+
+Given the net, a candidate `u => basis` where `u` is the origin and `basis` the triplet of
+axes, and `minimal_edgs` the last minimal key (for the pseudo-lexicographical order used),
+extract the key corresponding to the current candidate.
+
+The key is the lexicographically ordered list of edges of the graph when its vertices are
+numbered according to the candidate. The ordering of keys first compares the list of edges
+disregarding the offsets, and then only compares the offsets if the rest is identical.
+
+If the key is larger or equal to `minimal_edgs`, early stop and return two empty lists.
+Otherwise, the extracted key is the current best: return the vmap between the initial
+vertices and their ordered image in the candidate, as well as the key.
+
+See also: [`find_candidates`](@ref)
+"""
 function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
     V = soft_widen(widen(T))
     n = nv(net.graph)
-    h = 2 # Next node to assign
+    h = 2 # next node to assign
     origin = net.pos[u]
-    newpos = Vector{SVector{D,V}}(undef, n) # Positions of the kept representatives
+    newpos = Vector{SVector{D,V}}(undef, n) # positions of the kept representatives
     newpos[1] = zero(SVector{D,V})
-    offsets = Vector{SVector{D,Int}}(undef, n)
-    # Offsets of the new representatives with respect to the original one, in the original basis
+    offsets = Vector{SVector{D,Int}}(undef, n) # offsets of the new representatives with
+    # respect to the original one, in the original basis
     offsets[1] = zero(SVector{D,Int})
-    vmap = Vector{Int}(undef, n) # Bijection from the old to the new node number
+    vmap = Vector{Int}(undef, n) # bijection from the old to the new node number
     vmap[1] = u
     rev_vmap = zeros(Int, n) # inverse of vmap
     rev_vmap[u] = 1
-    flag_bestedgs = false # Marks whether the current list of edges is lexicographically
+    flag_bestedgs = false # marks whether the current list of edges is lexicographically
     # below the best known one. If not by the end of the algorithm, return false
     edgs = Tuple{Int,Int,SVector{D,V}}[]
     mat = V.(inv(widen(V).(basis)))
@@ -390,13 +475,13 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
             if !flag_bestedgs
                 j = length(edgs)
                 c = cmp(minimal_edgs[j], edgs[j])
-                c < 0 && return (Int[], Tuple{Int,Int,SVector{D,V}}[])
+                c < 0 && return (Int[], Tuple{Int,Int,SVector{D,V}}[]) # early stop
                 c > 0 && (flag_bestedgs = true)
             end
         end
     end
     @assert allunique(edgs)
-    if !flag_bestedgs
+    if !flag_bestedgs # the current list of edges is equal to minimal_edgs
         @assert minimal_edgs == edgs
         return (Int[], Tuple{Int,Int,SVector{D,V}}[])
     end
@@ -405,15 +490,17 @@ end
 
 
 """
-Partition the vertices of the graph into disjoint categories, one for each
-coordination sequence. The partition is then sorted by order of coordination sequence.
-This partition does not depend on the representation of the graph.
-The optional argument vmaps is a set of permutations of the vertices that leave the
-graph unchanged. In other words, vmaps is a set of symmetry operations of the graph.
+    partition_by_coordination_sequence(graph, vmaps=nothing)
 
-Also returns the map from vertices to an identifier such that all vertices with
-the same identifier are symmetric images of one another, as well as a list of
-unique representative for each symmetry class.
+Partition the vertices of the graph into disjoint categories, one for each coordination
+sequence. The partition is then sorted by order of coordination sequence.
+This partition does not depend on the representation of the graph.
+The optional argument `vmaps` is a set of permutations of the vertices that leave the graph
+unchanged. In other words, `vmaps` is a set of symmetry operations of the graph.
+
+Also return the map from vertices to an identifier such that all vertices with the same
+identifier are symmetric images of one another, as well as a list of unique representative
+for each symmetry class.
 """
 function partition_by_coordination_sequence(graph, vmaps=nothing)
     # First, union-find on the symmetries to avoid computing useless coordination sequences
@@ -520,9 +607,16 @@ end
 
 
 """
-Find a set of pairs (v, basis) that are candidates for finding the key with
-candidate_key(net, v, basis).
-The returned set is independent of the representation of the graph used in net.
+    find_candidates(net::CrystalNet{D}) where D
+
+Return a non-empty set of candidates `u => basis` where `u` is a vertex and `basis` is
+matrix whose columns are `D` linearly independent euclidean embeddings of edges.
+The returned set is independent of the representation of the graph used in `net`.
+
+Also return a `category_map` linking each vertex to its category number, as defined by
+[`partition_by_coordination_sequence`](@ref)
+
+See also: [`candidate_key`](@ref)
 """
 function find_candidates(net::CrystalNet{D,T}) where {D,T}
     L = D*D
@@ -551,7 +645,7 @@ function find_candidates(net::CrystalNet{D,T}) where {D,T}
     end
     if D >= 3 && isempty(candidates)
         # If we arrive at this point, it means that all vertices only have coplanar neighbors
-        # (in the case D == 3, it should be impossible for D < 3).
+        # (in the case D == 3, it should be impossible to arrive here for D < 3).
         # Then we look for all triplets of edges two of which start from a vertex
         # and one does not, stopping and the first pair of categories for which this
         # set of candidates is non-empty.
@@ -583,22 +677,33 @@ function find_candidates(net::CrystalNet{D,T}) where {D,T}
     end
 end
 
+
+"""
+    extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}, vmaps, rotations) where T
+
+Given the candidates and the list of symmetries of the net, return the flattened list of
+candidates after removing candidates that are symmetric images of the kept ones.
+"""
 function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}, vmaps, rotations) where T
     unique_candidates = Pair{Int,SMatrix{3,3,T,9}}[]
     for (i, mats) in candidates
         @assert i == minimum(vmap[i] for vmap in vmaps)
-        indices = [j for j in 1:length(vmaps) if vmaps[j][i] == i]
+        indices = [j for j in 1:length(vmaps) if vmaps[j][i] == i] # vmap for which i is a fixpoint
         min_mats = Set{SVector{9,T}}()
         for mat in mats
-            flattenedmat = SVector{9,T}(mat)
-            min_mat = flattenedmat
+            # At this point, `i => mat` is a potential candidate, and so are all its
+            # symmetric images. Among those, only the ones of the form `i => mat2` (i.e.
+            # with the same origin `i`) have not been eliminated earlier by symmetry.
+            # Let's enumerate all such candidates and only keep one of them, for example
+            # the lexicographically smallest, since they are all equivalent to `i => mat`.
+            min_mat = SVector{9,T}(mat) # flattened to allow lexicographic comparison
             for j in indices
                 new_mat = SVector{9,T}(rotations[j] * mat)
                 if new_mat < min_mat
                     min_mat = new_mat
                 end
             end
-            push!(min_mats, min_mat)
+            push!(min_mats, min_mat) # min_mats is a Set to eliminate duplicates
         end
         for x in min_mats
             push!(unique_candidates, i => SMatrix{3,3,T,9}(x))
@@ -608,6 +713,17 @@ function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}
 end
 
 
+"""
+    find_initial_candidates(net::CrystalNet{D}, candidates_v, category_map) where D
+
+Given the net, a list of vertices in a given category and the `category_map`, return a
+list of pairs `u => (basis, cats)` where `u ∈ candidates_v`, `basis` is a `D`-rank matrix
+made by juxtaposing the euclidean embeddings of outgoing edges from `u`, and `cats` are the
+categories of the respective neighbors of `u`.
+
+If the `basis` corresponding to vertex `u` is not of rank `D`, it is not included in the
+returned list (for instance, if all outgoing edges of a vertex are coplanar with `D == 3`).
+"""
 function find_initial_candidates(net::CrystalNet{D,T}, candidates_v, category_map) where {D,T}
     @assert 1 ≤ D ≤ 3
     U = soft_widen(T)
@@ -632,6 +748,23 @@ function find_initial_candidates(net::CrystalNet{D,T}, candidates_v, category_ma
     end
     return [_initial_candidates[i] for i in 1:n if valid_initial_candidates[i]]
 end
+
+
+"""
+    find_candidates_onlyneighbors(net::CrystalNet{D}, candidates_v, category_map) where D
+
+Given the net, a list of vertices in a given category and the `category_map`, return a Dict
+whose pairs `u => matv` are such that `u ∈ candidates_v` and `matv` is a list of unique
+invertible matrices of size `D` whose columns are euclidean embeddings of outgoing edges
+from `u`.
+Each such matrix has a category, defined by the `D`-uplet of categories of each
+corresponding outneighbor of `u`: the returned Dict is such that all the matrices belonging
+to all `matv` share the same category.
+
+The returned Dict is empty iff `find_initial_candidates(net, candidates_v, category_map)`
+is empty.
+"""
+function find_candidates_onlyneighbors end
 
 
 function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, category_map) where T
@@ -838,7 +971,14 @@ function find_candidates_onlyneighbors(net::CrystalNet1D{T}, candidates_v, categ
     return candidates
 end
 
-function find_candidates_fallback(net::CrystalNet{3,T}, reprs, othercats, category_map) where T
+
+"""
+    find_candidates_fallback(net::CrystalNet3D, reprs, othercats, category_map)
+
+Return candidates in the same form as [`find_candidates_onlyneighbors`](@ref) except that
+only two edges start from `u` and one does not.
+"""
+function find_candidates_fallback(net::CrystalNet3D{T}, reprs, othercats, category_map) where T
     U = soft_widen(T)
     candidates = Dict{Int,Vector{SMatrix{3,3,U,9}}}(u => [] for u in reprs)
     n = length(category_map)
@@ -908,11 +1048,21 @@ function find_candidates_fallback(net::CrystalNet{3,T}, reprs, othercats, catego
     return Dict{Int,Vector{SMatrix{3,3,U,9}}}()
 end
 
+
+"""
+    topological_key(net::CrystalNet{D}) where D
+
+Return a unique topological key for the net, which is a topological invariant of the net
+(i.e. it does not depend on its initial representation).
+
+The key is returned as a graph `g::PeriodicGraph{D}`, the litteral key can be extracted
+with `string(g)`.
+"""
 function topological_key(net::CrystalNet{D,T}) where {D,T}
     if isempty(net.pos)
         throw(ArgumentError("the net is empty."))
     end
-    @assert allunique(net.pos) # FIXME make a more precise check for net stability. Currently fails for sxt
+    @assert allunique(net.pos) # FIXME: make a more precise check for net stability. Currently fails for sxt
     candidates, category_map = find_candidates(net)
     v, minimal_basis = popfirst!(candidates)
     n = nv(net.graph)
