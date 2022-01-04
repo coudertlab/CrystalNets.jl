@@ -197,6 +197,30 @@ function is_paddlewheel_candidate!(memoized, sbus, i, types, periodicsbus)
     return ret
 end
 
+# Do not use, tend to give worse results
+function bond_carboxylic_acid!(graph, types)
+    for u in vertices(graph)
+        if types[u] === :C
+            neighs = neighbors(graph, u)
+            length(neighs) == 3 || continue
+            O1 = PeriodicVertex3D(0); O2 = PeriodicVertex3D(0)
+            for x in neighs
+                typ = types[x.v]
+                if typ === :O
+                    if O1.v == 0 || O2.v != 0
+                        O1 = x
+                    else O2.v == 0
+                        O2 = x
+                    end
+                end
+            end
+            (O1.v | O2.v) == 0 && continue
+            add_edge!(graph, O1.v, PeriodicVertex3D(O2.v, O2.ofs .- O1.ofs))
+        end
+    end
+    nothing
+end
+
 """
     function regroup_paddlewheel!(graph, types, clusters)
 
@@ -210,6 +234,8 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
     memoized = Union{Missing,Tuple{Symbol,PeriodicVertex3D}}[missing for _ in 1:n]
     opposite_sbus = zeros(Int, n)
     opposite_ofs = Vector{SVector{3,Int}}(undef, n)
+    # alt_sbus = zeros(Int, n)
+    # alt_ofs = Vector{SVector{3,Int}}(undef, n)
     metals = Vector{Tuple{PeriodicVertex3D,PeriodicVertex3D}}(undef, n)
     for (i, sbu) in enumerate(clusters.sbus)
         nonmetal, metal = is_paddlewheel_candidate!(memoized, clusters.sbus, i, types, periodicsbus)
@@ -218,15 +244,20 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
             continue
         end
         thissbu = Set{Int}([y.v for y in sbu])
-        metal_candidate = PeriodicVertex3D(0)
-        opposite_sbu = 0
-        ofs_diff = zero(SVector{3,Int})
+        opposite_metal = PeriodicVertex3D(0)
+        # alt_metal = PeriodicVertex3D(0)
         class_sbu = clusters.classes[i]
+        opposite_sbu = 0
+        # alt_sbu = 0
+        ofs_diff = zero(SVector{3,Int})
+        # ofs_diff_alt = zero(SVector{3,Int})
         num_contact = 0
+        # num_contact_alt = 0
         for u in sbu
             types[u.v] === nonmetal || nonmetal === Symbol("") || continue
             invalid_paddlewheel = false
             contact = false
+            # contact_alt = false
             for x in neighbors(graph, u.v)
                 clusters.attributions[x.v] == i && continue
                 if types[x.v] !== :C
@@ -247,9 +278,11 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
                         contact = true
                         continue
                     end
-                    _, metal_candidate = is_paddlewheel_candidate!(memoized, clusters.sbus, attr, types, periodicsbus)
-                    if metal_candidate.v != 0
-                        same_metal = types[metal.v] == types[metal_candidate.v]
+                    # if attr == alt_sbu
+                    #     if u.ofs .+ x.ofs .+ y.ofs .- clusters.offsets[y.v] != ofs_diff
+                    _, opposite_metal = is_paddlewheel_candidate!(memoized, clusters.sbus, attr, types, periodicsbus)
+                    if opposite_metal.v != 0
+                        same_metal = types[metal.v] == types[opposite_metal.v]
                         if same_metal
                             if opposite_sbu != 0
                                 invalid_paddlewheel = true
@@ -279,14 +312,14 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
         else
             opposite_sbus[i] = opposite_sbu
             opposite_ofs[i] = ofs_diff
-            metals[i] = (metal, metal_candidate)
+            metals[i] = (metal, opposite_metal)
             anypaddlewheel = true
         end
     end
 
     if anypaddlewheel
         anypaddlewheel = false
-        for (i, (opposite_sbu, ofs_diff, (metal, metal_candidate))) in
+        for (i, (opposite_sbu, ofs_diff, (metal, opposite_metal))) in
                 enumerate(zip(opposite_sbus, opposite_ofs, metals))
             opposite_sbu ≤ 0 && continue
             opp = opposite_sbus[opposite_sbu]
@@ -304,7 +337,7 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
                 clusters.attributions[u.v] = i
             end
             empty!(clusters.sbus[opposite_sbu])
-            add_edge!(graph, metal.v, PeriodicVertex(metal_candidate.v, metal_candidate.ofs .+ ofs_diff .- metal.ofs))
+            add_edge!(graph, metal.v, PeriodicVertex(opposite_metal.v, opposite_metal.ofs .+ ofs_diff .- metal.ofs))
             @assert clusters.classes[opposite_sbu] == clusters.classes[i]
             clusters.classes[opposite_sbu] = 0
             replacements[opposite_sbu] = i
@@ -928,6 +961,7 @@ function find_sbus(crystal, kinds=default_sbus)
     # oldlength may be != 0, this means that there are dangling unclassified clusters.
     # These will be eliminated as 0-dimensional residues later.
 
+    # bond_carboxylic_acid!(crystal.graph, crystal.types) # gives worse results
     sbus, periodicsbus = regroup_sbus(crystal.graph, classes, same_SBU_C)
     if crystal.options.detect_paddlewheels
         regroup_paddlewheel!(crystal.graph, sbus, crystal.types, periodicsbus)
