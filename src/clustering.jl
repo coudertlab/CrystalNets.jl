@@ -41,7 +41,7 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
         attributions[i] = attr
         Q = PeriodicVertex3D[PeriodicVertex3D(i)]
         for u in Q
-            @assert attributions[u.v] == attr
+            @toggleassert attributions[u.v] == attr
             for neigh in neighbors(graph, u.v)
                 x = neigh.v
                 ofs = neigh.ofs .+ u.ofs
@@ -54,7 +54,7 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
                         push!(sbus[end], y)
                         push!(Q, y)
                     else
-                        @assert attrx == attr
+                        @toggleassert attrx == attr
                         if ofs != offsets[x] && last(periodicsbus) != attr
                             push!(periodicsbus, attr)
                         end
@@ -324,7 +324,7 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
             opposite_sbu ≤ 0 && continue
             opp = opposite_sbus[opposite_sbu]
             if opp != i
-                @assert opp == -1
+                @toggleassert opp == -1
                 continue
             end
             anypaddlewheel = true
@@ -338,7 +338,7 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
             end
             empty!(clusters.sbus[opposite_sbu])
             add_edge!(graph, metal.v, PeriodicVertex(opposite_metal.v, opposite_metal.ofs .+ ofs_diff .- metal.ofs))
-            @assert clusters.classes[opposite_sbu] == clusters.classes[i]
+            @toggleassert clusters.classes[opposite_sbu] == clusters.classes[i]
             clusters.classes[opposite_sbu] = 0
             replacements[opposite_sbu] = i
         end
@@ -355,14 +355,14 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
             end
         end
         for rem in removed
-            @assert isempty(clusters.sbus[rem])
-            @assert clusters.classes[rem] == 0
+            @toggleassert isempty(clusters.sbus[rem])
+            @toggleassert clusters.classes[rem] == 0
         end
         deleteat!(clusters.classes, removed)
         deleteat!(clusters.sbus, removed)
         setremoved = Set{Int}(removed)
         for (i, attr) in enumerate(clusters.attributions)
-            @assert attr ∉ setremoved
+            @toggleassert attr ∉ setremoved
             clusters.attributions[i] = replacements[attr]
         end
         newperiodicsbus = [replacements[x] for x in periodicsbus]
@@ -383,7 +383,7 @@ Return the list of newly-created periodic SBUs, if any.
 """
 function split_sbu!(sbus, graph, i_sbu, classes)
     sbu = [x.v for x in sbus.sbus[i_sbu]]
-    @assert allunique(sbu)
+    @toggleassert allunique(sbu)
     empty!(sbus.sbus[i_sbu])
     periodicsbus = Set{Int}()
     j = i_sbu
@@ -391,7 +391,7 @@ function split_sbu!(sbus, graph, i_sbu, classes)
     explored = Set{Int}()
     while true
         _u = only(toexplore)
-        @assert iszero(_u.ofs)
+        @toggleassert iszero(_u.ofs)
         class = classes[_u.v]
         push!(explored, _u.v)
         sbus.offsets[_u.v] = _u.ofs
@@ -828,7 +828,7 @@ function fix_sbu_connectivity!(sbus, graph, oldperiodic, potentialnewperiodic)
                 end
             end
         end
-        @assert length(explored) == length(sbu)
+        @toggleassert length(explored) == length(sbu)
     end
     periodicsbus = Set{Int}()
     for i in oldperiodic
@@ -887,7 +887,7 @@ function find_sbus(crystal, kinds=default_sbus)
         end
         classes[i] = class
     end
-    @assert issorted(unclassified)
+    @toggleassert issorted(unclassified)
 
     same_SBU_C = if crystal.options.detect_heterocycles
         heterocycle = detect_heterocycles(classes, crystal.graph, crystal.pos,
@@ -951,7 +951,7 @@ function find_sbus(crystal, kinds=default_sbus)
                 push!(newclusters, cluster)
             else
                 for j in cluster
-                    @assert classes[unclassified[j]] ∈ kinds.tomerge
+                    @toggleassert classes[unclassified[j]] ∈ kinds.tomerge
                     classes[unclassified[j]] = new_class
                 end
             end
@@ -1169,7 +1169,7 @@ function find_sbus(crystal, kinds=default_sbus)
         avg_dst = lazy_avg_dst(crystal.pos, sbus, crystal.cell.mat)
 
         length_targeted = unique!(sort!(length.(targeted)))
-        @assert length_targeted[1] == 0
+        @toggleassert length_targeted[1] == 0
         popfirst!(length_targeted)
         actually_targeted = Set{Int}()
         modified_sbus = Set{Int}()
@@ -1331,7 +1331,7 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
     for s in vertices(crystal.graph)
         atts = clusters.attributions[s]
         neigh0 = neighbors(crystal.graph, s)
-        @assert length(neigh0) ≥ 2
+        @toggleassert length(neigh0) ≥ 2
         for x in neigh0
             d = x.v
             if crystal.options.bond_adjacent_sbus && crystal.types[d] === :C && crystal.types[s] !== :C
@@ -1349,7 +1349,7 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
                 attd = clusters.attributions[d]
                 newofs = x.ofs .+ clusters.offsets[s] .- clusters.offsets[d]
                 if atts == attd && d != s
-                    # @assert iszero(newofs)
+                    # @toggleassert iszero(newofs)
                     # continue
                     iszero(newofs) && continue
                     periodicsbuflag = true

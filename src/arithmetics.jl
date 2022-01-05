@@ -163,7 +163,7 @@ function normal_basis_rational(list::AbstractVector{<:StaticVector{N,<:Rational{
     return SMatrix{N,N,Rational{U}}(ratbasis * [@inbounds(intbasis[i,j] // lcms[i]) for i in 1:N, j in 1:N])
 
     # newcoords = [SVector{N,Int}(normalization * x) for x in intcoords]
-    # @assert (newbasis,) .* newcoords == list
+    # @toggleassert (newbasis,) .* newcoords == list
 
     # return newbasis, newcoords
 end

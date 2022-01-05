@@ -7,7 +7,7 @@ function export_dataline(f, x)
             x = ';'*x*"\n;"
             inbetween = '\n'
         else
-            @assert x[1]!= '\''
+            @toggleassert x[1]!= '\''
             x = '\''*x*'\''
         end
     end
@@ -17,7 +17,7 @@ end
 function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname=false)
     mkpath(splitdir(file)[1])
     n = length(c.types)
-    @assert length(c.pos) == n
+    @toggleassert length(c.pos) == n
     if c isa CrystalNet
         c = CrystalNet3D(c)
     end
@@ -121,7 +121,7 @@ function export_cif(file, c::Union{Crystal, CIF})
                 print(f, '_'); print(f, id)
                 export_dataline(f, data)
             else
-                @assert data isa Vector{String}
+                @toggleassert data isa Vector{String}
                 n = length(data)
                 if haskey(loops, n)
                     push!(loops[n][1], id)
@@ -253,7 +253,7 @@ function export_cgd(file, g::PeriodicGraph)
         repr = reverse(split(string(g)))
         n = parse(Int, pop!(repr))
         m = length(repr) ÷ (n+2)
-        @assert iszero(length(repr) % (n+2))
+        @toggleassert iszero(length(repr) % (n+2))
         for _ in 1:m
             src = pop!(repr)
             dst = pop!(repr)

@@ -1,5 +1,16 @@
 ## Common utility functions
 
+macro toggleassert(ex...)
+    # Change the following boolean and reload CrystalNets to enable assertions
+    ENABLE_ASSERT = false
+    if ENABLE_ASSERT
+        return esc(quote
+            @assert $(ex...)
+        end)
+    end
+    return nothing
+end
+
 function no_metadata_metafmt(level::Logging.LogLevel, _module, group, id, file, line)
     @nospecialize
     color = Logging.default_logcolor(level)
@@ -233,7 +244,7 @@ function issingular(x::SMatrix{N,N,T}) where {N,T<:Rational}
     try
         return iszero(det(x))
     catch e
-        @assert e isa OverflowError
+        @toggleassert e isa OverflowError
         return iszero(det(SMatrix{N,N,widen(T)}(x)))
     end
 end
@@ -253,7 +264,7 @@ function issingular(x::SMatrix{3,3,T})::Bool where T<:Rational
     try
         return y11 * y22 == y12 * y21
     catch e
-        @assert e isa OverflowError
+        @toggleassert e isa OverflowError
         return widemul(y11, y22) == widemul(y12, y21)
     end
     # This can overflow so the input matrix should already have a wide enough type
@@ -271,7 +282,7 @@ function issingular(x::SMatrix{2,2,T})::Bool where T<:Rational
     return x[2,2] == try
         x[2,1] * x12
     catch e
-        @assert e isa OverflowError
+        @toggleassert e isa OverflowError
         widemul(x[2,1], x12)
     end
     # This can overflow so the input matrix should already have a wide enough type
@@ -284,7 +295,7 @@ end
 
 function isrank3(x::AbstractMatrix{T}) where T<:Rational
     _n, n = size(x)
-    @assert _n == 3
+    @toggleassert _n == 3
     n < 3 && return false
     cols = collect(eachcol(x))
     u1 = popfirst!(cols)
@@ -310,7 +321,7 @@ end
 
 function isrank2(x::AbstractMatrix{T}) where T<:Rational
     _n, n = size(x)
-    @assert _n == 2
+    @toggleassert _n == 2
     n < 2 && return false
     cols = collect(eachcol(x))
     u1 = popfirst!(cols)
@@ -332,7 +343,7 @@ end
 
 function isrank1(x::AbstractMatrix{T}) where T<:Rational
     _n, n = size(x)
-    @assert _n == 1
+    @toggleassert _n == 1
     @inbounds for y in eachcol(x)
         iszero(y[1]) || return true
     end

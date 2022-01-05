@@ -93,10 +93,10 @@ function possible_translations(c::CrystalNet{D,T}) where {D,T}
     ts = Tuple{Int, Int, Int, SVector{D,T}}[]
     sortedpos = copy(c.pos)
     origin = popfirst!(sortedpos)
-    @assert iszero(origin)
+    @toggleassert iszero(origin)
     sort!(SVector{D,soft_widen(widen(widen(T)))}.(sortedpos), by=norm)
     for t in sortedpos
-        @assert t == back_to_unit.(t)
+        @toggleassert t == back_to_unit.(t)
         max_den, i_max_den = findmax(denominator.(t))
         numerator(t[i_max_den]) == 1 || continue
         nz = count(iszero, t)
@@ -171,7 +171,7 @@ function minimal_volume_matrix(translations::Tuple{T}) where T
             best = i
         end
     end
-    @assert !iszero(best)
+    @toggleassert !iszero(best)
     ret = hcat(nz0[best][3])
     if ret[1] < 0
         ret = hcat(.-nz0[best][3])
@@ -215,7 +215,7 @@ function minimal_volume_matrix(translations::Tuple{T,T}) where T
             end
         end
     end
-    @assert !any(iszero.(best))
+    @toggleassert !any(iszero.(best))
     i, j = best
     ret = hcat(all[i][3], all[j][3])
     if det(ret) < 0
@@ -263,7 +263,7 @@ function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
             end
         end
     end
-    @assert !any(iszero.(best))
+    @toggleassert !any(iszero.(best))
     i, j, k = best
     ret = hcat(all[i][3], all[j][3], all[k][3])
     if det(ret) < 0
@@ -298,7 +298,7 @@ function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
     end
     I_sort = sort(1:length(poscol); by=i->(poscol[i], hash_position(offset[i])))
     i = popfirst!(I_sort)
-    @assert iszero(offset[i])
+    @toggleassert iszero(offset[i])
     I_kept = Int[i]
     sortedcol = SVector{D,Rational{U}}[poscol[i]]
     for i in I_sort
@@ -314,13 +314,13 @@ function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
         for neigh in neighbors(c.graph, I_kept[i])
             x = poscol[neigh.v]
             j = searchsortedfirst(sortedcol, x)
-            @assert j <= length(sortedcol) && sortedcol[j] == x
+            @toggleassert j <= length(sortedcol) && sortedcol[j] == x
             ofs_x = offset[neigh.v]
             push!(edges, (i, j, ofs_x - ofs_i .+ imat*neigh.ofs))
         end
     end
     graph = PeriodicGraph{D}(edges)
-    @assert degree(graph) == lengths[I_kept]
+    @toggleassert degree(graph) == lengths[I_kept]
     return CrystalNet(cell, c.types[I_kept], sortedcol, graph, c.options)
 end
 
@@ -398,7 +398,7 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{D,T}}}) where {D,T}
         end
     end
 
-    @assert all(z-> begin x, y = z; x == (y.src, y.dst.v, basis*y.dst.ofs) end, zip(edges, newedges))
+    @toggleassert all(z-> begin x, y = z; x == (y.src, y.dst.v, basis*y.dst.ofs) end, zip(edges, newedges))
 
     return basis, newedges
 end
@@ -460,7 +460,7 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
         for (coordinate, v) in pairs
             idx = rev_vmap[v]
             if idx == 0 # New node to which h is assigned
-                @assert t < h
+                @toggleassert t < h
                 vmap[h] = v
                 rev_vmap[v] = h
                 newpos[h] = coordinate
@@ -480,9 +480,9 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
             end
         end
     end
-    @assert allunique(edgs)
+    @toggleassert allunique(edgs)
     if !flag_bestedgs # the current list of edges is equal to minimal_edgs
-        @assert minimal_edgs == edgs
+        @toggleassert minimal_edgs == edgs
         return (Int[], Tuple{Int,Int,SVector{D,V}}[])
     end
     return vmap, edgs
@@ -547,7 +547,7 @@ function partition_by_coordination_sequence(graph, vmaps=nothing)
                     unionfind[descent] = repri
                     descent = tmp
                 end
-                @assert descent == repri
+                @toggleassert descent == repri
             end
             cat = cat_map[repri]
             if iszero(cat)
@@ -563,13 +563,13 @@ function partition_by_coordination_sequence(graph, vmaps=nothing)
     end
 
     unique_reprs::Vector{Vector{Int}}
-    @assert all(x -> length(x) == 1, unique_reprs)
+    @toggleassert all(x -> length(x) == 1, unique_reprs)
     categories::Vector{Vector{Int}}
 
     PeriodicGraphs.graph_width!(graph) # setup for the computation of coordination sequences
     csequences = [coordination_sequence(graph, repr[1], 10) for repr in unique_reprs]
     I = sortperm(csequences)
-    @assert csequences[I[1]][1] >= 2 # vertices of degree <= 1 should have been removed at input creation
+    @toggleassert csequences[I[1]][1] >= 2 # vertices of degree <= 1 should have been removed at input creation
 
     todelete = falses(length(categories))
     last_i = I[1]
@@ -600,10 +600,10 @@ function partition_by_coordination_sequence(graph, vmaps=nothing)
     # and by the coordination sequence in case of ex-aequo.
     # categories are thus uniquely determined and ordered independently of the representation of the net
 
-    @assert allunique(csequences)
+    @toggleassert allunique(csequences)
     for i in 1:num
-        @assert all(coordination_sequence(graph, x, 10) == csequences[i] for x in categories[i])
-    end # TODO comment out these costly asserts
+        @toggleassert all(coordination_sequence(graph, x, 10) == csequences[i] for x in categories[i])
+    end # if enabled, these assertions are somewhat costly (up to ~10% total execution time)
     return categories[sortorder], unique_reprs[sortorder]
 end
 
@@ -625,7 +625,7 @@ function find_candidates(net::CrystalNet{D,T}) where {D,T}
     U = soft_widen(T)
     if D == 3
         rotations, vmaps, _ = find_symmetries(net)
-        @assert length(rotations) == length(vmaps)
+        @toggleassert length(rotations) == length(vmaps)
         categories, unique_reprs = partition_by_coordination_sequence(net.graph, vmaps)
     else
         categories, unique_reprs = partition_by_coordination_sequence(net.graph)
@@ -637,7 +637,7 @@ function find_candidates(net::CrystalNet{D,T}) where {D,T}
             category_map[j] = i
         end
     end
-    @assert sort.(categories) == sort.(first(partition_by_coordination_sequence(net.graph)))
+    @toggleassert sort.(categories) == sort.(first(partition_by_coordination_sequence(net.graph)))
     candidates = Dict{Int,Vector{SMatrix{D,D,U,L}}}()
     for reprs in unique_reprs
         # First, we try to look for triplet of edges all starting from the same vertex within a category
@@ -689,7 +689,7 @@ candidates after removing candidates that are symmetric images of the kept ones.
 function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}, vmaps, rotations) where T
     unique_candidates = Pair{Int,SMatrix{3,3,T,9}}[]
     for (i, mats) in candidates
-        @assert i == minimum(vmap[i] for vmap in vmaps)
+        @toggleassert i == minimum(vmap[i] for vmap in vmaps)
         indices = [j for j in 1:length(vmaps) if vmaps[j][i] == i] # vmap for which i is a fixpoint
         min_mats = Set{SVector{9,T}}()
         for mat in mats
@@ -727,7 +727,7 @@ If the `basis` corresponding to vertex `u` is not of rank `D`, it is not include
 returned list (for instance, if all outgoing edges of a vertex are coplanar with `D == 3`).
 """
 function find_initial_candidates(net::CrystalNet{D,T}, candidates_v, category_map) where {D,T}
-    @assert 1 ≤ D ≤ 3
+    @toggleassert 1 ≤ D ≤ 3
     U = soft_widen(T)
     deg = degree(net.graph, first(candidates_v)) # The degree is the same for all vertices of the same category
     n = length(candidates_v)
@@ -743,7 +743,7 @@ function find_initial_candidates(net::CrystalNet{D,T}, candidates_v, category_ma
             a[:,j] .= net.pos[x.v] .+ x.ofs .- posi
             cats[j] = category_map[x.v]
         end
-        if (D == 3 && isrank3(a)) || (D == 2 && isrank2(a)) || (D == 1 && ((@assert a[:,1] != 0); true))
+        if (D == 3 && isrank3(a)) || (D == 2 && isrank2(a)) || (D == 1 && ((@toggleassert a[:,1] != 0); true))
             _initial_candidates[i] = (v => (a, cats))
             valid_initial_candidates[i] = true
         end
@@ -1053,7 +1053,7 @@ function find_candidates_fallback(net::CrystalNet3D{T}, reprs, othercats, catego
             return candidates
          end
     end
-    @assert all(isempty, values(candidates))
+    @toggleassert all(isempty, values(candidates))
     return Dict{Int,Vector{SMatrix{3,3,U,9}}}()
 end
 
@@ -1071,7 +1071,7 @@ function topological_key(net::CrystalNet{D,T}) where {D,T}
     if isempty(net.pos)
         throw(ArgumentError("the net is empty."))
     end
-    @assert allunique(net.pos) # FIXME: make a more precise check for net stability. Currently fails for sxt
+    @toggleassert allunique(net.pos) # FIXME: make a more precise check for net stability. Currently fails for sxt
     candidates, category_map = find_candidates(net)
     v, minimal_basis = popfirst!(candidates)
     n = nv(net.graph)
@@ -1080,7 +1080,7 @@ function topological_key(net::CrystalNet{D,T}) where {D,T}
     for (v, basis) in candidates
         vmap, edgs = candidate_key(net, v, basis, minimal_edgs)
         isempty(vmap) && continue
-        @assert edgs < minimal_edgs
+        @toggleassert edgs < minimal_edgs
         if edgs < minimal_edgs
             minimal_edgs = edgs
             minimal_vmap = vmap

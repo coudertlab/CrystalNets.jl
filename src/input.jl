@@ -38,7 +38,7 @@ function parse_cif(file)
             end
 
             # From this point, the loop has been specified
-            @assert loopisspecified
+            @toggleassert loopisspecified
             if l[i] != '_' && l[i:j] != "loop_"
                 for k in 1:loop_n
                     push!(all_data[loopspec[k]], l[i:j])
@@ -56,10 +56,10 @@ function parse_cif(file)
             inloop = false
         end
 
-        @assert !inloop
+        @toggleassert !inloop
         if l[i] == '_' # Simple identifier definition
             next_i, next_j, next_x = nextword(l, x)
-            @assert next_i != 0
+            @toggleassert next_i != 0
             all_data[l[i+1:j]] = l[next_i:next_j]
             x = next_x
         else
@@ -68,7 +68,7 @@ function parse_cif(file)
                 loopisspecified = false
                 loopspec = String[]
             elseif j-i > 4 && l[i:i+4] == "data_"
-                @assert !haskey(all_data, "data")
+                @toggleassert !haskey(all_data, "data")
                 all_data["data"] = l[i+5:j]
             else
                 k::Int = findprev(isequal('\n'), l, i)
@@ -136,7 +136,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
             break
         end
     end
-    @assert removed_identity
+    @toggleassert removed_identity
 
     labels =  pop!(parsed, "atom_site_label")::Vector{String}
     _symbols = haskey(parsed, "atom_site_type_symbol") ?
@@ -155,7 +155,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     pos = Matrix{Float64}(undef, 3, natoms)
     correspondence = Dict{String, Int}()
     for i in 1:natoms
-        @assert !haskey(correspondence, labels[i])
+        @toggleassert !haskey(correspondence, labels[i])
         correspondence[labels[i]] = i
         push!(types, Symbol(symbols[i]))
         pos[:,i] = parsestrip.(Float64, [pos_x[i], pos_y[i], pos_z[i]])
@@ -217,15 +217,15 @@ function parse_arc(file)
     end
     for l in eachline(file)
         if length(l) > 3 && l[1:3] == "key"
-            @assert isempty(curr_key)
+            @toggleassert isempty(curr_key)
             i = 4
             while isspace(l[i])
                 i += 1
             end
             curr_key = l[i:end]
-            @assert !haskey(pairs, curr_key)
+            @toggleassert !haskey(pairs, curr_key)
         elseif length(l) > 2 && l[1:2] == "id"
-            @assert !isempty(curr_key)
+            @toggleassert !isempty(curr_key)
             i = 3
             while isspace(l[i])
                 i += 1
@@ -280,7 +280,7 @@ end
 function attribute_residues(residues, n, assert_use_existing_residues)
     m = length(residues)
     atoms_in_residues = m == 0 ? 0 : sum(length(atoms(r)) for r in residues)
-    @assert atoms_in_residues <= n
+    @toggleassert atoms_in_residues <= n
 
     if atoms_in_residues < n
         if assert_use_existing_residues

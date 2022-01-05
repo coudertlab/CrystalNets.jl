@@ -80,7 +80,7 @@ function _loop_group!(ex, id, net, group)
     nothing
 end
 macro loop_group(ex)
-    @assert ex.head === :for
+    @toggleassert ex.head === :for
     ret = Expr(:block)
     for i in 1:3
         id = Symbol("id", i)

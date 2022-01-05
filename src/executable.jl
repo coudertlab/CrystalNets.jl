@@ -198,7 +198,7 @@ function main(args)
         end
         parsed_args::Dict{Symbol,Any}
 
-        @assert !parsed_args[:help]
+        @toggleassert !parsed_args[:help]
 
         force::Bool = parsed_args[:force]
 

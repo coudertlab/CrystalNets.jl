@@ -258,9 +258,9 @@ end
 #             # cpub = deepcopy(ub)
 #             MPZ.tdiv_qr!(tmp, ua, ua, ub)
 #             ua, ub = ub, ua
-#             # @assert tmp == cpua ÷ cpub
-#             # @assert ua == cpub
-#             # @assert ub == cpua - tmp * cpub
+#             # @toggleassert tmp == cpua ÷ cpub
+#             # @toggleassert ua == cpub
+#             # @toggleassert ub == cpua - tmp * cpub
 #             # cpuc = deepcopy(va)
 #             if typemin(Clong) < vb < typemax(Clong)
 #                 MPZ.mul_si!(tmp, vb % Clong)
@@ -279,7 +279,7 @@ end
 #             else
 #                 va, vb = vb, va + tmp
 #             end
-#             # @assert vb == cpuc + tmp * va
+#             # @toggleassert vb == cpuc + tmp * va
 #         end
 #         uc, vc = if T === BigInt
 #             Base.divgcd(ub, vb)
@@ -295,7 +295,7 @@ end
 #
 #         @inbounds Z[j] = (-2*isodd(k)+1) * Base.checked_den(uc, vc)
 #         # @show Z[j]
-#         # @assert mod((-1)^isodd(k) * ub, h) == mod(vb * x̄[j], h)
+#         # @toggleassert mod((-1)^isodd(k) * ub, h) == mod(vb * x̄[j], h)
 #     end
 #     return true
 # end
@@ -325,9 +325,9 @@ function _inner_dixon_p!(indices, Z::Matrix{Rational{T}}, h, x̄, sqh, tmp) wher
             # cpub = deepcopy(ub)
             MPZ.tdiv_qr!(tmp, ua, ua, ub)
             ua, ub = ub, ua
-            # @assert tmp == cpua ÷ cpub
-            # @assert ua == cpub
-            # @assert ub == cpua - tmp * cpub
+            # @toggleassert tmp == cpua ÷ cpub
+            # @toggleassert ua == cpub
+            # @toggleassert ub == cpua - tmp * cpub
             # cpuc = deepcopy(va)
             if typemin(Clong) < vb < typemax(Clong)
                 MPZ.mul_si!(tmp, vb % Clong)
@@ -346,7 +346,7 @@ function _inner_dixon_p!(indices, Z::Matrix{Rational{T}}, h, x̄, sqh, tmp) wher
             else
                 va, vb = vb, va + tmp
             end
-            # @assert vb == cpuc + tmp * va
+            # @toggleassert vb == cpuc + tmp * va
         end
 
         uv::Tuple{T,T} = if T === BigInt
@@ -364,7 +364,7 @@ function _inner_dixon_p!(indices, Z::Matrix{Rational{T}}, h, x̄, sqh, tmp) wher
 
         @inbounds Z[j] = (-2*isodd(k)+1) * Base.checked_den(uv[1], uv[2])
         # @show Z[j]
-        # @assert mod((-1)^isodd(k) * ub, h) == mod(vb * x̄[j], h)
+        # @toggleassert mod((-1)^isodd(k) * ub, h) == mod(vb * x̄[j], h)
     end
     return true
 end
@@ -384,19 +384,19 @@ function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
     # @show δ
     # @show p
     m = ceil(Int, 2*log(δ / (MathConstants.φ - 1))/log(p))
-    @assert m ≥ 1
+    @toggleassert m ≥ 1
     # @show m
     B = copy(Y)
     x̄ = BigInt.(linsolve!(C, B))
     X = copy(x̄)
-    @assert A * Modulo{p,T}.(X) == B
+    @toggleassert A * Modulo{p,T}.(X) == B
     h = one(BigInt) # = p^i
     tmp = BigInt()
     for i in 1:m-1
         MPZ.mul_si!(h, p)
         B .= (B .- A*Integer.(X)) .÷ p
         X .= Integer.(linsolve!(C, B))
-        @assert A * Modulo{p,T}.(X) == B
+        @toggleassert A * Modulo{p,T}.(X) == B
         # x̄ .+= h .* X
         @inbounds for j in eachindex(x̄)
             MPZ.mul!(tmp, X[j], h)
@@ -404,7 +404,7 @@ function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
         end
     end
     MPZ.mul_si!(h, p) # h = p^m
-    @assert mod.(A * x̄, h) == mod.(Y, h)
+    @toggleassert mod.(A * x̄, h) == mod.(Y, h)
     sqh = MPZ.sqrt(h) # h = p^{m/2}
     typeofZ = Union{Matrix{Rational{Int64}},Matrix{Rational{Int128}},Matrix{Rational{BigInt}}}
     Z::typeofZ = similar(Y, Rational{Int64})
@@ -416,11 +416,11 @@ function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
         if !success
             Z = copyuntil(first(indices), Z, Rational{BigInt})
             success = _inner_dixon_p!(indices, Z, h, x̄, sqh, tmp)
-            @assert success
+            @toggleassert success
         end
     end
 
-    @assert eltype(Y).(A * big.(Z)) == Y
+    @toggleassert eltype(Y).(A * big.(Z)) == Y
     return Z::typeofZ
     # return hcat(zeros(Rational{Int128}, N), Rational{Int128}.(x̄)')
     # Rational{Int64} is not enough for tep for instance.

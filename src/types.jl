@@ -33,13 +33,13 @@ function find_refid(eqs)
         refid = [""]
         not_at_the_end = true
         for t in ts
-            @assert not_at_the_end
+            @toggleassert not_at_the_end
             k = Tokenize.Tokens.kind(t)
             if k === Tokenize.Tokens.IDENTIFIER
-                @assert refid[end] == ""
+                @toggleassert refid[end] == ""
                 refid[end] = Tokenize.Tokens.untokenize(t)
             elseif k === Tokenize.Tokens.COMMA || k === Tokenize.Tokens.SEMICOLON
-                @assert refid[end] != ""
+                @toggleassert refid[end] != ""
                 push!(refid, "")
             elseif k === Tokenize.Tokens.ENDMARKER
                 not_at_the_end = false
@@ -72,20 +72,20 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
         k = Tokenize.Tokens.kind(x)
         k === Tokenize.Tokens.WHITESPACE && continue
         if k === Tokenize.Tokens.INTEGER
-            @assert isnothing(curr_val)
+            @toggleassert isnothing(curr_val)
             if encountered_div
                 curr_val = Rational{Int}(Int(curr_num), parse(Int, x.val))
                 curr_num = nothing
                 encountered_div = false
             else
-                @assert isnothing(curr_num)
+                @toggleassert isnothing(curr_num)
                 curr_num = parse(Int, x.val)
             end
         else
-            @assert !encountered_div
+            @toggleassert !encountered_div
             if k === Tokenize.Tokens.IDENTIFIER
                 if !isnothing(curr_num)
-                    @assert isnothing(curr_val)
+                    @toggleassert isnothing(curr_val)
                     curr_val = curr_num
                     curr_num = nothing
                 end
@@ -98,13 +98,13 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                 something_written = true
             else
                 if x.kind === Tokenize.Tokens.FWD_SLASH
-                    @assert isnothing(curr_val)
-                    @assert !isnothing(curr_num)
+                    @toggleassert isnothing(curr_val)
+                    @toggleassert !isnothing(curr_num)
                     encountered_div = true
                     continue
                 end
                 if !isnothing(curr_num)
-                    @assert isnothing(curr_val)
+                    @toggleassert isnothing(curr_val)
                     curr_val = curr_num
                     curr_num = nothing
                 end
@@ -118,7 +118,7 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                     curr_val = nothing
                     curr_sign = nothing
                 else
-                    @assert isnothing(curr_sign)
+                    @toggleassert isnothing(curr_sign)
                 end
                 if x.kind === Tokenize.Tokens.PLUS
                     curr_sign = true
@@ -198,7 +198,7 @@ function Cell(hall, (a, b, c), (α, β, γ), eqs=EquivalentPosition[])
     if isempty(eqs)
         eqs = get_symmetry_equivalents(hall)
         id = popfirst!(eqs)
-        @assert isone(id.mat) && iszero(id.ofs)
+        @toggleassert isone(id.mat) && iszero(id.ofs)
     end
     return Cell(hall, mat, eqs)
 end
@@ -344,7 +344,7 @@ function remove_partial_occupancy(cif::CIF)
     tokeep = deleteat!(collect(1:n), toremove)
     bonds = bonds[tokeep, tokeep]
     pos = cif.pos[:,tokeep]
-    @assert allunique(collect(eachcol(pos)))
+    @toggleassert allunique(collect(eachcol(pos)))
     return CIF(cif.cifinfo, cif.cell, ids, cif.types, pos, bonds)
 end
 
@@ -768,7 +768,7 @@ Base.ndims(::CrystalNet{D}) where {D} = D
 function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::PeriodicGraph{D},
                        placement::AbstractMatrix{T}, options::Options) where {D,T<:Real}
     n = nv(graph)
-    @assert size(placement) == (D, n)
+    @toggleassert size(placement) == (D, n)
     pos = Vector{SVector{D,T}}(undef, n)
     offsets = Vector{SVector{D,Int}}(undef, n)
     @inbounds for (i, x) in enumerate(eachcol(placement))
@@ -779,7 +779,7 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
     pos = pos[s]
     types = Symbol[types[s[i]] for i in 1:n]
     graph = offset_representatives!(graph, .-offsets)[s]
-    # @assert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
+    # @toggleassert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
     return CrystalNet{D,T}(cell, types, pos, graph, options)
 end
 

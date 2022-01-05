@@ -135,7 +135,7 @@ function get_symmetry_equivalents(hall)
     translations = Array{Cdouble}(undef, 3, 192)
     len = ccall((:spg_get_symmetry_from_database, libsymspg), Cint,
                 (Ptr{Cint}, Ptr{Cdouble}, Cint), rotations, translations, hall)
-    @assert len < 192
+    @toggleassert len < 192
     eqs = EquivalentPosition[]
     for i in 1:len
         rot = SMatrix{3,3,Rational{Int},9}(transpose(@inbounds rotations[:,:,i]))
@@ -162,7 +162,7 @@ function get_spglib_dataset(net::CrystalNet3D)
                 (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint, Cdouble),
                 lattice, positions, types, n, 10*eps(Cdouble))
     dataset = unsafe_load(ptr)
-    @assert dataset.n_atoms == n # otherwise the net is not minimal
+    @toggleassert dataset.n_atoms == n # otherwise the net is not minimal
     return dataset
 end
 
@@ -216,18 +216,18 @@ function find_symmetries(net::CrystalNet3D{Rational{S}}) where S
     len = ccall((:spg_get_multiplicity, libsymspg), Cint,
                 (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint, Cdouble),
                 lattice, positions, types, n, 100*eps(Cdouble))
-    @assert len >= 1
+    @toggleassert len >= 1
     rotations = Array{Cint}(undef, 3, 3, len)
     translations = Array{Cdouble}(undef, 3, len)
     _len = ccall((:spg_get_symmetry, libsymspg), Cint,
                  (Ptr{Cint}, Ptr{Cdouble}, Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint, Cdouble),
                  rotations, translations, len, lattice, positions, types, n, 100*eps(Cdouble))
-    @assert _len == len
+    @toggleassert _len == len
     # @show len
     den = lcm(len, den)
     # The first symmetry should always be the identity, which we can skip
-    @assert isone(rotations[:,:,1])
-    @assert iszero(translations[:,1])
+    @toggleassert isone(rotations[:,:,1])
+    @toggleassert iszero(translations[:,1])
     symmetries = SMatrix{3,3,Int,9}[rotations[:,:,1]]
     vmaps = Vector{Int}[collect(1:nv(net.graph))]
     floatpos = [float(x) for x in net.pos]
@@ -235,11 +235,11 @@ function find_symmetries(net::CrystalNet3D{Rational{S}}) where S
     for i in 2:len
         rot = SMatrix{3,3,T,9}(transpose(rotations[:,:,i]))
         if det(rot) < 0
-            @assert det(rot) == -1
+            @toggleassert det(rot) == -1
             hasmirror = true
             # continue # No need to keep it as its mirror image will be kept
         end
-        # @assert det(rot) == 1
+        # @toggleassert det(rot) == 1
         tr = SVector{3,Cdouble}(translations[:,i])
         trans = SVector{3,Rational{S}}(round.(U, den .* tr) .// den)
         vmap = check_valid_symmetry(net, trans, rot)
@@ -256,7 +256,7 @@ function find_symmetries(net::CrystalNet3D{Rational{S}}) where S
             # end
             isnothing(vmap) && continue
         end
-        @assert rot != LinearAlgebra.I # Otherwise the symmetry is a pure translation, so the net is not minimal
+        @toggleassert rot != LinearAlgebra.I # Otherwise the symmetry is a pure translation, so the net is not minimal
         push!(symmetries, rot)
         push!(vmaps, vmap::Vector{Int})
     end
