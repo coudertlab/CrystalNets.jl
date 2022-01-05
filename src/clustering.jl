@@ -808,51 +808,6 @@ function group_cycle_C(heterocycle, types, graph)
     return groups
 end
 
-#=
-function fix_sbu_connectivity!(sbus, graph, oldperiodic, potentialnewperiodic)
-    for i_sbu in potentialnewperiodic
-        sbu = sbus.sbus[i_sbu]
-        toexplore = [sbu[1]]
-        explored = Set{Int}(sbu[1].v)
-        while !isempty(toexplore)
-            u = pop!(toexplore)
-            for x in neighbors(graph, u.v)
-                sbus.attributions[x.v] == i_sbu || continue
-                ofs = u.ofs .+ x.ofs
-                if ofs != sbus.offsets[x.v]
-                    throw(InvalidSBU("At least one SBU is periodic itself: cannot coalesce SBUs into new vertices."))
-                end
-                if x.v ∉ explored
-                    push!(explored, x.v)
-                    push!(toexplore, PeriodicVertex(x.v, ofs))
-                end
-            end
-        end
-        @toggleassert length(explored) == length(sbu)
-    end
-    periodicsbus = Set{Int}()
-    for i in oldperiodic
-        union!(periodicsbus, split_sbu!(sbus, graph, i))
-    end
-    return periodicsbus
-end
-
-function lazy_avg_dst(pos, sbus, mat)
-    n = length(sbus.sbus)
-    stored_avg = Vector{SVector{3,Float64}}(undef, n)
-    alreadycomputed = falses(n)
-    function avg_dst(target, c)
-        position = if alreadycomputed[c]
-            stored_avg[c]
-        else
-            p = mean(pos[x.v] .+ x.ofs for x in sbus.sbus[c])
-            stored_avg[c] = p .- floor.(p)
-        end
-        return periodic_distance(position, pos[target], mat)
-    end
-    return avg_dst
-end
-=#
 
 const default_sbus = SBUKinds([
     [:metal, :actinide, :lanthanide], [:C, :halogen], [:nonmetal, :metalloid],
@@ -1100,156 +1055,8 @@ function find_sbus(crystal, kinds=default_sbus)
         end
 
         periodicsbus = newperiodicsbus
-#        export_default(Crystal{Nothing}(crystal.cell, Symbol.(classes), crystal.pos, crystal.graph, crystal.options))
+        # export_default(Crystal{Nothing}(crystal.cell, Symbol.(classes), crystal.pos, crystal.graph, crystal.options))
     end
-
-
-#=
-    while !isempty(periodicsbus)
-        # In case of wrong clustering, one or more created SBUs may actually be
-        # periodic, making them infinite and meaningless.
-        # In this case, we attempt to trim these by reassigning the outermost
-        # atoms of these SBUs to other ones until they are no longer periodic.
-        # This procedure fails if any other SBU has itself become periodic in
-        # the process.
-        compositions = [sort([crystal.types[x.v] for x in sbu])
-                        for sbu in sbus.sbus]
-                encounteredcompositions = Dict{Vector{Symbol},Int}()
-        categories = Vector{Int}[]
-        category_of = Vector{Int}(undef, length(sbus.sbus))
-        for (i, compo) in enumerate(compositions)
-            n = length(categories) + 1
-            category = get!(encounteredcompositions, compo, n)
-            category == n && push!(categories, Int[])
-            push!(categories[category], i)
-            category_of[i] = category
-        end
-        # Each element of `categories` is a list of sbu index such that all
-        # sbus in the list have the same composition (and are hence considered
-        # equivalent)
-
-        reclassifiable = Vector{Int}[]
-        reclassifiable_parenttype = Vector{Symbol}[]
-        targeted = Set{Int}[]
-        # reclassifiable[i] is a set of atoms, each corresponding to an element
-        # of a periodic SBU which is the neighbor of an atom X of the i-th SBU.
-        # The element type of X is accordingly stored in
-        # reclassifiable_parenttype[i] while the involved periodic SBU is
-        # stored in targeted[i]
-        # If the i-th category is that of a periodic SBU, the i-th element of
-        # these three lists is empty
-        for (i, sbu) in enumerate(sbus.sbus)
-            if i ∈ periodicsbus
-                push!(reclassifiable, Int[])
-                push!(reclassifiable_parenttype, Symbol[])
-                push!(targeted, Set{Int}())
-                continue
-            end
-            _reclassifiable = Int[]
-            push!(reclassifiable, _reclassifiable)
-            _reclassifiable_parenttype = Symbol[]
-            push!(reclassifiable_parenttype, _reclassifiable_parenttype)
-            _targeted = Set{Int}()
-            push!(targeted, _targeted)
-            for x in sbu
-                typx = crystal.types[x.v]
-                for y in neighbors(crystal.graph, x.v)
-                    attr = sbus.attributions[y.v]
-                    if attr ∈ periodicsbus
-                        push!(_reclassifiable, y.v)
-                        push!(_reclassifiable_parenttype, typx)
-                        push!(_targeted, attr)
-                    end
-                end
-            end
-        end
-
-        # avg_dst(target, c) is the average distance between atom `target` and
-        # the atoms in SBU c.
-        avg_dst = lazy_avg_dst(crystal.pos, sbus, crystal.cell.mat)
-
-        length_targeted = unique!(sort!(length.(targeted)))
-        @toggleassert length_targeted[1] == 0
-        popfirst!(length_targeted)
-        actually_targeted = Set{Int}()
-        modified_sbus = Set{Int}()
-        for l in length_targeted
-            involvedsbus = Set{Int}() # TODO: use BitSet instead of Set{Int} at multiple places
-            _involvedcategories = Set{Int}()
-            for i in 1:length(sbus.sbus)
-                if length(targeted[i]) == l
-                    push!(involvedsbus, i)
-                    push!(_involvedcategories, category_of[i])
-                end
-            end
-
-            involvedcategories::Vector{Int} = collect(_involvedcategories)
-            involved_parenttypes = [Set{Symbol}() for _ in involvedcategories]
-            for (i, cat) in enumerate(involvedcategories)
-                for j in cat
-                    j ∈ involvedsbus || continue
-                    union!(involved_parenttypes[i], reclassifiable_parenttype[j])
-                end
-            end
-
-            while !isempty(involvedcategories)
-                new_involvedcategories = Int[]
-                for (i, i_cat) in enumerate(involvedcategories)
-                    thisparenttype = pop!(involved_parenttypes[i])
-                    if !isempty(involved_parenttypes)
-                        push!(new_involvedcategories, i_cat)
-                    end
-
-                    cat = categories[i_cat]
-                    toremove = Int[]
-                    for i_sbu in cat
-                        for (j, parenttype) in enumerate(reclassifiable_parenttype[i_sbu])
-                            parenttype === thisparenttype || continue
-                            target = reclassifiable[i_sbu][j]
-                            push!(toremove, target)
-                            if sbus.attributions[target] ∈ periodicsbus # not already dealt with
-                                contenders = Dict{Int, Tuple{Int, PeriodicVertex3D}}() # SBUs neighboring this atom
-                                for x in neighbors(crystal.graph, target)
-                                    attr = sbus.attributions[x.v]
-                                    if crystal.types[x.v] === parenttype && attr ∈ cat
-                                        count, _ = get(contenders, attr, (0, PeriodicVertex3D(0)))
-                                        contenders[attr] = (count + 1, x)
-                                    end
-                                end
-                                μ = maximum(first.(values(contenders)))
-                                candidates = [(attr, x) for (attr, (c, x)) in contenders if c == μ]
-                                j_sbu, neigh = if length(candidates) > 1
-                                    dsts = [avg_dst(target, c[1]) for c in candidates]
-                                    candidates[argmin(dsts)]
-                                else
-                                    only(candidates)
-                                end
-                                target_sbu = sbus.attributions[target]
-                                sbus.attributions[target] = j_sbu
-                                push!(actually_targeted, target_sbu)
-                                delete_target_from_list!(sbus.sbus[target_sbu], target)
-                                newofs = sbus.offsets[neigh.v] .- neigh.ofs
-                                sbus.offsets[target] = newofs
-                                push!(sbus.sbus[j_sbu], PeriodicVertex(target, newofs))
-                                push!(modified_sbus, j_sbu)
-                            end
-                        end
-                    end
-                    length(actually_targeted) == length(periodicsbus) && break
-                end
-                length(actually_targeted) == length(periodicsbus) && break
-                involvedcategories = new_involvedcategories
-            end
-
-            if length(actually_targeted) == length(periodicsbus)
-                # prevperiodicsbus = [Set([x.v for x in sbus.sbus[i]]) for i in periodicsbus]
-                periodicsbus = fix_sbu_connectivity!(sbus, crystal.graph, periodicsbus, modified_sbus)
-                break
-            end
-        end
-
-    end
-=#
 
     return sbus
 end
@@ -1268,6 +1075,7 @@ end
 
 function split_special_sbu!(graph, sbus, types)
     toremove = Int[]
+    uniqueCs = Int[]
     for (k, sbu) in enumerate(sbus)
         uniquetypes = :O
         for x in sbu
@@ -1280,29 +1088,32 @@ function split_special_sbu!(graph, sbus, types)
             end
         end
         uniquetypes === Symbol("") && continue
-        if uniquetypes === :O || (uniquetypes === :C && length(sbu) == 1)
+        if uniquetypes === :O
+            _split_this_sbu!(toremove, graph, k)
+        elseif uniquetypes == :C && length(sbu) == 1
+            push!(uniqueCs, k)
+        end
+    end
+    for k in uniqueCs
+        neighs = neighbors(graph, k)
+        otherwiseconnected = falses(length(neighs))
+        for (i, x) in enumerate(neighs)
+            done = otherwiseconnected[i]
+            for j in (i+1):length(neighs)
+                done && otherwiseconnected[j] && continue
+                y = neighs[j]
+                if has_edge(graph, x.v, PeriodicVertex(y.v, y.ofs .- x.ofs))
+                    otherwiseconnected[i] = true
+                    otherwiseconnected[j] = true
+                    done = true
+                end
+            end
+        end
+        if all(otherwiseconnected)
+            push!(toremove, k)
+        else
             _split_this_sbu!(toremove, graph, k)
         end
-        # if typ === :O
-        #     _split_this_sbu!(toremove, graph, k)
-        # else
-        #     flag = typ === :C
-        #     if !flag
-        #         strty = string(typ)
-        #         if length(strty) ≥ 2 && strty[1] == 'C' && !('1' <= strty[2] <= '9')
-        #             flag = true
-        #             for c in strty[2:end]
-        #                 if c != 'O' && c != 'N' && !('1' <= strty[2] <= '6')
-        #                     flag = false
-        #                     break
-        #                 end
-        #             end
-        #         end
-        #     end
-        #     if flag
-        #         _split_this_sbu!(toremove, graph, k)
-        #     end
-        # end
     end
     return rem_vertices!(graph, toremove)
 end
@@ -1332,9 +1143,10 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
         atts = clusters.attributions[s]
         neigh0 = neighbors(crystal.graph, s)
         @toggleassert length(neigh0) ≥ 2
+        typisnotC = crystal.types[s] !== :C
         for x in neigh0
             d = x.v
-            if crystal.options.bond_adjacent_sbus && crystal.types[d] === :C && crystal.types[s] !== :C
+            if crystal.options.bond_adjacent_sbus && crystal.types[d] === :C && typisnotC
                 neighs = neighbors(crystal.graph, d)
                 if length(neighs) > 2
                     for y in neighs
