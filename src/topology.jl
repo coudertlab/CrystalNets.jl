@@ -498,9 +498,7 @@ This partition does not depend on the representation of the graph.
 The optional argument `vmaps` is a set of permutations of the vertices that leave the graph
 unchanged. In other words, `vmaps` is a set of symmetry operations of the graph.
 
-Also return the map from vertices to an identifier such that all vertices with the same
-identifier are symmetric images of one another, as well as a list of unique representative
-for each symmetry class.
+Return the categories and a list of unique representative for each symmetry class.
 """
 function partition_by_coordination_sequence(graph, vmaps=nothing)
     # First, union-find on the symmetries to avoid computing useless coordination sequences
@@ -508,7 +506,6 @@ function partition_by_coordination_sequence(graph, vmaps=nothing)
     unionfind = collect(1:n)
     if vmaps isa Nothing || isempty(vmaps) # Absence of symmetry
         unique_reprs = Vector{Int}[Int[i] for i in 1:n]
-        cat_map = Int[i for i in 1:n]
         categories = Vector{Int}[[i] for i in 1:n]
     else
         for vmap in vmaps
@@ -565,8 +562,12 @@ function partition_by_coordination_sequence(graph, vmaps=nothing)
         end
     end
 
+    unique_reprs::Vector{Vector{Int}}
+    @assert all(x -> length(x) == 1, unique_reprs)
+    categories::Vector{Vector{Int}}
+
     PeriodicGraphs.graph_width!(graph) # setup for the computation of coordination sequences
-    csequences = [coordination_sequence(graph, first(cat), 10) for cat in categories]
+    csequences = [coordination_sequence(graph, repr[1], 10) for repr in unique_reprs]
     I = sortperm(csequences)
     @assert csequences[I[1]][1] >= 2 # vertices of degree <= 1 should have been removed at input creation
 
@@ -577,8 +578,9 @@ function partition_by_coordination_sequence(graph, vmaps=nothing)
         if csequences[i] == csequences[last_i]
             todelete[i] = true
             append!(categories[last_i], categories[i])
-            push!(unique_reprs[last_i], pop!(unique_reprs[i]))
-            empty!(categories[i])
+            push!(unique_reprs[last_i], unique_reprs[i][1])
+            # We asserted that unique_reprs[i] only had one element before
+            # Note that unique_reprs[last_i] has more than one element now
         else
             last_i = i
         end
@@ -602,7 +604,7 @@ function partition_by_coordination_sequence(graph, vmaps=nothing)
     for i in 1:num
         @assert all(coordination_sequence(graph, x, 10) == csequences[i] for x in categories[i])
     end # TODO comment out these costly asserts
-    return categories[sortorder], cat_map, unique_reprs[sortorder]
+    return categories[sortorder], unique_reprs[sortorder]
 end
 
 
@@ -624,9 +626,9 @@ function find_candidates(net::CrystalNet{D,T}) where {D,T}
     if D == 3
         rotations, vmaps, _ = find_symmetries(net)
         @assert length(rotations) == length(vmaps)
-        categories, symmetry_map, unique_reprs = partition_by_coordination_sequence(net.graph, vmaps)
+        categories, unique_reprs = partition_by_coordination_sequence(net.graph, vmaps)
     else
-        categories, symmetry_map, unique_reprs = partition_by_coordination_sequence(net.graph)
+        categories, unique_reprs = partition_by_coordination_sequence(net.graph)
     end
 
     category_map = Vector{Int}(undef, nv(net.graph))
