@@ -774,14 +774,20 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
     initial_candidates = find_initial_candidates(net, candidates_v, category_map)
     candidates = Dict{Int,Vector{SMatrix{3,3,U,9}}}()
     isempty(initial_candidates) && return candidates
+    # the two next variables are accessed concurrently, must be locked before read/write
     current_cats::SizedVector{3,Int} = SizedVector{3,Int}(fill(length(category_map), 3))
     current_ordertype::Int = 1
+    # ordertype designates the kind of ordering of the category of the three edges:
+    # ordertype == 1 means c1 == c2 == c3 where ci is the category of edge i
+    # ordertype == 2 means c1  < c2 == c3
+    # ordertype == 3 means c1 == c2  < c3
+    # ordertype == 4 means c1  < c2  < c3
     fastlock = SpinLock()
 
     @threads for (v, (mat, cats)) in initial_candidates
         _, n = size(mat)
-        matv = SMatrix{3,3,U,9}[]
-        lock(fastlock)
+        matv = SMatrix{3,3,U,9}[] # the list of bases making a candidate with origin v
+        lock(fastlock) # needed even for read-only to avoid data race
         ordertype = current_ordertype
         mincats = copy(current_cats)
         unlock(fastlock)
@@ -800,14 +806,15 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
                 end
             end)
             subcats = subcats[reorder]
-            if subcats[1] == subcats[3]
+            # subcats are the ordered categories of the three edges
+            if subcats[1] == subcats[3] # c1 == c2 == c3
                 (ordertype != 1 || mincats[1] < subcats[1]) && continue
                 if mincats[1] > subcats[1]
                     empty!(matv)
                     mincats = subcats
                 end
                 orders = SVector{3,Int}[(1,2,3), (1,3,2), (2,1,3), (2,3,1), (3,1,2), (3,2,1)]
-            elseif subcats[2] == subcats[3]
+            elseif subcats[2] == subcats[3] # c1 < c2 == c3
                 (ordertype > 2 || (ordertype == 2 && mincats < subcats)) && continue
                 if ordertype == 1 || mincats > subcats
                     empty!(matv)
@@ -815,7 +822,7 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
                     mincats = subcats
                 end
                 orders = SVector{3,Int}[reorder, (reorder[1], reorder[3], reorder[2])]
-            elseif subcats[1] == subcats[2]
+            elseif subcats[1] == subcats[2] # c1 == c2 < c3
                 (ordertype == 4 || (ordertype == 3 && mincats < subcats)) && continue
                 if ordertype <= 2 || mincats > subcats
                     empty!(matv)
@@ -823,7 +830,7 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
                     mincats = subcats
                 end
                 orders = SVector{3,Int}[reorder, (reorder[2], reorder[1], reorder[3])]
-            else
+            else # c1 < c2 < c3
                 ordertype == 4 && mincats < subcats && continue
                 if ordertype != 4 || mincats > subcats
                     empty!(matv)
