@@ -279,7 +279,7 @@ function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir()
     #     Chemfiles.add_residue!(frame, residues[i])
     # end
     _a, _b, _c, α, β, γ = cell_parameters(crystal.cell)
-    Chemfiles.set_cell!(frame, Chemfiles.UnitCell(_a, _b, _c, α, β, γ))
+    Chemfiles.set_cell!(frame, Chemfiles.UnitCell(Float64[_a, _b, _c], Float64[α, β, γ]))
     recenter::SVector{3,Float64} = minimum(reduce(hcat, crystal.pos); dims=2)
     for i in 1:length(crystal.types)
         # resid = crystal.clusters.attributions[i]

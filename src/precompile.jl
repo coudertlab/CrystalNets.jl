@@ -1,4 +1,4 @@
-using CrystalNets, PeriodicGraphs, TextWrap, ArgParse, LinearAlgebra, SparseArrays,
+using CrystalNets, PeriodicGraphs, ArgParse, LinearAlgebra, SparseArrays,
       StaticArrays, Logging, Tokenize
 import Chemfiles
 
@@ -101,10 +101,6 @@ function _precompile_()
             precompile(fbody, (Any,typeof(Base.CoreLogging.handle_message),Logging.ConsoleLogger,Any,Any,Any,Any,Any,Any,Any,))
         end
     end
-
-    # TextWrap
-    Base.precompile(Tuple{Core.kwftype(typeof(TextWrap.wrap)),NamedTuple{(:break_long_words, :break_on_hyphens), Tuple{Bool, Bool}},typeof(TextWrap.wrap),SubString{String}})
-    Base.precompile(Tuple{Core.kwftype(typeof(TextWrap.wrap)),NamedTuple{(:break_long_words, :break_on_hyphens, :initial_indent, :subsequent_indent), Tuple{Bool, Bool, String, String}},typeof(TextWrap.wrap),String})
 
     # ArgParse
     Base.precompile(Tuple{Core.kwftype(typeof(ArgParse.Type)),Any,Type{ArgParse.ArgParseSettings}})
