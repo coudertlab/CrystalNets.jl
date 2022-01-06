@@ -126,8 +126,8 @@ Attempt to reckognize a topological genome from an archive of known genomes.
 The second form is used on the output of topological_genome(::CrystalNetGroup).
 """
 function reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
-    (startswith(genome, "unstable") || genome == "non-periodic") && return genome
-    get(arc, genome, "UNKNOWN "*genome)
+    genome == "non-periodic" && return genome
+    get(arc, genome, startswith(genome, "unstable") ? genome : "UNKNOWN "*genome)
 end
 
 function reckognize_topology(genomes::Vector{Tuple{Vector{Int},String}}, arc=CRYSTAL_NETS_ARCHIVE)

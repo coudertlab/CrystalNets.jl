@@ -7,7 +7,8 @@ import Base.Threads
 CrystalNets.toggle_export(false)
 
 function _finddirs()
-    return joinpath(dirname(pathof(CrystalNets)), "test", "cif"), root
+    root = dirname(dirname(pathof(CrystalNets)))
+    return joinpath(root, "test", "cif"), root
 end
 
 const known_unstable_nets = ("sxt", "llw-z") # special case for these known unstable nets
@@ -35,12 +36,11 @@ end
 
 @testset "Archive" begin
     @info "Checking that all known topologies are reckognized (this can take a few minutes)."
-    tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)
-                               if x ∉ known_unstable_nets])
+    tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)])
     reverse_archive = collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
     Threads.@threads for (genome, id) in reverse_archive
         if id ∈ known_unstable_nets
-            @test_broken reckognize_topology(topological_genome(PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE[id]))) == id
+            @test_broken !startswith(topological_genome(PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE[id])), "unstable")
             continue
         end
         tests[id] = try

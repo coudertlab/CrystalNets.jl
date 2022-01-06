@@ -248,7 +248,7 @@ function parse_arcs(path)
     dict = Dict{String,String}()
     flag = true
     for f in readdir(path; sort=true)
-        _flag, _dict = parse_arc(path*f)
+        _flag, _dict = parse_arc(joinpath(path, f))
         flag &= _flag
         mergewith!(combine, dict, _dict)
     end

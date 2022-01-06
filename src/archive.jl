@@ -1,8 +1,8 @@
 ## Handling of the topological archive internally used to reckognize topologies.
 import Pkg
 
-const CRYSTAL_NETS_VERSION = VersionNumber(Pkg.TOML.parsefile(joinpath(@__DIR__, "..", "Project.toml"))["version"])
-const arc_location = normpath(joinpath(@__DIR__, "..", "archives/"))
+const CRYSTAL_NETS_VERSION = VersionNumber(Pkg.TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["version"])
+const arc_location = normpath(joinpath(dirname(@__DIR__), "archives"))
 const CRYSTAL_NETS_ARCHIVE = if isdir(arc_location) && !isempty(readdir(arc_location))
     flag, parsed = parse_arcs(arc_location)
     if !flag
@@ -19,7 +19,7 @@ else
           If you have not encountered any such error and you did not modify or erase the archive located at $arc_location please open an issue at https://github.com/coudertlab/CrystalNets.jl/issues/new
           """)
 end
-const REVERSE_CRYSTAL_NETS_ARCHIVE = Dict{String,String}(last(x) => first(x) for x in CRYSTAL_NETS_ARCHIVE)
+const REVERSE_CRYSTAL_NETS_ARCHIVE = Dict{String,String}(id => (startswith(key, "unstable") ? key[10:end] : key) for (key, id) in CRYSTAL_NETS_ARCHIVE)
 
 function _reset_archive!()
     global CRYSTAL_NETS_ARCHIVE
