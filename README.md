@@ -47,20 +47,20 @@ julia> string(topological_genome(net))
 "3 1 2 0 0 0 1 2 0 0 1 1 2 0 1 0 1 2 1 0 0"
 ```
 
-This string can be fed to the `reckognize_topology` function in order to determine the RCSR name of the topology:
+This string can be fed to the `recognize_topology` function in order to determine the RCSR name of the topology:
 
 ```julia
-julia> reckognize_topology("3 1 2 0 0 0 1 2 0 0 1 1 2 0 1 0 1 2 1 0 0")
+julia> recognize_topology("3 1 2 0 0 0 1 2 0 0 1 1 2 0 1 0 1 2 1 0 0")
 "dia"
 ```
 
 All these steps can be summarised by executing
 
 ```julia
-julia> reckognize_topology(topological_genome(CrystalNet(parse_chemfile(FILE))))
+julia> recognize_topology(topological_genome(CrystalNet(parse_chemfile(FILE))))
 ```
 
-where `FILE` is the path to the crystal in a reckognizable chemical file format.
+where `FILE` is the path to the crystal in a recognizable chemical file format.
 
 ## Use as an executable
 

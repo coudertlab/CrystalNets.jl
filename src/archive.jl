@@ -1,4 +1,4 @@
-## Handling of the topological archive internally used to reckognize topologies.
+## Handling of the topological archive internally used to recognize topologies.
 import Pkg
 
 const CRYSTAL_NETS_VERSION = VersionNumber(Pkg.TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["version"])
@@ -92,7 +92,7 @@ end
 """
     clean_default_archive!(custom_arc; validate=true, refresh=true)
 
-Erase the default archive used by CrystalNets.jl to reckognize known topologies
+Erase the default archive used by CrystalNets.jl to recognize known topologies
 and replace it with a new one from the file located at `custom_arc`.
 
 The `validate` parameter controls whether the new file is checked and converted
@@ -152,7 +152,7 @@ end
 """
     empty_default_archive!(; refresh=true)
 
-Empty the default archive. This will prevent CrystalNets from reckognizing any
+Empty the default archive. This will prevent CrystalNets from recognizing any
 topology before they are explicitly added.
 
 The `refresh` optional parameter controls whether the current archive should also
@@ -192,7 +192,7 @@ end
 """
     change_current_archive!(custom_arc; validate=true)
 
-Erase the current archive used by CrystalNets.jl to reckognize known topologies and
+Erase the current archive used by CrystalNets.jl to recognize known topologies and
 replace it with the archive stored in the file located at `custom_arc`.
 
 The `validate` optional parameter controls whether the new file is checked and converted
@@ -299,7 +299,7 @@ the name of the latest file that bore it.
 The archive can then be used with `change_current_archive!(destination; validate=false)`
 for instance.
 
-See also `reckognize_topologies` if you want to compare the topologies of the files
+See also `recognize_topologies` if you want to compare the topologies of the files
 in a directory with those of the current archive.
 """
 function make_archive(path, destination, verbose=false)

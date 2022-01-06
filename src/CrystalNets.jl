@@ -1,17 +1,17 @@
 """
     CrystalNets
 
-Module for automatic reckognition of crystal net topologies.
+Module for automatic recognition of crystal net topologies.
 To use as an executable, run the source file in a shell:
 ```bash
 julia --project=$(normpath(@__DIR__, "..")) $(@__FILE__)
 ```
-Otherwise, as a module, to try to reckognize the net underlying a crystal given in a
+Otherwise, as a module, to try to recognize the net underlying a crystal given in a
 chemical file format called FILE, the entry point is the following execution:
 ```julia
 julia> using CrystalNets
 
-julia> reckognize_topology(topological_genome(CrystalNet(parse_chemfile(FILE))))
+julia> recognize_topology(topological_genome(CrystalNet(parse_chemfile(FILE))))
 ```
 """
 module CrystalNets
@@ -20,7 +20,7 @@ export CrystalNet,
        CrystalNetGroup,
        parse_chemfile,
        topological_genome,
-       reckognize_topology,
+       recognize_topology,
        determine_topology,
        determine_topologies,
        guess_topology,

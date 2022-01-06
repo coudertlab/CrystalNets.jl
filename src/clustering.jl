@@ -817,7 +817,7 @@ const default_sbus = SBUKinds([
     find_sbus(crystal)
 
 This is an automatic clustering function for MOFs.
-Reckognize SBUs using a heuristic based on the atom types.
+recognize SBUs using a heuristic based on the atom types.
 """
 function find_sbus(crystal, kinds=default_sbus)
     n = nv(crystal.graph)
@@ -829,12 +829,12 @@ function find_sbus(crystal, kinds=default_sbus)
         if class == 0 # atom not identified
             if atom_name === Symbol("")
                 throw(MissingAtomInformation("""
-                the input is a periodic graph with no atom information, it cannot be reckognized as a MOF.
+                the input is a periodic graph with no atom information, it cannot be recognized as a MOF.
                 """))
             elseif atom_name === Symbol("_")
                 throw(MissingAtomInformation("""
                 the input file format does not contain enough information on the atoms to distinguish the organic and inorganic SBUs.
-                Please use a file format containing at least the atom types and in order to use MOF reckognition.
+                Please use a file format containing at least the atom types and in order to use MOF recognition.
                 """))
             else
                 throw(MissingAtomInformation("unhandled atom type: $(element_categories[atomic_numbers[atom_name]]) (for atom $atom_name)."))

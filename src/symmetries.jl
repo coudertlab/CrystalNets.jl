@@ -108,7 +108,7 @@ function find_hall_number(hallsymbol, hm, it)
             end
         end
         hall == 0 || return hall
-        @ifwarn @warn "Hall symbol provided but not reckognised: $hallsymbol"
+        @ifwarn @warn "Hall symbol provided but not recognised: $hallsymbol"
     end
     if hm != ""
         hm = hm[1]*lowercase(@view hm[2:end])
@@ -117,7 +117,7 @@ function find_hall_number(hallsymbol, hm, it)
         hall == 0 || return hall
         hall = get(SPACE_GROUP_FULL, dense_hm, 0)
         hall == 0 || return hall
-        @ifwarn @warn "H-M symbol provided but not reckognised : $hm"
+        @ifwarn @warn "H-M symbol provided but not recognised : $hm"
     end
     if it != 0
         if it < 1 || it > 230

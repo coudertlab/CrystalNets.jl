@@ -118,20 +118,20 @@ function topological_genome(group::CrystalNetGroup)
 end
 
 """
-    reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
-    reckognize_topology(genomes::Vector{Tuple{Vector{Int},String}}, arc=CRYSTAL_NETS_ARCHIVE)
+    recognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
+    recognize_topology(genomes::Vector{Tuple{Vector{Int},String}}, arc=CRYSTAL_NETS_ARCHIVE)
 
-Attempt to reckognize a topological genome from an archive of known genomes.
+Attempt to recognize a topological genome from an archive of known genomes.
 
 The second form is used on the output of topological_genome(::CrystalNetGroup).
 """
-function reckognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
+function recognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
     genome == "non-periodic" && return genome
     get(arc, genome, startswith(genome, "unstable") ? genome : "UNKNOWN "*genome)
 end
 
-function reckognize_topology(genomes::Vector{Tuple{Vector{Int},String}}, arc=CRYSTAL_NETS_ARCHIVE)
-    return [(src, reckognize_topology(genome, arc)) for (src, genome) in genomes]
+function recognize_topology(genomes::Vector{Tuple{Vector{Int},String}}, arc=CRYSTAL_NETS_ARCHIVE)
+    return [(src, recognize_topology(genome, arc)) for (src, genome) in genomes]
 end
 
 """
@@ -155,7 +155,7 @@ function determine_topology(path, options::Options)
             rethrow()
         end
     end
-    return reckognize_topology(genomes)
+    return recognize_topology(genomes)
 end
 determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs...))
 
@@ -166,7 +166,7 @@ determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs.
 Compute the topology of the files at `path`.
 Return a triplet `(tops, genomes, failed)` where:
 - `tops` is a dictionary linking each file name (without the extension) to its
-  topology name, if reckognised, or topological genome otherwise.
+  topology name, if recognised, or topological genome otherwise.
   If an input file X contains intertwinned nets, they will automatically be
   separated and each subnet (called X_1, X_2, ...) will be linked to its
   corresponding topology
@@ -203,7 +203,7 @@ function determine_topologies(path, options)
         end
         for (j, (_, genome)) in enumerate(genomes)
             newname = length(genomes) == 1 ? name : name * '_' * string(j)
-            id = reckognize_topology(genome)
+            id = recognize_topology(genome)
             if startswith(id, "UNKNOWN")
                 push!(newgenomes[i], id[9:end])
             end
@@ -247,7 +247,7 @@ macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
             if haskey(encountered_genomes, sig)
                 encountered_genomes[sig] += 1
             else
-                genome = reckognize_topology(topological_genome(net))
+                genome = recognize_topology(topological_genome(net))
                 if !startswith(genome, "UNKNOWN") && !startswith(genome, "unstable") &&
                                                     !startswith(genome, "non-periodic")
                     $ifprintinfo
@@ -340,7 +340,7 @@ guess_topology(path; kwargs...) = guess_topology(path, Options(; kwargs...))
 Attempt to determine the topology of the files stored in the directory at `path`
 by using `guess_topology` on each.
 
-Similarly to `reckognize_topologies`, return a triplet `(tops, genomes, failed)`
+Similarly to `recognize_topologies`, return a triplet `(tops, genomes, failed)`
 where `tops` is a dictionary linking the name of the files to the name of the
 topology (or the topological genome if none), `genomes` contain the genomes
 not part of the archive and `failed` is a dictionary linking the name of the
@@ -389,7 +389,7 @@ is the exception preceded by a "FAILED with" mention. Finally, if the input does
 not represent a periodic structure, the result is "non-periodic".
 
 This function is similar to determine_topologies, but targets larger datasets,
-for which performance is critical. In particular, no attempt to reckognise the
+for which performance is critical. In particular, no attempt to recognise the
 found topologies is performed: only the topological key is returned.
 
 It is strongly recommended to toggle warnings off (through `toggle_warning`) and

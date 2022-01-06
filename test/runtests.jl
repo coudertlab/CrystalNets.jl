@@ -35,7 +35,7 @@ end
 
 
 @testset "Archive" begin
-    @info "Checking that all known topologies are reckognized (this can take a few minutes)."
+    @info "Checking that all known topologies are recognized (this can take a few minutes)."
     tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)])
     reverse_archive = collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
     Threads.@threads for (genome, id) in reverse_archive
@@ -44,7 +44,7 @@ end
             continue
         end
         tests[id] = try
-            reckognize_topology(topological_genome(PeriodicGraph(genome))) == id
+            recognize_topology(topological_genome(PeriodicGraph(genome))) == id
         catch
             false
         end
@@ -70,7 +70,7 @@ end
             r = randperm(n)
             offsets = [SVector{3,Int}([rand(-3:3) for _ in 1:3]) for _ in 1:n]
             graph = swap_axes!(offset_representatives!(graph[r], offsets), randperm(3))
-            tests[target] &= reckognize_topology(topological_genome(graph)) == target
+            tests[target] &= recognize_topology(topological_genome(graph)) == target
         end
     end
     for (id, b) in tests
@@ -81,7 +81,7 @@ end
     end
 
     cifs, crystalnetsdir = _finddirs()
-    @test reckognize_topology(topological_genome(CrystalNet(
+    @test recognize_topology(topological_genome(CrystalNet(
         redirect_stderr(devnull) do; parse_chemfile(joinpath(cifs, "Moganite.cif")) end))) == "mog"
 end
 
@@ -202,7 +202,7 @@ end
     @test occursin("Form C", popfirst!(written))
     @test isempty(popfirst!(written))
     @test isempty(popfirst!(written))
-    @test popfirst!(written) == "Automatic reckognition of crystal net topologies."
+    @test popfirst!(written) == "Automatic recognition of crystal net topologies."
 
     empty!(ARGS)
     append!(ARGS, safeARGS)

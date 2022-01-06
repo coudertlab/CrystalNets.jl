@@ -28,7 +28,7 @@ end
 
 function parse_commandline(args)
     s = ArgParseSettings(prog = "CrystalNets" * (Sys.iswindows() ? ".exe" : ""),
-                         description = "Automatic reckognition of crystal net topologies.",
+                         description = "Automatic recognition of crystal net topologies.",
                          epilog = """\n\n\n\nCLUSTERING_MODE options:\n\n
                          \ua0\ua0\ua0* input: use the input residues as clusters. Fail if some atom does not belong to a residue.\n\n
                          \ua0\ua0\ua0* atom: each atom is its own cluster.\n\n
@@ -42,7 +42,7 @@ function parse_commandline(args)
                          \ua0\ua0\ua0* auto: if the input possesses explicit bonds, use them unless they are suspicious. Otherwise, fall back to "guess". Default option.\n\n
                          \n\n
                          CREATE_MODE options:\n\n
-                         \ua0\ua0\ua0* empty: empty archive, unable to reckognize any topological structure.\n\n
+                         \ua0\ua0\ua0* empty: empty archive, unable to recognize any topological structure.\n\n
                          \ua0\ua0\ua0* rcsr: RCSR Systre archive.\n\n
                          \ua0\ua0\ua0* zeolites: zeolites topologies from the database of zeolite structures.\n\n
                          \ua0\ua0\ua0* full: combined rcsr and zeolites archives. Default option.\n\n
@@ -69,7 +69,7 @@ function parse_commandline(args)
             action = :store_true
 
         "--archive", "-a"
-            help = """Specify the path to an archive used to reckognize topologies.
+            help = """Specify the path to an archive used to recognize topologies.
             If unspecified while using Form A, defaults to a combination of the RCSR
             Systre archive (available at http://rcsr.net/systre) and the known zeolite
             topologies (registered at http://www.iza-structure.org/).
@@ -176,7 +176,7 @@ function parse_to_str_or_nothing(@nospecialize(x))::Union{Nothing,String,Int}
     str = try
         string(x)
     catch e
-        return parse_error("Unreckognized argument format: $x.")
+        return parse_error("Unrecognized argument format: $x.")
     end
     return String(strip(str))
 end
@@ -407,7 +407,7 @@ function main(args)
             end
         end
 
-        id = reckognize_topology(genome)
+        id = recognize_topology(genome)
 
         if new_topology_name isa String
             if force
