@@ -472,23 +472,27 @@ end
     sanitize_removeatoms!(graph, pos, types, mat)
 
 Special heuristics to remove atoms that seem to arise from an improper cleaning of the file.
-Currently implmented:
+Currently implemented:
 - C atoms suspiciously close to metallic atoms.
-- O atoms with 4 coplanar bonds.
+TODO:
+- O atoms with 4 coplanar bonds (warning only).
 """
 function sanitize_removeatoms!(graph::PeriodicGraph{N}, pos, types, mat, options) where N
     toremove = Set{Int}()
     flag = true
     for (i, t) in enumerate(types)
         if t === :O
-            #continue
             @reduce_valence true 0 4
             # at this point, the valence is 4 since @reduce_valence would continue otherwise
             neighs = neighbors(graph, i)
             p = pos[i]
             lengths = [norm(mat * (pos[u.v] .+ u.ofs .- p)) for u in neighs]
             if flag && any(>(2.6), lengths)
-                @show options.name
+                # This warning is not in a @ifwarn because it reliably indicates cases
+                # where the input was not properly cleaned
+                with_logger(minimal_logger) do
+                    @error "Very suspicious connectivity found for $(options.name)"
+                end
                 flag = false
             end
         elseif ismetal[atomic_numbers[t]]
