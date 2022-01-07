@@ -23,6 +23,7 @@ function parse_cif(file)
 
     l = read(file, String)
     i, j, x = nextword(l, 0)
+    lastword = ""
     while i != 0
 
         if inloop
@@ -60,20 +61,26 @@ function parse_cif(file)
         if l[i] == '_' # Simple identifier definition
             next_i, next_j, next_x = nextword(l, x)
             @toggleassert next_i != 0
-            all_data[l[i+1:j]] = l[next_i:next_j]
+            lastword = l[i+1:j]
+            all_data[lastword] = l[next_i:next_j]
             x = next_x
         else
             if l[i:j] == "loop_"
                 inloop = true
                 loopisspecified = false
                 loopspec = String[]
+                lastword = ""
             elseif j-i > 4 && l[i:i+4] == "data_"
                 @toggleassert !haskey(all_data, "data")
                 all_data["data"] = l[i+5:j]
             else
-                k::Int = findprev(isequal('\n'), l, i)
-                n::Int = count("\n", l[1:k])
-                error("Unkown word \"$(l[i:j])\" at line $(n+1), position $(i-k):$(j-k)")
+                complete_lastword = get(all_data, lastword, "")
+                if complete_lastword == ""
+                    k::Int = findprev(isequal('\n'), l, i)
+                    n::Int = count("\n", l[1:k])
+                    error("Unknown word \"$(l[i:j])\" at line $(n+1), position $(i-k):$(j-k)")
+                end
+                all_data[lastword] = complete_lastword*' '*l[i:j]
             end
         end
 
