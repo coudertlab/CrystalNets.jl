@@ -922,10 +922,6 @@ function find_sbus(crystal, kinds=default_sbus)
         regroup_paddlewheel!(crystal.graph, sbus, crystal.types, periodicsbus)
     end
 
-    if length(sbus.sbus) == 1 # TODO: no need for a special handle here?
-        return sbus # This is an error but it will be handled at a higher level.
-    end
-
     new_class::Int = length(kinds)
     while !isempty(periodicsbus)
         incr_newclass = false
@@ -1129,10 +1125,8 @@ end
 Return the new crystal corresponding to the input where each cluster has been
 transformed into a new vertex.
 """
-function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mode, _attempt=1)
+function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mode, ::Val{_attempt}=Val(1)) where _attempt
     crystal = trim_monovalent(c)
-    export_default(crystal, "trimmed", crystal.options.name,
-                   crystal.options.export_input)
     clusters, clustering = find_clusters(crystal, mode)
     if clustering == ClusteringMode.EachVertex
         return Crystal{Nothing}(crystal; _pos=crystal.pos)
@@ -1163,7 +1157,7 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
                 if atts == attd && d != s
                     # @toggleassert iszero(newofs)
                     # continue
-                    iszero(newofs) && continue
+                    (_attempt == 3 || iszero(newofs)) && continue
                     periodicsbuflag = true
                     break
                 end
@@ -1173,17 +1167,14 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
     end
     if periodicsbuflag || isempty(edgs)
         if _attempt == 1 && clustering == ClusteringMode.MOF
-            return coalesce_sbus(crystal, ClusteringMode.MOFWiderOrganicSBUs, 2)
+            return coalesce_sbus(crystal, ClusteringMode.MOFWiderOrganicSBUs, Val(2))
         end
         if _attempt == 2
-           return coalesce_sbus(crystal, ClusteringMode.MOFMetalloidIsMetal, 3)
-        end
-        if periodicsbuflag
-            throw(InvalidSBU("At least one SBU is periodic itself: cannot coalesce SBUs into new vertices."))
-        else
-            throw(InvalidSBU("Coalescence of SBUs into new nodes leads to an edgeless graph: the clustering is probably wrong and the structure is not connected."))
+           return coalesce_sbus(crystal, ClusteringMode.MOFMetalloidIsMetal, Val(3))
         end
     end
+    export_default(crystal, "trimmed", crystal.options.name,
+                   crystal.options.export_input)
     n = length(clusters.sbus)
     graph = PeriodicGraph3D(n, edgs)
     if mode == ClusteringMode.Guess && nv(graph) == 1
