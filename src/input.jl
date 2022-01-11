@@ -250,14 +250,25 @@ end
 Parse a folder containing .arc Systre archives such as the one used by the RCSR.
 Return a pair `(flag, pairs)` with the same convention than `parse_arc`
 """
-function parse_arcs(path)
+function parse_arcs(path, lesser_priority=["epinet"])
     combine(x, y) = x * ", " * y
+    combineignore(x, _) = x
     dict = Dict{String,String}()
     flag = true
+    postprocess = Dict{String,String}[]
     for f in readdir(path; sort=true)
+        arc_name, ext = splitext(f)
+        ext == ".arc" || continue
         _flag, _dict = parse_arc(joinpath(path, f))
         flag &= _flag
-        mergewith!(combine, dict, _dict)
+        if arc_name ∈ lesser_priority
+            push!(postprocess, _dict)
+        else
+            mergewith!(combine, dict, _dict)
+        end
+    end
+    for _dict in postprocess
+        mergewith!(combineignore, dict, _dict)
     end
     return flag, dict
 end
