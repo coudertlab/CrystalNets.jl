@@ -809,12 +809,9 @@ function group_cycle_C(heterocycle, types, graph)
 end
 
 
-const default_sbus = SBUKinds([
-    [:metal, :actinide, :lanthanide], [:C, :halogen], [:nonmetal, :metalloid],
-], Set{Int}(3))
 
 """
-    find_sbus(crystal)
+    find_sbus(crystal, kinds=default_sbus)
 
 This is an automatic clustering function for MOFs.
 recognize SBUs using a heuristic based on the atom types.
@@ -1131,7 +1128,6 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
     if clustering == ClusteringMode.EachVertex
         return Crystal{Nothing}(crystal; _pos=crystal.pos)
     end
-    periodicsbuflag = false
     edgs = PeriodicEdge3D[]
     for s in vertices(crystal.graph)
         atts = clusters.attributions[s]
@@ -1157,15 +1153,14 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
                 if atts == attd && d != s
                     # @toggleassert iszero(newofs)
                     # continue
-                    (_attempt == 3 || iszero(newofs)) && continue
-                    periodicsbuflag = true
-                    break
+                    @assert iszero(newofs)
+                    continue
                 end
                 push!(edgs, PeriodicEdge3D(atts, attd, newofs))
             end
         end
     end
-    if periodicsbuflag || isempty(edgs)
+    if isempty(edgs)
         if _attempt == 1 && clustering == ClusteringMode.MOF
             return coalesce_sbus(crystal, ClusteringMode.MOFWiderOrganicSBUs, Val(2))
         end

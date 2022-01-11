@@ -9,7 +9,7 @@ the string representation of a D-periodic graph such that
 `PeriodicGraph{D}(topological_genome(net))` is isomorphic to `net.graph` (except
 possibly if the `ignore_types` option is unset).
 
-    !!! info
+!!! info
     Options must be passed directly within `net`.
 """
 function topological_genome(net::CrystalNet{D,T})::String where {D,T}
@@ -106,7 +106,7 @@ end
 
 Compute the topological genome of each subnet stored in `group`.
 
-    !!! info
+!!! info
     Options must be passed directly within the subnets.
 """
 function topological_genome(group::CrystalNetGroup)
@@ -160,7 +160,7 @@ end
 determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs...))
 
 """
-    determine_topologies(path, options)
+    determine_topologies(path, options::Options)
     determine_topologies(path; kwargs...)
 
 Compute the topology of the files at `path`.
@@ -176,8 +176,8 @@ Return a triplet `(tops, genomes, failed)` where:
   stores the information on the cause of the failure of CrystalNets. It can be
   visualised with `Base.showerror(stdout, e, bt)`.
 """
-function determine_topologies(path, options)
-    dircontent = collect(enumerate(readdir(path; join=true)))
+function determine_topologies(path, options::Options)
+    dircontent = isdir(path) ? collect(enumerate(readdir(path; join=true))) : [(1, path)]
     n = length(dircontent)
     ret = [Pair{String,String}[] for _ in 1:n]
     newgenomes = [String[] for _ in 1:n]
@@ -283,6 +283,10 @@ function guess_topology(path, defopts)
     atoms = Set{Symbol}(crystal.types)
 
     @ifvalidgenomereturn defopts "" true
+    if any(x -> (at = atomic_numbers[x]; (ismetal[at] | ismetalloid[at])), atoms)
+        @ifvalidgenomereturn Options(defopts; clustering_mode=ClusteringMode.MOF) "using MOF clusters"
+    end
+    @ifvalidgenomereturn Options(defopts; clustering_mode=ClusteringMode.Cluster) "using clusters"
     if defopts.cutoff_coeff == 0.75 # if default cutoff was used, try larger
         @ifvalidgenomereturn Options(defopts; cutoff_coeff=0.85) "using longer cutoff"
     end
@@ -347,7 +351,7 @@ not part of the archive and `failed` is a dictionary linking the name of the
 structure to the error and backtrace justifying its failure.
 """
 function guess_topologies(path, options)
-    dircontent = collect(enumerate(readdir(path)))
+    dircontent = isdir(path) ? collect(enumerate(readdir(path))) : [(1, path)]
     ret = Vector{Pair{String,String}}(undef, length(dircontent))
     newgenomes::Vector{Union{Missing, String}} = fill(missing, length(dircontent))
     failed::Vector{Union{Missing, Pair{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}}} =
@@ -388,7 +392,7 @@ genome preceded by an "UNKNOWN" mention otherwise. In case of error, the result
 is the exception preceded by a "FAILED with" mention. Finally, if the input does
 not represent a periodic structure, the result is "non-periodic".
 
-This function is similar to determine_topologies, but targets larger datasets,
+This function is similar to [`determine_topologies`](@ref)`, but targets larger datasets,
 for which performance is critical. In particular, no attempt to recognise the
 found topologies is performed: only the topological key is returned.
 
@@ -404,7 +408,7 @@ current state of the computation: to continue an interrupted computation, simply
 pass this temporary directory as the path. If `autoclean` is set, this directory
 is removed if the computation was successful.
 
-    !!! info
+!!! info
     If `save` is set and `autoclean` is unset, the directory of temporary files will
     be renamed into "\$path/../results_\$i.OLD\$j".
 """

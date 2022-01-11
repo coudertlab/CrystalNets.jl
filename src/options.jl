@@ -4,10 +4,10 @@
     BondingMode
 
 Selection mode for the detection of bonds. The choices are:
--   `Input`: use the input bonds. Fail if those are not specified.
--   `Guess`: guess bonds using a variant of chemfiles / VMD algorithm.
--   `Auto`: if the input specifies bonds, use them unless they look suspicious (too or too
-    large according to a heuristic). Otherwise, fall back to `Guess`.
+- `Input`: use the input bonds. Fail if those are not specified.
+- `Guess`: guess bonds using a variant of chemfiles / VMD algorithm.
+- `Auto`: if the input specifies bonds, use them unless they look suspicious (too small or
+  or too large according to a heuristic). Otherwise, fall back to `Guess`.
 """
 module BondingMode
     @enum _BondingMode begin
@@ -25,15 +25,15 @@ import .BondingMode
     ClusteringMode
 
 Selection mode for the clustering of vertices. The choices are:
--   `Input`: use the input residues as clusters. Fail if some atom does
-    not belong to a residue.
--   `EachVertex`: each vertex is its own cluster.
--   `MOF`: discard the input residues and consider the input as a MOF. Identify
-    organic and inorganic clusters using a simple heuristic based on the atom types.
--   `Auto`: attempt `Input` and fall back to `EachVertex` if the input does not
-    provide adequate residues.
--   `Guess`: try to identify the clusters as in `MOF`.
-    If it fails, fall back to `Auto`.
+- `Input`: use the input residues as clusters. Fail if some atom does not belong to a
+  residue.
+- `EachVertex`: each vertex is its own cluster.
+- `Auto`: attempt `Input` and fall back to `EachVertex` if the input does not provide
+  adequate residues.
+- `MOF`: discard the input residues and consider the input as a MOF. Identify organic and
+  inorganic clusters using heuristics based on the atom types.
+- `Cluster`: similar to MOF but metallic atoms are not given a wider radius.
+- `Guess`: try to identify the clusters as in `Cluster`. If it fails, fall back to `Auto`.
 """
 module ClusteringMode
     @enum _ClusteringMode begin
@@ -42,11 +42,12 @@ module ClusteringMode
         MOF
         MOFWiderOrganicSBUs
         MOFMetalloidIsMetal
+        Cluster
         Guess
         Auto
     end
     """See help for `ClusteringMode`"""
-    Input, EachVertex, MOF, Guess, Auto
+    Input, EachVertex, MOF, Guess, Auto, Cluster
     """Internal clustering modes, similar to MOF but with different heuristics"""
     MOFWiderOrganicSBUs, MOFMetalloidIsMetal
 end
@@ -55,14 +56,14 @@ import .ClusteringMode: _ClusteringMode
 
 
 """
-    SBUKinds(sbus, toclassify=Set{Int}())
+    ClusterKinds(sbus, toclassify=Set{Int}())
 
 Description of the different kinds of SBUs there should be when making clusters.
 `sbus` should be a list of set of symbols, each set containing the different
 elements acceptable in this SBU (an empty set designates all remaining elements).
 All elements of the same category of the periodic table can be grouped together
 by putting the name of the category. For example
-`SBUKinds([[:Au, :halogen, :nonmetal], [:metal, :metalloid], []])` means that
+`ClusterKinds([[:Au, :halogen, :nonmetal], [:metal, :metalloid], []])` means that
 there are three kinds of SBUs:
 - the thirst kind can only hold halogens, non-metals and Au atoms
 - the second kind can only hold metalloids and metals (except Au)
@@ -74,7 +75,7 @@ The list of possible categories is: :actinide, :noble (for noble gas), :halogen,
 `tomerge` contains the list of SBUs which are not actual SBUs but only groups of
 atoms waiting to be merged to a neighboring SBU. The neighboring SBU is chosen
 by order in the `sbus` list.
-For example, `SBUKinds([[:metal], [], [:nonmetal], [:C, :H]], Set{Int}([4]))`
+For example, `ClusterKinds([[:metal], [], [:nonmetal], [:C, :H]], Set{Int}([4]))`
 means that all atoms except carbohydrate chains will be grouped into SBUs
 corresponding to their nature (SBU of kind 1 for metals, of kind 3 for
 non-metals, of kind 2 for the rest), then each carbohydrate chain will be
@@ -107,19 +108,19 @@ of the included categories, the returned SBU kind is 0.
 An exception is made for nonmetals which are part of an aromatic carbon cycle: those will
 be treated separately and put in the SBU of the corresponding carbons.
 """
-struct SBUKinds
+struct ClusterKinds
     dict::Dict{Symbol,Int}
     default::Int
     tomerge::Set{Int}
     len::Int
 
-    function SBUKinds(sbus, tomerge=Set{Int}())
+    function ClusterKinds(sbus, tomerge=Set{Int}())
         dict = Dict{Symbol,Int}()
         default = 0
         for (i, sbu) in enumerate(sbus)
             if isempty(sbu)
                 if default != 0
-                    throw(ArgumentError("SBUKinds cannot contain multiple empty sets."))
+                    throw(ArgumentError("ClusterKinds cannot contain multiple empty sets."))
                 end
                 default = i
                 continue
@@ -135,10 +136,10 @@ struct SBUKinds
     end
 end
 
-function Base.getindex(sbus::SBUKinds, i::Int)
+function Base.getindex(sbus::ClusterKinds, i::Int)
     get(sbus.dict, element_categories[i], sbus.default)
 end
-function Base.getindex(sbus::SBUKinds, x::Symbol)
+function Base.getindex(sbus::ClusterKinds, x::Symbol)
     ret = get(sbus.dict, x, 0)
     ret == 0 || return ret
     num = get(atomic_numbers, x, 0)
@@ -146,8 +147,14 @@ function Base.getindex(sbus::SBUKinds, x::Symbol)
     return sbus[num]
 end
 
-Base.length(sbus::SBUKinds) = sbus.len
-false_sbus(sbus::SBUKinds) = sbus.tomerge
+Base.length(sbus::ClusterKinds) = sbus.len
+false_sbus(sbus::ClusterKinds) = sbus.tomerge
+
+const default_sbus = ClusterKinds([
+    [:metal, :actinide, :lanthanide], [:C, :halogen], [:nonmetal, :metalloid],
+], Set{Int}(3))
+
+
 
 function ifbooltempdirorempty(x)::String
     if x isa Bool
@@ -203,6 +210,7 @@ struct Options
     bond_adjacent_sbus::Bool
     detect_paddlewheels::Bool
     detect_heterocycles::Bool
+    cluster_kinds::ClusterKinds
     export_attributions::String
     export_clusters::String
 
@@ -229,6 +237,7 @@ struct Options
                        bond_adjacent_sbus=false,
                        detect_paddlewheels=true,
                        detect_heterocycles=true,
+                       cluster_kinds=default_sbus,
                        export_attributions="",
                        export_clusters="",
                        skip_minimize=false,
@@ -258,6 +267,7 @@ struct Options
             bond_adjacent_sbus,
             detect_paddlewheels,
             detect_heterocycles,
+            cluster_kinds,
             _export_attributions,
             _export_clusters,
             skip_minimize,

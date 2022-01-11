@@ -991,14 +991,14 @@ function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _C
         else
             return c.clusters, ClusteringMode.Input
         end
-    elseif mode == ClusteringMode.MOF
-        clusters = find_sbus(c)
-        if length(clusters.sbus) <= 1
+    elseif mode == ClusteringMode.MOF || mode == ClusteringMode.Cluster
+        clusters = find_sbus(c, c.options.cluster_kinds)
+        if length(clusters.sbus) <= 1 && c.options.cluster_kinds == default_sbus
             return find_clusters(c, ClusteringMode.MOFWiderOrganicSBUs)
         end
         return clusters, ClusteringMode.MOF
     elseif mode == ClusteringMode.MOFWiderOrganicSBUs
-        sbus2 = SBUKinds([
+        sbus2 = ClusterKinds([
             [:metal, :actinide, :lanthanide, :metalloid], [:C, :halogen, :nonmetal],
         ])
         clusters = find_sbus(c, sbus2)
@@ -1007,13 +1007,10 @@ function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _C
         end
         return clusters, ClusteringMode.MOF
     elseif mode == ClusteringMode.MOFMetalloidIsMetal
-        sbus3 = SBUKinds([
+        sbus3 = ClusterKinds([
             [:metal, :actinide, :lanthanide, :metalloid], [:C, :halogen], [:nonmetal]
         ], Set{Int}(3))
         clusters = find_sbus(c, sbus3)
-        if length(clusters.sbus) <= 1
-            throw(InvalidSBU("ClusteringMode.MOF leads to a single cluster, choose a different clustering mode."))
-        end
         return clusters, ClusteringMode.MOF
     elseif mode == ClusteringMode.Guess
         crystal = Crystal{Nothing}(c)
