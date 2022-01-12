@@ -382,7 +382,7 @@ guess_topologies(path; kwargs...) = guess_topologies(path, db_options(; kwargs..
 
 """
     topologies_dataset(path, save, autoclean, options::Options)
-    topologies_dataset(path, save=true; kwargs...)
+    topologies_dataset(path, save=true, autoclean=true; kwargs...)
 
 Given a path to a directory containing structure input files, compute the
 topology of each structure within the directory.
@@ -401,16 +401,15 @@ not to export any file since those actions may critically reduce performance,
 especially for numerous files.
 
 If `save` is set, the result is also stored in a julia serialized file located at
-"\$path/../results_\$i" where i is the lowest integer such that this path does
+"\$path/../results_\$i" where `i` is the lowest integer such that this path does
 not already exist at the start of the computation.
 While processing, this path will be used to create a directory storing the
 current state of the computation: to continue an interrupted computation, simply
 pass this temporary directory as the path. If `autoclean` is set, this directory
-is removed if the computation was successful.
+is removed at the end if the computation was successful.
 
-!!! info
-    If `save` is set and `autoclean` is unset, the directory of temporary files will
-    be renamed into "\$path/../results_\$i.OLD\$j".
+If `save` is set and `autoclean` is unset, the directory of temporary files will
+be renamed into "\$path/../results_\$i.OLD\$j".
 """
 function topologies_dataset(path, save, autoclean, options::Options)
     if isdirpath(path)

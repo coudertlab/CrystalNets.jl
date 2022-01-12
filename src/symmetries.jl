@@ -117,7 +117,17 @@ function find_hall_number(hallsymbol, hm, it)
         hall == 0 || return hall
         hall = get(SPACE_GROUP_FULL, dense_hm, 0)
         hall == 0 || return hall
-        @ifwarn @warn "H-M symbol provided but not recognised : $hm"
+        @ifwarn begin
+            @warn "H-M symbol provided but not recognised : $hm"
+            keysHM = collect(keys(SPACE_GROUP_HM))
+            suggestions = keysHM[findall(startswith(dense_hm), keysHM)]
+            keysFULL = collect(keys(SPACE_GROUP_FULL))
+            append!(suggestions, keysFULL[findall(startswith(dense_hm), keysFULL)])
+            if !isempty(suggestions)
+                msg = join(suggestions, ", ", " or ")
+                @info "Did you perhaps mean to use $msg?"
+            end
+        end
     end
     if it != 0
         if it < 1 || it > 230
@@ -126,7 +136,7 @@ function find_hall_number(hallsymbol, hm, it)
         end
         return SPACE_GROUP_IT[it]
     end
-    @ifwarn @warn "Could not determine the space group of this file. It will be considered P1."
+    @ifwarn @error "Could not determine the space group of this file. It will be considered P1."
     return 1
 end
 

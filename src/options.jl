@@ -59,54 +59,59 @@ import .ClusteringMode: _ClusteringMode
     ClusterKinds(sbus, toclassify=Set{Int}())
 
 Description of the different kinds of SBUs there should be when making clusters.
-`sbus` should be a list of set of symbols, each set containing the different
-elements acceptable in this SBU (an empty set designates all remaining elements).
-All elements of the same category of the periodic table can be grouped together
-by putting the name of the category. For example
-`ClusterKinds([[:Au, :halogen, :nonmetal], [:metal, :metalloid], []])` means that
-there are three kinds of SBUs:
-- the thirst kind can only hold halogens, non-metals and Au atoms
+
+`sbus` should be a list of set of symbols, each set containing the different elements
+acceptable in this SBU (an empty set designates all remaining elements). All elements of
+the same category of the periodic table can be grouped together by putting the name of the
+category.
+For example, `ClusterKinds([[:Au, :halogen, :nonmetal], [:metal, :metalloid], []])` means
+that there are three kinds of SBUs:
+- the first kind can only hold halogens, non-metals and Au atoms
 - the second kind can only hold metalloids and metals (except Au)
 - the third kind can hold all the other elements.
 
 The list of possible categories is: :actinide, :noble (for noble gas), :halogen,
 :lanthanide, :metal, :metalloid and :nonmetal.
 
-`tomerge` contains the list of SBUs which are not actual SBUs but only groups of
+`toclassify` contains the list of SBUs which are not actual SBUs but only groups of
 atoms waiting to be merged to a neighboring SBU. The neighboring SBU is chosen
 by order in the `sbus` list.
-For example, `ClusterKinds([[:metal], [], [:nonmetal], [:C, :H]], Set{Int}([4]))`
-means that all atoms except carbohydrate chains will be grouped into SBUs
-corresponding to their nature (SBU of kind 1 for metals, of kind 3 for
-non-metals, of kind 2 for the rest), then each carbohydrate chain will be
-merged into a neighboring SBU, of kind 1 if any, otherwise of kind 2 if any,
-otherwise of kind 3.
+For example, `ClusterKinds([[:metal], [], [:nonmetal], [:C, :H]], Set{Int}([4]))` means
+that all atoms except hydrocarbon chains will be grouped into SBUs corresponding to their
+nature (SBU of kind 1 for metals, of kind 3 for non-metals, of kind 2 for the rest), then
+each hydrocarbon chain will be merged into a neighboring SBU, of kind 1 if any, otherwise
+of kind 2 if any, otherwise of kind 3.
 
-Note that, since the entire graph is connected, false SBUs in `tomerge` will
-always eventually be merged with another SBU except if the entire graph
-comprises only one SBU (in which case there will be an error).
+If each connected component of the graph contains at least one atom in an actual SBU, then
+false SBUs in `toclassify` will always eventually be merged with another SBU.
 
 To determine which SBU kind corresponds to a given atom, use `getindex`:
-```julia
-julia> sbu_kinds = SBUKindsSBUKinds([[:nonmetal, :halogen], [:metal, :F]]);
+```jldoctest
+julia> sbu_kinds = CrystalNets.ClusterKinds([[:nonmetal, :halogen], [:metal, :F]]);
 
-julia> sbu_kinds[:O]
+julia> sbu_kinds[:O] # nonmetal
 1
 
-julia> sbu_kinds[:Au]
+julia> sbu_kinds[:Au] # metal
 2
 
-julia> sbu_kinds[:F]
+julia> sbu_kinds[:F] # specifically F
 2
 
-julia> sbu_kinds[:Ne] # corresponds to no given SBU kind
+julia> sbu_kinds[:Ne] # no given SBU kind
 0
 ```
-If no empty set has been explicitly added to `sbus` and an element falls outside
-of the included categories, the returned SBU kind is 0.
+If no empty set has been explicitly added to `sbus` and an element falls outside of the
+included categories, the returned SBU kind is 0.
 
-An exception is made for nonmetals which are part of an aromatic carbon cycle: those will
-be treated separately and put in the SBU of the corresponding carbons.
+An exception is made for nonmetals which are part of an aromatic heterocycle: those will be
+treated separately and put in the SBU of the corresponding carbons.
+
+The cluster kinds used by default are
+```jldoctest
+CrysatalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C, :halogen],
+                           [:nonmetal, :metalloid]], Set{Int}(3))
+```
 """
 struct ClusterKinds
     dict::Dict{Symbol,Int}
