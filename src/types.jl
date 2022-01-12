@@ -1009,19 +1009,16 @@ function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _C
     elseif mode == ClusteringMode.MOFMetalloidIsMetal
         sbus3 = ClusterKinds([
             [:metal, :actinide, :lanthanide, :metalloid], [:C, :halogen], [:nonmetal]
-        ], Set{Int}(3))
+        ], Int[3])
         clusters = find_sbus(c, sbus3)
         return clusters, ClusteringMode.MOF
     elseif mode == ClusteringMode.Guess
         crystal = Crystal{Nothing}(c)
-        uniquetypes = unique!(sort(c.types))
-        if (:C ∈ uniquetypes) && any(x -> ismetal[atomic_numbers[x]], uniquetypes)
-            try
-                return find_clusters(crystal, ClusteringMode.MOF)
-            catch e
-                if !(e isa ClusteringError)
-                    rethrow()
-                end
+        try
+            return find_clusters(crystal, ClusteringMode.Cluster)
+        catch e
+            if !(e isa ClusteringError)
+                rethrow()
             end
         end
         return find_clusters(c, ClusteringMode.Auto)

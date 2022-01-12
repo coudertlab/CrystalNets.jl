@@ -814,12 +814,11 @@ end
     find_sbus(crystal, kinds=default_sbus)
 
 This is an automatic clustering function for MOFs.
-recognize SBUs using a heuristic based on the atom types.
+Recognize SBUs using a heuristic based on the atom types.
 """
 function find_sbus(crystal, kinds=default_sbus)
     n = nv(crystal.graph)
     classes = Vector{Int}(undef, n)
-    unclassified = Int[]
     for i in 1:n
         atom_name = crystal.types[i]
         class = kinds[atom_name]
@@ -839,79 +838,72 @@ function find_sbus(crystal, kinds=default_sbus)
         end
         classes[i] = class
     end
-    @toggleassert issorted(unclassified)
 
+    temporary_classes = copy(kinds.tomerge)
+    temporary_classes_set = Set{Int}(temporary_classes)
     same_SBU_C = if crystal.options.detect_heterocycles
         heterocycle = detect_heterocycles(classes, crystal.graph, crystal.pos,
-                                    crystal.cell.mat, kinds[:C], false_sbus(kinds))
+                                    crystal.cell.mat, kinds[:C], temporary_classes_set)
         group_cycle_C(heterocycle, crystal.types, crystal.graph)
     else
         Vector{PeriodicVertex3D}[]
     end
 
-    unclassified = [i for i in 1:n if classes[i] ∈ kinds.tomerge]
+    nclasses = length(kinds)
+    rev_nclasses = [0 for _ in 1:nclasses]
+    for (i, k) in enumerate(temporary_classes)
+        rev_nclasses[k] = i
+    end
+    unclassified = [Int[] for _ in temporary_classes]
+    for i in 1:n
+        k = rev_nclasses[classes[i]]
+        if k != 0
+            push!(unclassified[k], i)
+        end
+    end
 
     #= We now merge `unclassified` elements according to the following rules
     (exemplified for the special case where kinds == default_sbus)
-      - All elements of class 3 that are connected to each other are replaced by
-        a big virtual element of class 3 whose neighbours are the sum of the
+      - All elements of class 3 (resp. 4) that are connected to each other are replaced by
+        a big virtual element of class 3 (resp. 4) whose neighbours are the sum of the
         neighbours of each of its constituents.
-    From this point, each element of class 3 only has neighbours of class 1 or 2.
-      - If it has a neighbour of class 1, it becomes of class 1 (inorganic SBUs)
-      - Otherwise, it only has neighbours of class 2 and then it becomes of
-        class 2.
+      - For each virtual element of class 3, if it has a neighbour of class 1, it becomes
+        of class 1 (inorganic SBU). Otherwise, if it has a neighbour of class 2, it becomes
+        of class 2. Otherwise (all its neighbours are in class 4), it becomes of class 1.
+      - Same for each virtual element of class 4: if it has no neighbour at all or at least
+        one of class 1, it becomes of class 1, otherwise it becomes of class 2.
     =#
-    rev_unclassified = zeros(Int, n)
-    m = length(unclassified)
-    for i in 1:m
-        rev_unclassified[unclassified[i]] = i
-    end
-    edges = SimpleEdge{Int}[]
-    for _i in 1:m
-        i = unclassified[_i]
-        classi = classes[i]
-        for neigh in neighbors(crystal.graph, i)
-            j = rev_unclassified[neigh.v]
-            (j == 0 || classes[neigh.v] != classi) && continue
-            # j is the index of unclassified that corresponds to the neighbour of i
-            j >= i && break # We will encounter and handle the symmetric case later
-            push!(edges, SimpleEdge(_i, j))
-        end
-    end
-    _graph = SimpleGraph(edges)
-    nv(_graph) < m && add_vertices!(_graph, m - nv(_graph))
-    # _graph contains the subgraph of unclassified elements with only the bonds
-    # between unclassified of the same class
-    clusters = connected_components(_graph)
 
-    oldlength = 0
-    while oldlength != length(clusters)
-        oldlength = length(clusters)
-        newclusters = Vector{Int}[]
-        for cluster in clusters
-            new_class = length(kinds) + 1
-            for j in cluster
-                for neigh in neighbors(crystal.graph, unclassified[j])
-                    k = classes[neigh.v]
-                    (k ∈ kinds.tomerge || k > new_class) && continue
-                    new_class = k
-                    k == 1 && break
+    for in_tmp_class in unclassified
+        tmp_class = popfirst!(temporary_classes)
+        # in_tmp_class contains the atoms whose current class is tmp_class
+        delete!(temporary_classes_set, tmp_class)
+        for x in in_tmp_class
+            classes[x] != tmp_class && continue # already handled earlier
+            # we now collect the virtual element
+            visited = Set{Int}(x)
+            new_class = nclasses + 1 # the class of the virtual element, will be updated
+            Q = Int[x]
+            for u in Q
+                for x in neighbors(crystal.graph, u)
+                    v = x.v
+                    class = classes[v]
+                    if class == tmp_class
+                        if v ∉ visited
+                            push!(Q, v)
+                            push!(visited, v)
+                        end
+                    elseif class ∉ temporary_classes
+                        new_class = min(new_class, class)
+                    end
                 end
-                new_class == 1 && break
             end
-            if new_class == length(kinds) + 1
-                push!(newclusters, cluster)
-            else
-                for j in cluster
-                    @toggleassert classes[unclassified[j]] ∈ kinds.tomerge
-                    classes[unclassified[j]] = new_class
-                end
+            new_class == nclasses + 1 && (new_class = 1) # no classified neighbour
+            for u in visited
+                classes[u] = new_class
             end
         end
-        clusters = newclusters
     end
-    # oldlength may be != 0, this means that there are dangling unclassified clusters.
-    # These will be eliminated as 0-dimensional residues later.
 
     # bond_carboxylic_acid!(crystal.graph, crystal.types) # gives worse results
     sbus, periodicsbus = regroup_sbus(crystal.graph, classes, same_SBU_C)
@@ -972,7 +964,7 @@ function find_sbus(crystal, kinds=default_sbus)
                     @inbounds elements_for_composition[i_sbu]
                 else
                     _ats = [atomic_numbers[k] for k in uniquecompo]
-                    metallics = [k for (at, k) in zip(_ats, uniquecompo) if ismetal[at]]
+                    metallics = [k for (at, k) in zip(_ats, uniquecompo) if ismetal[at] || k === :P]
                     if isempty(metallics)
                         metallics = [k for (at, k) in zip(_ats, uniquecompo) if ismetalloid[at]]
                     end
@@ -1178,11 +1170,7 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
     if ne(graph) == 0
         throw(EmptyGraphException())
     end
-    sbus = if clustering == ClusteringMode.MOF
-        clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.types)]
-    else
-        clusters.sbus
-    end
+    sbus = clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.types)]
     n = length(sbus)
     if !isempty(crystal.options.export_attributions)
         path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")

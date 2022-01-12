@@ -56,7 +56,7 @@ import .ClusteringMode: _ClusteringMode
 
 
 """
-    ClusterKinds(sbus, toclassify=Set{Int}())
+    ClusterKinds(sbus, toclassify=Int[])
 
 Description of the different kinds of SBUs there should be when making clusters.
 
@@ -76,14 +76,21 @@ The list of possible categories is: :actinide, :noble (for noble gas), :halogen,
 `toclassify` contains the list of SBUs which are not actual SBUs but only groups of
 atoms waiting to be merged to a neighboring SBU. The neighboring SBU is chosen
 by order in the `sbus` list.
-For example, `ClusterKinds([[:metal], [], [:nonmetal], [:C, :H]], Set{Int}([4]))` means
-that all atoms except hydrocarbon chains will be grouped into SBUs corresponding to their
-nature (SBU of kind 1 for metals, of kind 3 for non-metals, of kind 2 for the rest), then
-each hydrocarbon chain will be merged into a neighboring SBU, of kind 1 if any, otherwise
-of kind 2 if any, otherwise of kind 3.
 
-If each connected component of the graph contains at least one atom in an actual SBU, then
-false SBUs in `toclassify` will always eventually be merged with another SBU.
+The cluster kinds used by default are
+`CrystalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C, :halogen],
+                           [:P], [:nonmetal, :metalloid]], [3, 4])`.
+This means that all atoms that are either metals, actinides or lanthanides are assigned to
+class 1 and all halogens and C atoms in SBUs of class 2.
+Afterwards, each group of adjacent P atoms is assigned either class 1 if any of its
+neighbor is of class 1, or class 2 otherwise if any of its neighbor is of class 2.
+If no such neighbor exist, it is assigned to class 1.
+Finally, each group of adjacent nonmetals and metalloids is assigned class 1 or 2 following
+the same rule as for P atoms.
+
+At the end of the procedure, all atoms are thus given a class between `1` and `length(sbus)`
+which is not in `toclassify`. See also [`find_sbus`](@ref) for the implementation of this
+procedure.
 
 To determine which SBU kind corresponds to a given atom, use `getindex`:
 ```jldoctest
@@ -106,18 +113,14 @@ included categories, the returned SBU kind is 0.
 
 An exception is made for nonmetals which are part of an aromatic heterocycle: those will be
 treated separately and put in the SBU of the corresponding carbons.
-
-The cluster kinds used by default are
-`CrystalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C, :halogen],
-                           [:nonmetal, :metalloid]], Set{Int}(3))`
 """
 struct ClusterKinds
     dict::Dict{Symbol,Int}
     default::Int
-    tomerge::Set{Int}
+    tomerge::Vector{Int}
     len::Int
 
-    function ClusterKinds(sbus, tomerge=Set{Int}())
+    function ClusterKinds(sbus, tomerge=Int[])
         dict = Dict{Symbol,Int}()
         default = 0
         for (i, sbu) in enumerate(sbus)
@@ -135,7 +138,7 @@ struct ClusterKinds
                 end
             end
         end
-        return new(dict, default, Set{Int}(tomerge), length(sbus))
+        return new(dict, default, tomerge, length(sbus))
     end
 end
 
@@ -151,11 +154,10 @@ function Base.getindex(sbus::ClusterKinds, x::Symbol)
 end
 
 Base.length(sbus::ClusterKinds) = sbus.len
-false_sbus(sbus::ClusterKinds) = sbus.tomerge
 
 const default_sbus = ClusterKinds([
-    [:metal, :actinide, :lanthanide], [:C, :halogen], [:nonmetal, :metalloid],
-], Set{Int}(3))
+    [:metal, :actinide, :lanthanide], [:C, :halogen], [:P], [:nonmetal, :metalloid],
+], [3, 4])
 
 
 
