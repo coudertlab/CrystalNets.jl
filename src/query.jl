@@ -222,7 +222,7 @@ determine_topologies(path; kwargs...) = determine_topologies(path, db_options(; 
 macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
     crystaldef = skipcrystal ? nothing : :(crystal = parse_chemfile(path, $opts))
     msg = "(found by $msg)"
-    ifprintinfo = skipcrystal ? nothing : :(@ifwarn @info $msg)
+    ifprintinfo = isempty(msg) ? nothing : :(@ifwarn @info $msg)
 
     return esc(quote
     $crystaldef
@@ -270,54 +270,74 @@ function guess_topology(path, defopts)
     maxdim = maximum(defopts.dimensions; init=0)
     encountered_graphs = Dict{String,String}()
     encountered_genomes = Dict{String,Int}()
-    dryrun = Dict{Symbol,Union{Nothing,Set{Symbol}}}()
     if defopts.name == "unnamed"
         defopts = Options(defopts; name=splitext(splitdir(path)[2])[1])
     end
-    crystal = parse_chemfile(path, Options(defopts; dryrun))
+
+    @ifvalidgenomereturn defopts "using clustering_mode=ClusteringMode.Guess" false
+
+    # dryrun = Dict{Symbol,Union{Nothing,Set{Symbol}}}()
+    # crystal = parse_chemfile(path, Options(defopts; dryrun))
     atoms = Set{Symbol}(crystal.types)
 
-    @ifvalidgenomereturn defopts "using clustering_mode=ClusteringMode.Guess" true
     if any(x -> (at = atomic_numbers[x]; (ismetal[at] | ismetalloid[at])), atoms)
         @ifvalidgenomereturn Options(defopts; clustering_mode=ClusteringMode.MOF) "using MOF clusters"
     end
 
     defopts = Options(; clustering_mode=ClusteringMode.Auto)
-    if defopts.cutoff_coeff == 0.75 # if default cutoff was used, try larger
-        @ifvalidgenomereturn Options(defopts; cutoff_coeff=0.85) "using longer cutoff"
+    # if defopts.cutoff_coeff == 0.75 # if default cutoff was used, try larger
+    #     @ifvalidgenomereturn Options(defopts; cutoff_coeff=0.85) "using longer cutoff"
+    # end
+    # invalidatoms = union(get(dryrun, :invalidatoms, Set{Symbol}()),
+    #                      get(dryrun, :suspect_smallbonds, Set{Symbol}()))
+    # hashydrogens = :H ∈ atoms
+    # if hashydrogens
+    #     @ifvalidgenomereturn Options(defopts; ignore_atoms=(:H,)) "ignoring H"
+    #     # delete!(invalidatoms, :H)
+    # end
+    # for a in invalidatoms
+    #     @ifvalidgenomereturn Options(defopts; ignore_atoms=tuple(a)) "ignoring $a"
+    #     if hashydrogens
+    #         @ifvalidgenomereturn Options(defopts; ignore_atoms=(a, :H)) "ignoring H and $a"
+    #     end
+    # end
+    # if any(==(:C), atoms)# && :C ∉ invalidatoms # organic solvent
+    #     @ifvalidgenomereturn Options(defopts; ignore_atoms=(:C,)) "ignoring C"
+    # end
+    # if haskey(dryrun, :try_Input_bonds)
+    #     @ifvalidgenomereturn Options(defopts; bonding_mode=BondingMode.Input) "using input bonds"
+    # end
+    # @ifvalidgenomereturn Options(defopts; ignore_low_occupancy=true) "removing atoms with occupancy < 0.5"
+    if :Al ∈ atoms && :P ∈ atoms # ALPO datastructure
+        # flag = false
+        # for i in vertices(crystal.graph)
+        #     crystal.types[i] === :O || continue
+        #     currt = :O
+        #     for x in neighbors(crystal.graph, i)
+        #         t = crystal.types[x.v]
+        #         if (t === :P) | (t === :Al)
+        #             if currt === :O
+        #                 currt = t
+        #             elseif currt === t
+        #                 flag = true
+        #                 break
+        #             end
+        #         end
+        #     end
+        # end
+        # if flag
+            @ifvalidgenomereturn Options(defopts; ignore_homoatomic_bonds=(:Al,:P)) "removing Al-O-Al and P-O-P bonds"
+        # end
+        # if :Sn ∈ atoms # observed in some cases for ALPO databases
+        #     @ifvalidgenomereturn Options(defopts; ignore_atoms=(:Sn,)) "ignoring Sn"
+        # end
     end
-    invalidatoms = union(get(dryrun, :invalidatoms, Set{Symbol}()),
-                         get(dryrun, :suspect_smallbonds, Set{Symbol}()))
-    hashydrogens = :H ∈ atoms
-    if hashydrogens
-        @ifvalidgenomereturn Options(defopts; ignore_atoms=(:H,)) "ignoring H"
-        delete!(invalidatoms, :H)
-    end
-    for a in invalidatoms
-        @ifvalidgenomereturn Options(defopts; ignore_atoms=tuple(a)) "ignoring $a"
-        if hashydrogens
-            @ifvalidgenomereturn Options(defopts; ignore_atoms=(a, :H)) "ignoring H and $a"
-        end
-    end
-    if any(==(:C), atoms) && :C ∉ invalidatoms # organic solvent
-        @ifvalidgenomereturn Options(defopts; ignore_atoms=(:C,)) "ignoring C"
-    end
-    if haskey(dryrun, :try_Input_bonds)
-        @ifvalidgenomereturn Options(defopts; bonding_mode=BondingMode.Input) "using input bonds"
-    end
-    @ifvalidgenomereturn Options(defopts; ignore_low_occupancy=true) "removing atoms with occupancy < 0.5"
-    if :Al ∈ atoms || :P ∈ atoms # ALPO datastructure
-        @ifvalidgenomereturn Options(defopts; ignore_homoatomic_bonds=(:Al,:P)) "removing Al-O-Al and P-O-P bonds"
-        if :Sn ∈ atoms # observed in some cases for ALPO databases
-            @ifvalidgenomereturn Options(defopts; ignore_atoms=(:Sn,)) "ignoring Sn"
-        end
-    end
-    if haskey(dryrun, :try_no_Auto_bonds)
-        @ifvalidgenomereturn Options(defopts; bonding_mode=BondingMode.Guess) "discarding input bonds and guessing them"
-    end
-    if haskey(dryrun, :collisions)
-        @ifvalidgenomereturn Options(defopts; authorize_pruning=false) "retaining all colliding atoms"
-    end
+    # if haskey(dryrun, :try_no_Auto_bonds)
+    #     @ifvalidgenomereturn Options(defopts; bonding_mode=BondingMode.Guess) "discarding input bonds and guessing them"
+    # end
+    # if haskey(dryrun, :collisions)
+    #     @ifvalidgenomereturn Options(defopts; authorize_pruning=false) "retaining all colliding atoms"
+    # end
 
     # Finally, if everything fails, return the one encountered most
     maxencounter = 0
