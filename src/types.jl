@@ -904,19 +904,19 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
 end
 
 function CrystalNet(cell::Cell, types::AbstractVector{Symbol},
-                    graph::PeriodicGraph, options::Options)
+                    graph::PeriodicGraph, options::Options)::CrystalNet
     group = CrystalNetGroup(cell, types, graph, options)
     D = isempty(group.D3) ? (isempty(group.D2) ? 1 : 2) : 3
     nonuniqueD = D != 1 && (!isempty(group.D1) || (D == 3 && !isempty(group.D2)))
     if nonuniqueD
         @ifwarn @warn "Presence of periodic structures of different dimensionalities. Only the highest dimensionality ($D here) will be retained."
     end
-    intertwinnedD = false
+    interpenetratingD = false
     @separategroups D group begin
-        intertwinnedD = length(group) > 1
+        interpenetratingD = length(group) > 1
     end
-    if intertwinnedD
-        error(ArgumentError("Multiple intertwinned $D-dimensional structures. Cannot handle this as a single CrystalNet, use CrystalNetGroup instead."))
+    if interpenetratingD
+        error(ArgumentError("Multiple interpenetrating $D-dimensional structures. Cannot handle this as a single CrystalNet, use CrystalNetGroup instead."))
     end
     @separategroups D group begin
         return last(first(group))

@@ -499,11 +499,9 @@ function sanitize_removeatoms!(graph::PeriodicGraph{N}, pos, types, mat, options
             p = pos[i]
             lengths = [norm(mat * (pos[u.v] .+ u.ofs .- p)) for u in neighs]
             if flag && any(>(2.6), lengths)
-                # This warning is not in a @ifwarn because it reliably indicates cases
-                # where the input was not properly cleaned
-                with_logger(minimal_logger) do
-                    @error "Very suspicious connectivity found for $(options.name)"
-                end
+                # This warning could be out of a  @ifwarn because it reliably indicates
+                # cases where the input was not properly cleaned
+                @ifwarn @error "Very suspicious connectivity found for $(options.name)"
                 flag = false
             end
         elseif ismetal[atomic_numbers[t]]

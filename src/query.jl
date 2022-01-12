@@ -140,20 +140,22 @@ end
 
 Compute the topology of the structure described in the file located at `path`.
 This is essentially equivalent to calling
-`topological_genome(CrystalNet(parse_chemfile(path, options)))` which means that
-it will similarly fail if the input describes multiple intertwinned nets.
-In this case, try `topological_genome(CrystalNetGroup(parse_chemfile(path, options)))`
-to separate the different subnets.
+`recognize_topology(topological_genome(CrystalNetGroup(parse_chemfile(path, options))))`.
+In the case where the structure is not made of interpenetrating nets, return the name of
+the only net.
 """
 function determine_topology(path, options::Options)
-    genomes::String = try
-        topological_genome(CrystalNet(parse_chemfile(path, options)))
+    genomes::Vector{Tuple{Vector{Int},String}} = try
+        topological_genome(CrystalNetGroup(parse_chemfile(path, options)))
     catch e
         if e isa NonPeriodicInputException || e isa EmptyGraphException
-            "non-periodic"
+            [(Int[], "non-periodic")]
         else
             rethrow()
         end
+    end
+    if length(genomes) == 1
+        return recognize_topology(genomes[1][2])
     end
     return recognize_topology(genomes)
 end
@@ -165,16 +167,15 @@ determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs.
 
 Compute the topology of the files at `path`.
 Return a triplet `(tops, genomes, failed)` where:
-- `tops` is a dictionary linking each file name (without the extension) to its
-  topology name, if recognised, or topological genome otherwise.
-  If an input file X contains intertwinned nets, they will automatically be
-  separated and each subnet (called X_1, X_2, ...) will be linked to its
-  corresponding topology
-- `genomes` contain the topological genomes that have been encountered but were
-  not part of the archive.
-- `failed` is a dictionary linking each file name to the tuple `(e, bt)` that
-  stores the information on the cause of the failure of CrystalNets. It can be
-  visualised with `Base.showerror(stdout, e, bt)`.
+- `tops` is a dictionary linking each file name to its topology name, if recognised, or
+  topological genome otherwise.
+  If an input file "X" contains interpenetrating nets, they will automatically be separated
+  and each subnet (called "X/1", "X/2", ...) will be linked to its corresponding topology.
+- `genomes` contain the topological genomes that have been encountered but were not part of
+  the archive.
+- `failed` is a dictionary linking each file name to the tuple `(e, bt)` that stores the
+  information on the cause of the failure of CrystalNets. It can be visualised with
+  `Base.showerror(stdout, e, bt)`.
 """
 function determine_topologies(path, options::Options)
     dircontent = isdir(path) ? collect(enumerate(readdir(path; join=true))) : [(1, path)]
@@ -184,7 +185,7 @@ function determine_topologies(path, options::Options)
     failed::Vector{Union{Missing, Pair{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}}} =
         fill(missing, n)
     @threads for (i, f) in dircontent
-        name = first(splitext(f))
+        name = last(splitdir(f))
         # println(name)
         genomes::Vector{Tuple{Vector{Int},String}} = try
             topological_genome(CrystalNetGroup(parse_chemfile(f, options)))
@@ -202,7 +203,7 @@ function determine_topologies(path, options::Options)
             end
         end
         for (j, (_, genome)) in enumerate(genomes)
-            newname = length(genomes) == 1 ? name : name * '_' * string(j)
+            newname = length(genomes) == 1 ? name : name * '/' * string(j)
             id = recognize_topology(genome)
             if startswith(id, "UNKNOWN")
                 push!(newgenomes[i], id[9:end])
@@ -236,26 +237,20 @@ macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
     end::CrystalNetGroup
     dim, subnets = isempty(group.D3) ? isempty(group.D2) ? isempty(group.D1) ? 
                     (0, CrystalNet1D{Int}[]) : (1, group.D1) : (2, group.D2) : (3, group.D3)
-    if dim > maxdim
-        maxdim = dim
-    end
-    if dim ≥ maxdim
-        if length(subnets) == 1 # otherwise, multiple intertwinned nets -> skip
-            net = subnets[1][2]
-            sig = string(net.graph)::String
-            sig = get(encountered_graphs, sig, sig)
-            if haskey(encountered_genomes, sig)
-                encountered_genomes[sig] += 1
-            else
-                genome = recognize_topology(topological_genome(net))
-                if !startswith(genome, "UNKNOWN") && !startswith(genome, "unstable") &&
-                                                    !startswith(genome, "non-periodic")
-                    $ifprintinfo
-                    return genome
-                end
-                encountered_graphs[sig] = genome
-                encountered_genomes[genome] = 1
+    for (_, net) in subnets
+        sig = string(net.graph)::String
+        sig = get(encountered_graphs, sig, sig)
+        if haskey(encountered_genomes, sig)
+            encountered_genomes[sig] += 1
+        else
+            genome = recognize_topology(topological_genome(net))
+            if dim == maxdim && !startswith(genome, "UNKNOWN") &&
+                    !startswith(genome, "unstable") && !startswith(genome, "non-periodic")
+                $ifprintinfo
+                return genome
             end
+            encountered_graphs[sig] = genome
+            encountered_genomes[genome] = 1
         end
     end
     end)
@@ -303,6 +298,9 @@ function guess_topology(path, defopts)
             @ifvalidgenomereturn Options(defopts; ignore_atoms=(a, :H)) "ignoring H and $a"
         end
     end
+    if any(==(:C), atoms) && :C ∉ invalidatoms # organic solvent
+        @ifvalidgenomereturn Options(defopts; ignore_atoms=(:C,)) "ignoring C"
+    end
     if haskey(dryrun, :try_Input_bonds)
         @ifvalidgenomereturn Options(defopts; bonding_mode=BondingMode.Input) "using input bonds"
     end
@@ -329,10 +327,10 @@ function guess_topology(path, defopts)
             most_plausible_genome = genome
         end
     end
-    return most_plausible_genome == "" ? "FAILED (perhaps because "*(
-        isempty(defopts.dimensions) ? "of multiple intertwinned structures)" :
-        "no net with suitable dimension $maxdim was found)"
-    ) : most_plausible_genome
+    return isempty(most_plausible_genome) ? begin
+            issetequal(defopts.dimensions, [1,2,3]) ? "FAILED" :
+                "FAILED (perhaps because no net with suitable dimension in $(defopts.dimensions) was found)"
+            end : most_plausible_genome
 end
 guess_topology(path; kwargs...) = guess_topology(path, Options(; kwargs...))
 

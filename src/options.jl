@@ -15,7 +15,7 @@ module BondingMode
         Guess
         Auto
     end
-    """See help for `BondingMode`"""
+    """See help for [`BondingMode`](@ref)"""
     Input, Guess, Auto
 end
 import .BondingMode
@@ -46,7 +46,7 @@ module ClusteringMode
         Guess
         Auto
     end
-    """See help for `ClusteringMode`"""
+    """See help for [`ClusteringMode`](@ref)"""
     Input, EachVertex, MOF, Guess, Auto, Cluster
     """Internal clustering modes, similar to MOF but with different heuristics"""
     MOFWiderOrganicSBUs, MOFMetalloidIsMetal
@@ -108,10 +108,8 @@ An exception is made for nonmetals which are part of an aromatic heterocycle: th
 treated separately and put in the SBU of the corresponding carbons.
 
 The cluster kinds used by default are
-```jldoctest
-CrysatalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C, :halogen],
-                           [:nonmetal, :metalloid]], Set{Int}(3))
-```
+`CrystalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C, :halogen],
+                           [:nonmetal, :metalloid]], Set{Int}(3))`
 """
 struct ClusterKinds
     dict::Dict{Symbol,Int}
@@ -182,16 +180,16 @@ Different options, passed as keyword arguments:
             the clustering of vertices. Empty string if none.
 - export_net: path to the directory in which to store the .vtf representing the
             extracted net on which the topology is computed. Empty string if none.
-- bonding_mode: one of the [@BondingMode] options, see above.
+- bonding_mode: one of the [`BondingMode`](@ref) options.
 - cutoff_coeff: coefficient used to detect bonds. Default is 0.75, higher
             values will include bonds that were considered to long before.
-- ignore_atoms: set of atom symbols to ignore (for instance [:C,:H] will
+- ignore_atoms: set of atom symbols to ignore (for instance `[:C,:H]` will
             remove carbohydrate solvent residues).
 - bond_adjacent_sbus: bond together SBUs which are only separated by a single C atom.
 - skip_minimize: assume that the cell is already the unit cell (default is false).
 - dimensions: the set of crystal net dimensions to consider. For instance, putting
-            Set(3) will ensure that only 3-dimensional nets are considered.
-            Default is empty, meaning that all nets are considered.
+            `Set(3)` will ensure that only 3-dimensional nets are considered.
+            Default is `Set([1,2,3])`.
 - ignore_types: disregard atom types to compute the topology, making pcu and
             pcu-b identical for example (default is true)
 """
@@ -246,7 +244,7 @@ struct Options
                        export_attributions="",
                        export_clusters="",
                        skip_minimize=false,
-                       dimensions=Set{Int}(),
+                       dimensions=Set{Int}([1,2,3]),
                        ignore_types=true,
                        export_net=DOEXPORT[],
                        _pos=SVector{3,Float64}[],
