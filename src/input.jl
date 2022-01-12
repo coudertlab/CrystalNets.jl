@@ -420,19 +420,21 @@ macro reduce_valence_to1()
     end)
 end
 
-macro reduce_valence(dofix, n1, n2)
+macro reduce_valence(dofix, n1, n2, nm=0)
     comparison = n1 == 0 ? :(___m ≤ $n2) : :($n1 ≤ ___m ≤ $n2)
     invalidcond = n1 == 0 ? :(!$dofix) : :(!$dofix || ___m < $n1)
+    n2update = nm == 0 ? :(___n2 = $n2) : :(___n2 = $n2 + $nm*any(ismetal[atomic_numbers[types[___n.v]]] for ___n in ___neighs))
     return esc(quote
         ___neighs = neighbors(graph, i)
+        $n2update
         ___m = length(___neighs)
         $comparison && continue
         ($invalidcond) && push!(invalidatoms, t)
-        if $dofix && ___m > $n2
+        if $dofix && ___m > ___n2
             ___posi = pos[i]
             ___noHatoms = [x for x in ___neighs if types[x.v] !== :H]
             ___Δs = [norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___noHatoms]
-            ___toremove = least_plausible_neighbours(___Δs, ___m - $n2)
+            ___toremove = least_plausible_neighbours(___Δs, ___m - ___n2)
             for v in ___toremove
                 rem_edge!(graph, PeriodicEdge{N}(i, ___noHatoms[v]))
             end
@@ -458,19 +460,11 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, passO, passCN, mat,
     # First pass over H, since those are likely bonded to their closest neighbor
     for i in passO
         t = :O
-        if options.clustering_mode == ClusteringMode.MOF
-            @reduce_valence dofix 0 4 # oxo-clusters
-        else
-            @reduce_valence dofix 0 2
-        end
+        @reduce_valence dofix 0 2 2
     end
     for i in passCN
         t = types[i]
-        if options.clustering_mode == ClusteringMode.MOF
-            @reduce_valence dofix 2 5
-        else
-            @reduce_valence dofix 2 4
-        end
+        @reduce_valence dofix 2 4 1
     end
     if !isempty(invalidatoms)
         s = String.(collect(invalidatoms))
