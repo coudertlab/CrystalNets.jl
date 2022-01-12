@@ -277,11 +277,12 @@ function guess_topology(path, defopts)
     crystal = parse_chemfile(path, Options(defopts; dryrun))
     atoms = Set{Symbol}(crystal.types)
 
-    @ifvalidgenomereturn defopts "" true
+    @ifvalidgenomereturn defopts "using clustering_mode=ClusteringMode.Guess" true
     if any(x -> (at = atomic_numbers[x]; (ismetal[at] | ismetalloid[at])), atoms)
         @ifvalidgenomereturn Options(defopts; clustering_mode=ClusteringMode.MOF) "using MOF clusters"
     end
-    @ifvalidgenomereturn Options(defopts; clustering_mode=ClusteringMode.Cluster) "using clusters"
+
+    defopts = Options(; clustering_mode=ClusteringMode.Auto)
     if defopts.cutoff_coeff == 0.75 # if default cutoff was used, try larger
         @ifvalidgenomereturn Options(defopts; cutoff_coeff=0.85) "using longer cutoff"
     end
@@ -332,7 +333,7 @@ function guess_topology(path, defopts)
                 "FAILED (perhaps because no net with suitable dimension in $(defopts.dimensions) was found)"
             end : most_plausible_genome
 end
-guess_topology(path; kwargs...) = guess_topology(path, Options(; kwargs...))
+guess_topology(path; kwargs...) = guess_topology(path, Options(clustering_mode=ClusteringMode.Guess; kwargs...))
 
 
 """
@@ -355,7 +356,7 @@ function guess_topologies(path, options)
     failed::Vector{Union{Missing, Pair{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}}} =
         fill(missing, length(dircontent))
     @threads for (i, f) in dircontent
-        name = first(splitext(f))
+        name = last(splitdir(f))
         # println(name)
         result::String = try
             guess_topology(joinpath(path, f), options)
