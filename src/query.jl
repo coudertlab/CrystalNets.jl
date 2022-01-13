@@ -13,9 +13,7 @@ possibly if the `ignore_types` option is unset).
     Options must be passed directly within `net`.
 """
 function topological_genome(net::CrystalNet{D,T})::String where {D,T}
-    if !allunique(net.pos)
-        return UnstableNetException(net).g
-    end
+    is_stable_net(net) || return string("unstable ", net.graph)
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos,
                               net.graph, net.options)
@@ -38,12 +36,11 @@ function topological_genome(net::CrystalNet{D,T})::String where {D,T}
     if isempty(net.options._pos) # could not be exported before
         export_default(net, "net", net.options.name, net.options.export_net; repeats=2)
     end
+
     try
         return string(last(topological_key(net)))
     catch e
-        if e isa UnstableNetException
-            return e.g
-        elseif T == BigInt || !(e isa OverflowError || e isa InexactError)
+        if T == BigInt || !(e isa OverflowError || e isa InexactError)
             rethrow()
         end
     end

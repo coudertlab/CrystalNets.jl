@@ -240,7 +240,6 @@ function _precompile_()
         Base.precompile(Tuple{typeof(Base.Broadcast.materialize!),Base.Broadcast.DefaultArrayStyle{1},SubArray{Rational{CrystalNets.soft_widen(T)}, 1, Matrix{Rational{CrystalNets.soft_widen(T)}}, Tuple{Base.Slice{Base.OneTo{Int}}, Int}, true},Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(-), Tuple{Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(+), Tuple{SVector{3, Rational{T}}, SVector{3, Int}}}, SVector{3, Rational{T}}}}})
         Base.precompile(Tuple{typeof(Base.Broadcast.materialize),Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(-), Tuple{SVector{3, Rational{T}}, SVector{3, Int}}}})
         Base.precompile(Tuple{typeof(Base.Broadcast.materialize),Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(floor), Tuple{Base.RefValue{Type{Int}}, SVector{3, Rational{T}}}}})
-        Base.precompile(Tuple{typeof(allunique),Vector{SVector{3, Rational{T}}}})
         Base.precompile(Tuple{typeof(append!),Vector{SMatrix{3, 3, Rational{T}, 9}},Vector{SMatrix{3, 3, Rational{T}, 9}}})
         Base.precompile(Tuple{typeof(append!),Vector{SMatrix{3, 3, Rational{T}, 9}},Vector{SMatrix{3, 3, Rational{widen(T)}, 9}}})
         let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Rational{T}}},))) catch missing end

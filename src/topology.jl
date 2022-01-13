@@ -1,15 +1,42 @@
 ## Main functions of the algorithm
 
-struct UnstableNetException <: Exception
-    g::String
-end
-UnstableNetException(net::CrystalNet) = UnstableNetException(string("unstable ", net.graph))
-function Base.showerror(io::IO, e::UnstableNetException)
-    print(io, "The net is unstable, hence it cannot be analyzed.")
+"""
+    is_stable_net(c::CrystalNet)
+
+Check that the net is stable, i.e. that no two vertices have the same equilibrium placement.
+Return `true` if the net is stable, `false` otherwise
+
+TODO:
+A net is still considered stable if the collisions in equilibrium placement cannot lead to
+different topological genomes. This happens if there is no edge between two collision sites
+and if, for each collision site, all the corresponding vertices have the exact same set of
+neighbours out of the collision site, and either:
+- there is no edge between any pair of atoms on the site, or
+- there is an edge between each pair of atoms on the site (the collision site is a clique).
+"""
+function is_stable_net(net::CrystalNet)
+    @toggleassert issorted(net.pos)
+    collision_sites = Vector{Int}[]
+    flag_collision = false
+    for i in 2:length(net.pos)
+        if net.pos[i-1] == net.pos[i]
+            if flag_collision
+                push!(collision_sites[end], i)
+            else
+                push!(collision_sites, [i-1, i])
+                flag_collision = true
+            end
+        else
+            flag_collision = false
+        end
+    end
+    isempty(collision_sites) && return true # no collision at all
+    # TODO: handle non-problematic collisions
+    return false
 end
 
 """
-    check_dimensionality(c::CrystalNet{D}) where D
+    check_dimensionality(c::CrystalNet)
 
 Check that the dimensionality of the net (i.e. the number of independent axes along which
 it is periodic) is equal to `D`, or throw an ArgumentError otherwise.
@@ -647,9 +674,9 @@ function find_candidates(net::CrystalNet{D,T}) where {D,T}
     end
     if D >= 3 && isempty(candidates)
         # If we arrive at this point, it means that all vertices only have coplanar neighbors
-        # (in the case D == 3, it should be impossible to arrive here for D < 3).
+        # and D >= 3
         # Then we look for all triplets of edges two of which start from a vertex
-        # and one does not, stopping and the first pair of categories for which this
+        # and one does not, stopping at the first pair of categories for which this
         # set of candidates is non-empty.
         if isempty(candidates)
             for reprs in unique_reprs
@@ -659,12 +686,8 @@ function find_candidates(net::CrystalNet{D,T}) where {D,T}
         end
     end
     if isempty(candidates)
-        if !allunique(net.pos)
-            throw(UnstableNetException(net))
-        else
-            check_dimensionality(net)
-            error("Internal error: no candidate found.")
-        end
+        check_dimensionality(net)
+        error("Internal error: no candidate found.")
     end
     if D == 3
         return extract_through_symmetry(candidates, vmaps, rotations), category_map
@@ -1071,7 +1094,7 @@ function topological_key(net::CrystalNet{D,T}) where {D,T}
     if isempty(net.pos)
         throw(ArgumentError("the net is empty."))
     end
-    @toggleassert allunique(net.pos) # FIXME: make a more precise check for net stability. Currently fails for sxt
+    @toggleassert is_stable_net(net.pos) # FIXME: make a more precise check for net stability. Currently fails for sxt
     candidates, category_map = find_candidates(net)
     v, minimal_basis = popfirst!(candidates)
     n = nv(net.graph)
