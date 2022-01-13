@@ -402,9 +402,9 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{D,T}}}) where {D,T}
     uniques = SVector{D,T}[]
     last_trans = zero(SVector{D,T})
 
-    for j in 1:length(positivetrans)
-        i = tmp_map[I_sort[j]]
-        trans = positivetrans[I_sort[j]]
+    for j in I_sort
+        i = tmp_map[j]
+        trans = positivetrans[j]
         if trans != last_trans
             push!(uniques, trans)
             last_trans = trans
@@ -1111,8 +1111,8 @@ function topological_key(net::CrystalNet{D,T}) where {D,T}
         end
     end
 
-    newbasis, coords = findbasis(minimal_edgs)
+    newbasis, edges = findbasis(minimal_edgs)
 
-    return minimal_basis * newbasis, minimal_vmap, PeriodicGraph{D}(n, coords)
+    return minimal_basis * newbasis, minimal_vmap, PeriodicGraph{D}(n, edges)
 end
 
