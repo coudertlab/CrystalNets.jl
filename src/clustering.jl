@@ -1168,7 +1168,7 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
         return coalesce_sbus(crystal, ClusteringMode.Auto)
     end
     if ne(graph) == 0
-        throw(EmptyGraphException())
+        return Crystal{Nothing}(crystal.cell, Symbol[], SVector{3,Float64}[], graph, Options(crystal.options; _pos=SVector{3,Float64}[]))
     end
     sbus = clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.types)]
     n = length(sbus)

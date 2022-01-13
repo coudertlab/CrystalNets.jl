@@ -49,6 +49,7 @@ function topological_genome(net::CrystalNet{D,T})::String where {D,T}
     end
     return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net; skip_minimize=true))
 end
+topological_genome(net::CrystalNet{0,T}) where {T} = "non-periodic"
 
 """
     topological_genome(g::PeriodicGraph, options::Options=Options())
@@ -145,18 +146,12 @@ In the case where the structure is not made of interpenetrating nets, return the
 the only net.
 """
 function determine_topology(path, options::Options)
-    genomes::Vector{Tuple{Vector{Int},String}} = try
+    genomes::Vector{Tuple{Vector{Int},String}} =
         topological_genome(CrystalNetGroup(parse_chemfile(path, options)))
-    catch e
-        if e isa NonPeriodicInputException || e isa EmptyGraphException
-            [(Int[], "non-periodic")]
-        else
-            rethrow()
-        end
-    end
     if length(genomes) == 1
         return recognize_topology(genomes[1][2])
     end
+    length(genomes) == 0 && return "non-periodic"
     return recognize_topology(genomes)
 end
 determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs...))
@@ -194,13 +189,11 @@ function determine_topologies(path, options::Options)
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            if e isa NonPeriodicInputException || e isa EmptyGraphException
-                [(Int[], "non-periodic")]
-            else
-                e isa ArgumentError && startswith(e.msg, "Cannot use input bonds since there are none.") && continue
-                failed[i] = (name => (e, catch_backtrace()))
-                Tuple{Vector{Int},String}[]
-            end
+            failed[i] = (name => (e, catch_backtrace()))
+            Tuple{Vector{Int},String}[]
+        end
+        if isempty(genomes)
+            push!(genomes, (Int[], "non-periodic"))
         end
         for (j, (_, genome)) in enumerate(genomes)
             newname = length(genomes) == 1 ? name : name * '/' * string(j)
@@ -222,28 +215,19 @@ determine_topologies(path; kwargs...) = determine_topologies(path, db_options(; 
 macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
     crystaldef = skipcrystal ? nothing : :(crystal = parse_chemfile(path, $opts))
     msg = "(found by $msg)"
-    ifprintinfo = isempty(msg) ? nothing : :(@ifwarn @info $msg)
+    ifprintinfo = isempty(msg) ? nothing : :(CrystalNets.@ifwarn @info $msg)
 
     return esc(quote
     $crystaldef
-    group = try
-        CrystalNetGroup(crystal)
-    catch e
-        if e isa NonPeriodicInputException || e isa EmptyGraphException
-            CrystalNetGroup()
-        else
-            rethrow()
-        end
-    end::CrystalNetGroup
-    dim, subnets = isempty(group.D3) ? isempty(group.D2) ? isempty(group.D1) ? 
-                    (0, CrystalNet1D{Int}[]) : (1, group.D1) : (2, group.D2) : (3, group.D3)
+    group = CrystalNetGroup(crystal)
+    dim, subnets = isempty(group.D3) ? isempty(group.D2) ? (1, group.D1) : (2, group.D2) : (3, group.D3)
     for (_, net) in subnets
         sig = string(net.graph)::String
         sig = get(encountered_graphs, sig, sig)
         if haskey(encountered_genomes, sig)
             encountered_genomes[sig] += 1
         else
-            genome = recognize_topology(topological_genome(net))
+            genome = recognize_topology(topological_genome(net)::String)
             if dim == maxdim && !startswith(genome, "UNKNOWN") &&
                     !startswith(genome, "unstable") && !startswith(genome, "non-periodic")
                 $ifprintinfo
@@ -349,7 +333,7 @@ function guess_topology(path, defopts)
         end
     end
     return isempty(most_plausible_genome) ? begin
-            issetequal(defopts.dimensions, [1,2,3]) ? "FAILED" :
+            issetequal(defopts.dimensions, [1,2,3]) ? "non-periodic" :
                 "FAILED (perhaps because no net with suitable dimension in $(defopts.dimensions) was found)"
             end : most_plausible_genome
 end
@@ -465,6 +449,7 @@ function topologies_dataset(path, save, autoclean, options::Options)
         end
         files = readdir(path; join=true, sort=true)
     end
+
     @threads for f in files
         file = splitdir(f)[2]
 
@@ -475,11 +460,10 @@ function topologies_dataset(path, save, autoclean, options::Options)
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            if e isa NonPeriodicInputException || e isa EmptyGraphException
-                [(Int[], "non-periodic")]
-            else
-                [(Int[], "FAILED with "*escape_string(string(e)))]
-            end
+            [(Int[], "FAILED with "*escape_string(string(e)))]
+        end
+        if isempty(genomes)
+            push!(genomes, (Int[], "non-periodic"))
         end
         for (j, (_, genome)) in enumerate(genomes)
             newname = length(genomes) == 1 ? file * '/' : file * '/' * string(j)

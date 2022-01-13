@@ -833,8 +833,6 @@ macro separategroups(D, groups, ex)
     end
 end
 
-struct NonPeriodicInputException <: Exception end
-Base.showerror(io::IO, ::NonPeriodicInputException) = print(io, "Non-periodic input")
 
 function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
                          graph::PeriodicGraph, opts::Options)
@@ -858,7 +856,6 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
         dimensions = PeriodicGraphs.dimensionality(graph)
         initialvmap = initialvmap[vmap0]
     end
-    isempty(dimensions) && throw(NonPeriodicInputException())
 
     groups = CrystalNetGroup()
 
@@ -906,7 +903,8 @@ end
 function CrystalNet(cell::Cell, types::AbstractVector{Symbol},
                     graph::PeriodicGraph, options::Options)::CrystalNet
     group = CrystalNetGroup(cell, types, graph, options)
-    D = isempty(group.D3) ? (isempty(group.D2) ? 1 : 2) : 3
+    D = isempty(group.D3) ? isempty(group.D2) ? isempty(group.D1) ? 0 : 1 : 2 : 3
+    D == 0 && return CrystalNet{0,Int8}(cell, Symbol[], SVector{0,Int8}[], PeriodicGraph{0}(), options)
     nonuniqueD = D != 1 && (!isempty(group.D1) || (D == 3 && !isempty(group.D2)))
     if nonuniqueD
         @ifwarn @warn "Presence of periodic structures of different dimensionalities. Only the highest dimensionality ($D here) will be retained."
@@ -956,12 +954,6 @@ function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
     return CrystalNet{D,Rational{BigInt}}(cell, types, graph, placement, options)
     # Type-unstable function, but yields better performance than always falling back to BigInt
 end
-
-struct EmptyGraphException end
-function Base.showerror(io::IO, ::EmptyGraphException)
-    print(io, "Empty graph. This probably means that the bonds have not been correctly attributed. Please switch to an input file containing explicit bonds.")
-end
-
 
 
 function CrystalNet(crystal::Crystal)
