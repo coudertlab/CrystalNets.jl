@@ -1091,9 +1091,7 @@ The key is returned as a graph `g::PeriodicGraph{D}`, the litteral key can be ex
 with `string(g)`.
 """
 function topological_key(net::CrystalNet{D,T}) where {D,T}
-    if isempty(net.pos)
-        throw(ArgumentError("the net is empty."))
-    end
+    isempty(net.pos) && return zero(SMatrix{3,3,T}), Int[], PeriodicGraph{D}()
     @toggleassert is_stable_net(net.pos) # FIXME: make a more precise check for net stability. Currently fails for sxt
     candidates, category_map = find_candidates(net)
     v, minimal_basis = popfirst!(candidates)

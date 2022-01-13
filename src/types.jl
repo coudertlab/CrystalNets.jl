@@ -630,7 +630,7 @@ is at the origin of the space.
 """
 function equilibrium(g::PeriodicGraph{N}) where N
     n = nv(g)
-    iszero(n) && return Matrix{Rational{Int128}}(undef, N, 0)
+    iszero(n) && return Matrix{Rational{Int64}}(undef, N, 0)
     Y = Matrix{Int}(undef, n, N)
     A = spzeros(Int, n, n)
     neigh = Vector{Int}(undef, n)
@@ -944,6 +944,7 @@ end
 function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
     placement = equilibrium(graph)
+    isempty(placement) && return CrystalNet{D,Rational{Int}}(cell, types, graph, placement, options)
     m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
     M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))
     @tryinttype Int8

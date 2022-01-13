@@ -14,6 +14,7 @@ possibly if the `ignore_types` option is unset).
 """
 function topological_genome(net::CrystalNet{D,T})::String where {D,T}
     is_stable_net(net) || return string("unstable ", net.graph)
+    isempty(net.pos) && return "non-periodic"
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos,
                               net.graph, net.options)
