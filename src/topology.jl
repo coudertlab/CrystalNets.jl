@@ -1,39 +1,6 @@
 ## Main functions of the algorithm
 
-"""
-    is_stable_net(c::CrystalNet)
-
-Check that the net is stable, i.e. that no two vertices have the same equilibrium placement.
-Return `true` if the net is stable, `false` otherwise
-
-TODO:
-A net is still considered stable if the collisions in equilibrium placement cannot lead to
-different topological genomes. This happens if there is no edge between two collision sites
-and if, for each collision site, all the corresponding vertices have the exact same set of
-neighbours out of the collision site, and either:
-- there is no edge between any pair of atoms on the site, or
-- there is an edge between each pair of atoms on the site (the collision site is a clique).
-"""
-function is_stable_net(net::CrystalNet)
-    @toggleassert issorted(net.pos)
-    collision_sites = Vector{Int}[]
-    flag_collision = false
-    for i in 2:length(net.pos)
-        if net.pos[i-1] == net.pos[i]
-            if flag_collision
-                push!(collision_sites[end], i)
-            else
-                push!(collision_sites, [i-1, i])
-                flag_collision = true
-            end
-        else
-            flag_collision = false
-        end
-    end
-    isempty(collision_sites) && return true # no collision at all
-    # TODO: handle non-problematic collisions
-    return false
-end
+include("stability.jl")
 
 """
     check_dimensionality(c::CrystalNet)
