@@ -1059,7 +1059,14 @@ with `string(g)`.
 """
 function topological_key(net::CrystalNet{D,T}) where {D,T}
     isempty(net.pos) && return zero(SMatrix{3,3,T}), Int[], PeriodicGraph{D}()
-    @toggleassert is_stable_net(net.pos) # FIXME: make a more precise check for net stability. Currently fails for sxt
+    collisions = collision_nodes!(net)
+    initial_graph = net.graph
+    if !isempty(collisions)
+        net, collision_vmap = shrink_collisions(net, collisions)
+    else
+        collision_vmap = Int[] # for type stability
+    end
+
     candidates, category_map = find_candidates(net)
     v, minimal_basis = popfirst!(candidates)
     n = nv(net.graph)
@@ -1077,7 +1084,14 @@ function topological_key(net::CrystalNet{D,T}) where {D,T}
     end
 
     newbasis, edges = findbasis(minimal_edgs)
+    graph = PeriodicGraph{D}(n, edges)
+    
+    if !isempty(collisions)
+        minimal_vmap, graph = expand_collisions!(collisions, graph, initial_graph, minimal_vmap, collision_vmap)
+    end
 
-    return minimal_basis * newbasis, minimal_vmap, PeriodicGraph{D}(n, edges)
+    # finalbasis = minimal_basis * newbasis
+    # return Int.(finalbasis), minimal_vmap, graph
+    return minimal_vmap, graph
 end
 
