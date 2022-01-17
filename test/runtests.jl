@@ -2,6 +2,8 @@ using CrystalNets
 using Test, Random
 using PeriodicGraphs
 using StaticArrays
+using Graphs
+using Combinatorics
 import Base.Threads
 
 CrystalNets.toggle_export(false)
@@ -85,7 +87,7 @@ end
         redirect_stderr(devnull) do; parse_chemfile(joinpath(cifs, "Moganite.cif")) end))) == "mog"
 end
 
-
+#=
 @testset "Executable" begin
     cifs, crystalnetsdir = _finddirs()
     safeARGS = deepcopy(ARGS)
@@ -210,3 +212,45 @@ end
         CrystalNets._reset_archive!()
     end
 end
+=#
+
+@testset "Unstable nets" begin
+    for n in 2:4
+        for m in 0:div(n*(n-1), 2)
+            @info "Testing unstable node canonicalization for n = $n; m = $m"
+            seen = SimpleGraph[]
+            for _ in 1:500
+                g = SimpleGraph(n, m; seed=-1)
+                any(==(g), seen) && continue
+                seencolors = Set{Vector{Int}}()
+                seensubnodes = Set{Vector{Vector{Int}}}()
+                for _ in 1:300
+                    colors = rand(1:n, n)
+                    sort!(colors) # allowed since the order of vertices is random
+                    colors ∈ seencolors && continue
+                    push!(seencolors, colors)
+                    subnodes = [Int[] for _ in 1:n]
+                    for i in 1:n
+                        push!(subnodes[colors[i]], i)
+                    end
+                    filter!(!isempty, subnodes)
+                    length(subnodes) == n && continue
+                    subnodes ∈ seensubnodes && continue
+                    push!(seensubnodes, subnodes)
+                    sig = g[CrystalNets._order_collision(g, subnodes)]
+                    for r in permutations(1:n)
+                        newcolors = colors[r]
+                        newsubnodes = [Int[] for _ in 1:n]
+                        for i in 1:n
+                            push!(newsubnodes[newcolors[i]], i)
+                        end
+                        filter!(!isempty, newsubnodes)
+                        g2 = g[r]
+                        @test sig == g2[CrystalNets._order_collision(g2, newsubnodes)]
+                    end
+                end
+            end
+        end
+    end
+end
+

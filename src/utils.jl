@@ -2,7 +2,7 @@
 
 macro toggleassert(ex...)
     # Change the following boolean and reload CrystalNets to enable assertions
-    ENABLE_ASSERT = false
+    ENABLE_ASSERT = true
     if ENABLE_ASSERT
         return esc(quote
             @assert $(ex...)

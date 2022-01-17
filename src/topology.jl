@@ -121,8 +121,15 @@ See also: [`check_valid_symmetry`](@ref), [`possible_translations`](@ref)
 """
 function find_all_valid_translations(c::CrystalNet{D,T}) where {D,T}
     ret = NTuple{D, Vector{Tuple{Int, Int, SVector{D,T}}}}(ntuple(_->[], Val(D)))
+    sites, cdict = collect_collisions(c)
     for (nz, i_max_den, max_den, t) in possible_translations(c)
-        !isnothing(check_valid_symmetry(c, t)) && push!(ret[nz+1], (i_max_den, max_den, t))
+        vmap = check_valid_symmetry(c, t)
+        if vmap isa Vector{Int}
+            if !isempty(sites)
+                check_valid_symmetry_unstable(c, vmap, sites, cdict) || continue
+            end
+            push!(ret[nz+1], (i_max_den, max_den, t))
+        end
     end
     return ret
 end
@@ -329,10 +336,10 @@ topologicallly invariant.
 """
 function minimize(net::CrystalNet)
     translations = find_all_valid_translations(net)
-    while !all(isempty.(translations))
+    if !all(isempty.(translations))
         mat = minimal_volume_matrix(translations)
         net = reduce_with_matrix(net, mat)
-        translations = find_all_valid_translations(net) # TODO don't recompute
+        @toggleassert all(isempty.(find_all_valid_translations(net)))
     end
     return net
 end
@@ -1059,7 +1066,7 @@ with `string(g)`.
 """
 function topological_key(net::CrystalNet{D,T}) where {D,T}
     isempty(net.pos) && return zero(SMatrix{3,3,T}), Int[], PeriodicGraph{D}()
-    collisions = collision_nodes!(net)
+    net, collisions = collision_nodes(net)
     initial_graph = net.graph
     if !isempty(collisions)
         net, collision_vmap = shrink_collisions(net, collisions)
@@ -1087,7 +1094,7 @@ function topological_key(net::CrystalNet{D,T}) where {D,T}
     graph = PeriodicGraph{D}(n, edges)
     
     if !isempty(collisions)
-        minimal_vmap, graph = expand_collisions!(collisions, graph, initial_graph, minimal_vmap, collision_vmap)
+        minimal_vmap, graph = expand_collisions(collisions, graph, initial_graph, minimal_vmap, collision_vmap)
     end
 
     # finalbasis = minimal_basis * newbasis
