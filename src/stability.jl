@@ -310,6 +310,13 @@ function expand_collisions(collisions::Vector{UnitRange{Int}}, graph::PeriodicGr
 end
 
 
+"""
+    subgraph_identifier(graph, node, vmap=nothing)
+
+Return a canonical string identifying the collision node.
+This depends on the order of its neighbours, which is given by their order in the graph or
+in `vmap` if provided.
+"""
 function subgraph_identifier(graph, node, vmap=nothing)
     neighbors_of_node_set = Set{Int}
     for u in node

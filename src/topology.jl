@@ -1,6 +1,5 @@
 ## Main functions of the algorithm
 
-include("stability.jl")
 
 """
     check_dimensionality(c::CrystalNet)
