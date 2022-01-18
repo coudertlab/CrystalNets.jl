@@ -1145,7 +1145,7 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
                 if atts == attd && d != s
                     # @toggleassert iszero(newofs)
                     # continue
-                    @assert iszero(newofs)
+                    @toggleassert iszero(newofs)
                     continue
                 end
                 push!(edgs, PeriodicEdge3D(atts, attd, newofs))

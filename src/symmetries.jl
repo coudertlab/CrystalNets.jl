@@ -177,7 +177,7 @@ function get_spglib_dataset(net::CrystalNet3D)
 end
 
 
-function find_symmetries(net::CrystalNet3D{Rational{S}}) where S
+function find_symmetries(net::CrystalNet3D{Rational{S}}, collisions) where S
     T = soft_widen(S)
     U = soft_widen(T)
     lattice = Matrix{Cdouble}(LinearAlgebra.I, 3, 3) # positions are expressed in this basis
@@ -252,10 +252,10 @@ function find_symmetries(net::CrystalNet3D{Rational{S}}) where S
         # @toggleassert det(rot) == 1
         tr = SVector{3,Cdouble}(translations[:,i])
         trans = SVector{3,Rational{S}}(round.(U, den .* tr) .// den)
-        vmap = check_valid_symmetry(net, trans, rot)
+        vmap = check_valid_symmetry(net, trans, collisions, rot)
         if isnothing(vmap)
             trans = SVector{3,Rational{S}}(net.pos[last(findmin([norm(x .- tr) for x in floatpos]))])
-            vmap = check_valid_symmetry(net, trans, rot)
+            vmap = check_valid_symmetry(net, trans, collisions, rot)
             # if isnothing(vmap)
             #     @show translations[:,i]
             #     @show float(trans)

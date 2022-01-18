@@ -1,6 +1,28 @@
 ## Functions related to unstable nets (some vertices have the same equilibrium placement)
 
 
+
+"""
+    CollisionNode
+
+Store the structure of a collision node through the subgraph `g` extracted with only the
+edges bond to the vertices in the node.
+
+The `num` field corresponds to the number of vertices in `g` that collide in the initial
+graph, while the `neighs` field stores the indices of their neighbor out of the collision
+site.
+
+The colliding vertices are the `num` first vertices of `g`, the others are the neighbors.
+In particular, `nv(g) == num + length(neighs)` and `g[(num+1):(nv(g))]` has no edge.
+"""
+struct CollisionNode
+    g::PeriodicGraph{0}
+    num::Int
+    neighs::Vector{Int}
+end
+(Base.:(==))(c1::CollisionNode, c2::CollisionNode) = c1.num == c2.num && c1.g == c2.g
+Base.length(c::CollisionNode) = c.num
+
 """
     shrink_collisions(net::CrystalNet, collisions)
 
@@ -9,29 +31,32 @@ neighbours are that of the vertices within.
 """
 function shrink_collisions(net::CrystalNet{D,T}, collisions::Vector{UnitRange{Int}}) where {D,T}
     first_colliding = first(first(collisions))
+    m = length(collisions)
+    n = first_colliding + m - 1
+
     collision_vmap = collect(1:length(net.types))
     for (i, node) in enumerate(collisions)
         @toggleassert all(==(net.pos[first(node)]), @view net.pos[node])
-        collision_vmap[node] .= i
+        collision_vmap[node] .= first_colliding + i - 1
     end
     edgs = PeriodicEdge{D}[]
     for e in edges(net.graph)
-        push!(edgs, collision_vmap[e.src], collision_vmap[e.dst.v], e.dst.ofs)
+        src = collision_vmap[e.src]
+        dst = collision_vmap[e.dst.v]
+        if src < first_colliding || dst < first_colliding
+            push!(edgs, PeriodicEdge{D}(src, dst, e.dst.ofs))
+        end
     end
     newgraph = PeriodicGraph{D}(edgs)
 
-    m = length(collisions)
-    n = first_colliding + m - 1
     @toggleassert nv(newgraph) == n
 
     newpos = net.pos[1:first_colliding]
-    append!(newtypes, net.pos[first(collisions[i])] for i in 2:m)
+    append!(newpos, net.pos[first(collisions[i])] for i in 2:m)
     newtypes = net.types[1:first_colliding-1]
     append!(newtypes, :* for i in 1:m) # type of collision nodes will be Symbol('*')
 
-    newnet = CrystalNet{D,T}(net.cell, newtypes, newpos, newgraph, net.options)
-
-    return newnet, collision_vmap
+    return CrystalNet{D,T}(net.cell, newtypes, newpos, newgraph, net.options)
 end
 
 
@@ -214,8 +239,33 @@ function order_collision(graph::PeriodicGraph{D}, colliding) where D
     return _order_collision(subgraph, subnodes)
 end
 
+
+
+function collision_utils(collisions, vmap)
+    num_withcolliding = length(vmap)
+    rev_vmap = Vector{Int}(undef, num_withcolliding)
+    for (i, j) in enumerate(vmap)
+        rev_vmap[j] = i
+    end
+    return collision_utils(collisions, num_withcolliding, rev_vmap)
+end
+
+function collision_utils(collisions, num_withcolliding::Int, rev_vmap=nothing)
+    m = length(collisions)
+    num_nocolliding = num_withcolliding - m
+    n = num_nocolliding + sum(length, collisions)
+
+    if rev_vmap isa Vector{Int}
+        colliding_nodes = rev_vmap[(num_nocolliding+1):num_withcolliding]
+        collisions = [CollisionNode(collisions[i], rev_vmap) for i in sortperm(colliding_nodes)]
+        # The order of collisions and is made independent of the initial representation
+    end
+
+    return n, m, num_withcolliding, num_nocolliding, collisions
+end
+
 """
-    expand_collisions(collisions, graph::PeriodicGraph, initial_graph, vmap, collision_vmap)
+    expand_collisions(collisions::Vector{CollisionNode}, graph::PeriodicGraph, vmap)
 
 Expand each collision node into the appropriate number of vertices so that the resulting
 graph is isomorphic to the initial one, in a manner that only depends on the current graph.
@@ -224,101 +274,73 @@ Return the resulting graph.
 `vmap` is the map of vertices between `initial_graph` (with collapsed collision nodes) and
 `graph`
 """
-function expand_collisions(collisions::Vector{UnitRange{Int}}, graph::PeriodicGraph{D}, initial_graph, vmap, collision_vmap) where D
-    n = nv(initial_graph)
-    m = length(collisions)
-    num_withcolliding = length(vmap)
-    num_nocolliding = num_withcolliding - m
+function expand_collisions(collisions::Vector{CollisionNode}, graph::PeriodicGraph{D}, vmap) where D
+    n, m, num_withcolliding, num_nocolliding, collisions = collision_utils(collisions, vmap)
+    # collisions are now sorted according to vmap, both in the list and for each subgraph
 
-    @toggleassert num_nocolliding + sum(x->length(x), collisions) == length(collision_vmap) == n
     @toggleassert nv(graph) == num_withcolliding
-
-    rev_vmap = Vector{Int}(undef, num_withcolliding)
-    for (i, j) in enumerate(vmap)
-        rev_vmap[j] = i
-    end
-
-    prev_ranges = Vector{Int}(undef, m+1)
-    prev_ranges[1] = num_nocolliding
-    for (i,node) in enumerate(collisions)
-        @toggleassert first(node) == prev_ranges[i] + 1
-        prev_ranges[i+1] = last(node)
-    end
-
-    colliding_nodes = [rev_vmap[collision_vmap[prev_ranges[i]]] for i in 2:(m+1)]
-    I = sortperm(colliding_nodes)
-    colliding_nodes = colliding_nodes[I]
-    collisions = collisions[I] # The order of collisions is now independent of the initial representation
-
-    _new_ranges = num_nocolliding .+ cumsum(length(node) for node in collisions)
-    pushfirst!(_new_ranges, num_nocolliding)
-    new_ranges = [(1+_new_ranges[i]):new_ranges[i+1] for i in 1:m]
+    @toggleassert length(vmap) == nv(graph)
 
     # We now push all the collision nodes to the end
-    perm_nocolliding = Vector{Int}(undef, num_nocolliding)
-    perm_withcolliding = Vector{Int}(undef, num_withcolliding)
-    perm = Vector{Int}(undef, n)
+    perm = Vector{Int}(undef, num_withcolliding)
     current_idx_colliding = 1
-    for i in 1:nv(graph)
-        if i == colliding_nodes[current_idx_colliding]
-            perm_withcolliding[num_nocolliding+current_idx_colliding] = i
-            newpos = new_ranges[current_idx_colliding]
-            oldpos = (1+prev_ranges[current_idx_colliding]):prevprev_rangessums[current_idx_colliding+1]
-            perm[newpos] = oldpos
-
+    for (i, j) in enumerate(vmap)
+        if j > num_nocolliding # vertex i in the current graph is a collision node
+            perm[num_nocolliding + current_idx_colliding] = i
             current_idx_colliding += 1
         else
             idx = i + 1 - current_idx_colliding
-            perm_withcolliding[idx] = perm_nocolliding[idx] = i
-            perm[idx] = vmap[i]
+            perm[idx] = i
         end
     end
-    newgraph = graph[perm_nocolliding] # subgraph of the non-colliding nodes keeping the order]
-    graph = graph[perm_withcolliding]
-    initial_graph = initial_graph[perm]
+    graph = graph[perm]
+    newgraph = graph[1:num_nocolliding] # subgraph of the non-colliding nodes keeping the order
 
     # At this point, the graph has all the collision nodes stacked at its end, but kept in
     # the same order as that given by the topological genome of the graph.
 
     add_vertices!(newgraph, n - num_nocolliding)
-    for i in 1:m
-        rnge = new_ranges[i]
-        for x in neighbors(graph, i) # x is a (non-colliding) neighbour of the collision node
-            for j in neighbors(initial_graph, x.v)
-                if j.v ∈ rnge # j.v is the number of the vertex in the collision node whose neighbour is x
-                    add_edge!(newgraph, PeriodicEdge{D}(j.v, x))
-                end
+    offsetcounter = num_nocolliding
+    for (i, node) in enumerate(collisions)
+        k = length(node)
+        # bonds internal to the collision site
+        for j in 1:k
+            for x in neighbors(node.g, j)
+                x.v ≤ k || continue
+                add_edge!(newgraph, offsetcounter + j, PeriodicVertex{D}(offsetcounter + x.v))
             end
         end
+        # other bonds
+        for (j, x) in enumerate(neighbors(graph, num_nocolliding + i))
+            # x is a (non-colliding) neighbour of the collision node
+            for y in neighbors(node.g, length(node) + j)
+                add_edge!(newgraph, offsetcounter + y.v, x)
+            end
+        end
+        offsetcounter += length(node)
     end
 
     # newgraph contains all vertices from initial_graph
     # The non-colliding ones are ordered like in graph, the others are stacked in the order
-    # of their collision node in graph.
-    # What remains is the ordering of the vertices within each collision node.
+    # of their collision node in graph, each colliding subgraph sorted with order_collision.
 
-    newperm = collect(1:n)
-    for rnge in new_ranges
-        neworder = order_collision(newgraph, rnge)
-        isempty(neworder) && error("Internal error: invalid unstable node detected at expansion")
-        newperm[rnge] = (rnge[1] - 1) .+ neworder
-    end
-    retgraph = newgraph[newperm]
-    newperm[1:num_nocolliding] = vmap[perm_nocolliding]
-
-    return newperm, retgraph
+    return newgraph
 end
 
 
 """
-    subgraph_identifier(graph, node, vmap=nothing)
+    CollisionNode(graph, node, vmap=nothing)
 
-Return a canonical string identifying the collision node.
+Return a canonical `CollisionNode` identifying the collision node.
 This depends on the order of its neighbours, which is given by their order in the graph or
 in `vmap` if provided.
 """
-function subgraph_identifier(graph, node, vmap=nothing)
-    neighbors_of_node_set = Set{Int}
+function CollisionNode(graph, node::UnitRange, rev_vmap=nothing)
+    return CollisionNode(unsorted_node(graph, node), rev_vmap)
+end
+
+function unsorted_node(graph::PeriodicGraph, node::UnitRange)
+    neighbors_of_node_set = Set{Int}()
     for u in node
         for x in neighbors(graph, u)
             push!(neighbors_of_node_set, x.v)
@@ -326,7 +348,6 @@ function subgraph_identifier(graph, node, vmap=nothing)
     end
     setdiff!(neighbors_of_node_set, node)
     neighbors_of_node = collect(neighbors_of_node_set)
-    sort!(neighbors_of_node; by=(vmap isa Vector{Int} ? (x->vmap[x]) : identity))
 
     newmap = Vector{Int}(undef, nv(graph))
     for (i, u) in enumerate(node)
@@ -338,7 +359,7 @@ function subgraph_identifier(graph, node, vmap=nothing)
     end
 
     edgs = PeriodicEdge{0}[]
-    for u in enumerate(node)
+    for u in node
         v = newmap[u]
         for x in neighbors(graph, u)
             push!(edgs, PeriodicEdge{0}(v, newmap[x.v], ()))
@@ -346,24 +367,41 @@ function subgraph_identifier(graph, node, vmap=nothing)
     end
 
     newgraph = PeriodicGraph{0}(edgs)
+
+    return CollisionNode(newgraph, length(node), neighbors_of_node)
+end
+
+function CollisionNode(c::CollisionNode, rev_vmap)
+    sorted_neighbors = rev_vmap isa Vector{Int} ? rev_vmap[c.neighs] : c.neighs
+    I = sortperm(sorted_neighbors)
+
+    newmap = collect(1:nv(c.g))
+    l = length(c)
+    for (j, i) in enumerate(I)
+        newmap[l+j] = l+i
+    end
+    sorted_neighbors = sorted_neighbors[I]
+
+    newgraph = c.g[newmap]
     n = nv(newgraph)
-    @toggleassert n == length(neighbors_of_node) + length(node)
-    neworder = order_collision(newgraph, 1:length(node))
-    isempty(neworder) && return ""
-    perm = collect(1:n)
-    perm[1:length(node)] = neworder
-    return string(newgraph[perm])
+    @toggleassert n == length(sorted_neighbors) + l
+    neworder = order_collision(newgraph, 1:l)
+    @toggleassert !isempty(neworder)
+    perm = collect(1:nv(newgraph))
+    perm[1:l] = neworder
+
+    return CollisionNode(newgraph[perm], l, sorted_neighbors)
 end
 
 
 function collect_collisions(net)
-    @toggleassert issorted(net.pos)
+    sortedpos = issorted(net.pos) ? net.pos : sort(net.pos)
     @toggleassert all(pos -> all(x -> 0 ≤ x < 1, pos), net.pos)
     collision_sites = Vector{Int}[]
     collision_vertices = Int[]
     flag_collision = false
-    for i in 2:length(net.pos)
-        if net.pos[i-1] == net.pos[i]
+    for i in 2:length(sortedpos)
+        if sortedpos[i-1] == sortedpos[i]
             if flag_collision
                 push!(collision_sites[end], i)
                 push!(collision_vertices, i)
@@ -395,13 +433,13 @@ C) for each collision site either:
 In this case, return the list of corresponding `CollisionNode`, the list being empty if the
 net is truly stable. Otherwise, return `nothing`.
 
-This function reorders the vertices in the net so that the vertices in a `CollisionNode`
-appear after the others and are contiguous when they belong to the same `CollisionNode`.
+Also return an updated net where the vertices in a `CollisionNode` are collapsed into a new
+vertex, appearing after the non-colliding vertices.
 """
 function collision_nodes(net::CrystalNet{D}) where D
     collision_sites, collision_vertices = collect_collisions(net)
 
-    isempty(collision_sites) && return net, UnitRange{Int}[] # no collision at all
+    isempty(collision_sites) && return net, CollisionNode[] # no collision at all
 
     # Check that conditions A, B and C are respected
     collision_vertices_set = BitSet(collision_vertices)
@@ -412,9 +450,9 @@ function collision_nodes(net::CrystalNet{D}) where D
         for u in site
             this_nlist = PeriodicVertex{D}[]
             for x in neighbors(net.graph, u)
+                get!(known_neighbors, x.v, x.ofs) == x.ofs || return net, nothing # condition B
                 x.v ∈ site && continue
                 x.v ∈ collision_vertices_set && return net, nothing # condition A
-                get!(known_neighbors, x.v, x.ofs) == x.ofs || return net, nothing # condition B
                 if uniquenlist
                     push!(this_nlist, x)
                 end
@@ -454,55 +492,18 @@ function collision_nodes(net::CrystalNet{D}) where D
     end
     @toggleassert idx == n+1
 
-    return CrystalNet(net.cell, net.types[vmap], net.pos[vmap], net.graph[vmap], net.options),
-           collisions
+    newgraph = net.graph[vmap]
+    newpos = net.pos[vmap]
+    ofs = newpos[1]
+    offsets = Vector{SVector{D,Int}}(undef, n)
+    for (i, x) in enumerate(newpos)
+        offsets[i] = floor.(Int, x .- ofs)
+        newpos[i] = x .- ofs .- offsets[i]
+    end
+    offset_representatives!(newgraph, .-offsets)
+    # net.pos[1] should always be [0,0,0]
 
-    # for site in collision_site
-    #     adjacent_nodes = Vector{Int}[]
-    #     handled = BitSet()
-    #     for simplenode in site
-    #         simplenode ∈ handled && continue
-    #         push!(handled, simplenode)
-    #         Q = [simplenode]
-    #         ref_ext_neighbours = Set{PeriodicVertex{D}}()
-    #         internal_degree = Int[]
-    #         for u in Q
-    #             ext_neighbours = PeriodicVertex{D}[]
-    #             push!(internal_degree, 0)
-    #             for x in neighbors(net.graph, u)
-    #                 v = x.v
-    #                 if iszero(x.ofs)
-    #                     if v ∈ Q
-    #                         internal_degree[end] += 1
-    #                         continue
-    #                     end
-    #                     if v ∈ site
-    #                         push!(Q, v)
-    #                         push!(handled, v)
-    #                         internal_degree[end] += 1
-    #                         continue
-    #                     end
-    #                 end
-    #                 if v ∈ collision_vertices
-    #                     return nothing # edge between two collision sites
-    #                 else
-    #                     push!(ext_neighbours, x)
-    #                 end
-    #             end
-    #         end
-    #         @toggleassert !isempty(ext_neighbours) # otherwise, non-periodic input?
-    #         if isempty(ref_ext_neighbours)
-    #             length(site) > 1 && (ref_ext_neighbours = Set(ext_neighbours))
-    #         else
-    #             issetequal(ext_neighbours, ref_ext_neighbours) || return nothing # all vertices do not share the same external neighbours
-    #         end
-    #         push!(adjacent_nodes, Q)
-    #     end
-    # end
-
-    #=
-    each `vertices` field must be sorted
-    The list of collision nodes must be sorted by length and the corresponding vertices
-    appear in that order in the net, after all the non-colliding vertices
-    =#
+    newnet = CrystalNet(net.cell, net.types[vmap], newpos, newgraph, net.options)
+    newnodes = [CollisionNode(newnet.graph, node) for node in collisions]
+    return shrink_collisions(newnet, collisions), newnodes
 end

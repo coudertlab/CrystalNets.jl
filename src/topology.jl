@@ -26,21 +26,22 @@ end
 
 
 """
-    check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, r=nothing) where {D,T}
+    check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, collisions, r=nothing) where {D,T}
 
 Check that the net is identical to that rotated by `r` (if it is not `nothing`) then
-translated by `t`.
+translated by `t`. `collisions` is the list of `CollisionNode`s in the net.
 
 If so, return the vmap between the initial vertices and their translated images.
 Otherwise, return `nothing`.
 
 See also: [`possible_translations`](@ref), [`find_all_valid_translations`](@ref)
 """
-function check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, r=nothing) where {D,T}
+function check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, 
+                              collisions, r=nothing) where {D,T}
     U = soft_widen(T)
     n = length(c.pos)
-    vmap = Int[]
-    offsets = SVector{D,Int}[]
+    vmap = Vector{Int}(undef, n)
+    offsets = Vector{SVector{D,Int}}(undef, n)
     for k in 1:n
         curr_pos = c.pos[k]
         transl = U.(isnothing(r) ? curr_pos : (r * curr_pos)) .+ t
@@ -56,14 +57,21 @@ function check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Inte
             end
         end
         (c.pos[i] == x && c.types[i] == c.types[k]) || return nothing
-        push!(vmap, i)
-        push!(offsets, ofs)
+        vmap[k] = i
+        offsets[k] = ofs
     end
     for e in edges(c.graph)
         src = vmap[e.src]
         dst = vmap[e.dst.v]
         newofs = (isnothing(r) ? e.dst.ofs : r * e.dst.ofs) .+ offsets[e.dst.v] .- offsets[e.src]
         has_edge(c.graph, PeriodicGraphs.unsafe_edge{D}(src, dst, newofs)) || return nothing
+    end
+    m = n - length(collisions)
+    for (i, node) in enumerate(collisions)
+        j = vmap[m+i]
+        m + i == j && continue
+        j ≤ m && return nothing # a non-collision node is mapped to a collision node
+        collisions[j-m] == CollisionNode(node, vmap) || return nothing
     end
     return vmap
 end
@@ -98,14 +106,6 @@ function possible_translations(c::CrystalNet{D,T}) where {D,T}
     return sort!(ts; by=(x->(x[1], x[2], x[3])))
 end
 
-# TODO: remove?
-function find_first_valid_translations(c::CrystalNet)
-    for (nz, i_max_den, max_den, t) in possible_translations(c)
-        !isnothing(check_valid_symmetry(c, t)) && return (nz, i_max_den, max_den, t)
-    end
-    return nothing
-end
-
 
 """
     find_all_valid_translations(c::CrystalNet{D}) where D
@@ -120,13 +120,10 @@ See also: [`check_valid_symmetry`](@ref), [`possible_translations`](@ref)
 """
 function find_all_valid_translations(c::CrystalNet{D,T}) where {D,T}
     ret = NTuple{D, Vector{Tuple{Int, Int, SVector{D,T}}}}(ntuple(_->[], Val(D)))
-    sites, cdict = collect_collisions(c)
-    for (nz, i_max_den, max_den, t) in possible_translations(c)
-        vmap = check_valid_symmetry(c, t)
+    shrunk_net, collisions = collision_nodes(c)
+    for (nz, i_max_den, max_den, t) in possible_translations(shrunk_net)
+        vmap = check_valid_symmetry(shrunk_net, t, collisions)
         if vmap isa Vector{Int}
-            if !isempty(sites)
-                check_valid_symmetry_unstable(c, vmap, sites, cdict) || continue
-            end
             push!(ret[nz+1], (i_max_den, max_den, t))
         end
     end
@@ -277,7 +274,7 @@ end
     reduce_with_matrix(c::CrystalNet{D}, mat) where {D}
 
 Given the net and the output of `minimal_volume_matrix` computed on the valid translations
-of the net, return the new CrystalNet representing the initial net in the computed unit cell.
+of the net, return the new net representing the initial net in the computed unit cell.
 """
 function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
     U = widen(T)
@@ -290,33 +287,28 @@ function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
         cell = Cell(c.cell, c.cell.mat * _mat)
     end
     imat = soft_widen(T).(inv(mat)) # The inverse should only have integer coefficients
+    @toggleassert all(isinteger, imat)
+    @toggleassert all(all(x -> 0 ≤ x < 1, pos) for pos in c.pos)
     poscol = (U.(imat),) .* c.pos
+
+    I_kept = [i for (i,pos) in enumerate(poscol) if all(x -> 0 ≤ x < 1, pos)]
+    I_sort = sortperm(poscol[I_kept])
+    I_kept = I_kept[I_sort]
+    sortedcol = poscol[I_kept]
 
     offset = [floor.(Int, x) for x in poscol]
     for i in 1:length(poscol)
         poscol[i] = poscol[i] .- offset[i]
     end
-    I_sort = sort(1:length(poscol); by=i->(poscol[i], hash_position(offset[i])))
-    i = popfirst!(I_sort)
-    @toggleassert iszero(offset[i])
-    I_kept = Int[i]
-    sortedcol = SVector{D,Rational{U}}[poscol[i]]
-    for i in I_sort
-        x = poscol[i]
-        if x != sortedcol[end]
-            push!(I_kept, i)
-            push!(sortedcol, x)
-        end
-    end
+
     edges = PeriodicEdge{D}[]
     for i in 1:length(I_kept)
-        ofs_i = offset[I_kept[i]]
         for neigh in neighbors(c.graph, I_kept[i])
             x = poscol[neigh.v]
             j = searchsortedfirst(sortedcol, x)
             @toggleassert j <= length(sortedcol) && sortedcol[j] == x
             ofs_x = offset[neigh.v]
-            push!(edges, (i, j, ofs_x - ofs_i .+ imat*neigh.ofs))
+            push!(edges, (i, j, ofs_x .+ imat*neigh.ofs))
         end
     end
     graph = PeriodicGraph{D}(edges)
@@ -620,11 +612,11 @@ Also return a `category_map` linking each vertex to its category number, as defi
 
 See also: [`candidate_key`](@ref)
 """
-function find_candidates(net::CrystalNet{D,T}) where {D,T}
+function find_candidates(net::CrystalNet{D,T}, collisions) where {D,T}
     L = D*D
     U = soft_widen(T)
     if D == 3
-        rotations, vmaps, _ = find_symmetries(net)
+        rotations, vmaps, _ = find_symmetries(net, collisions)
         @toggleassert length(rotations) == length(vmaps)
         categories, unique_reprs = partition_by_coordination_sequence(net.graph, vmaps)
     else
@@ -1059,21 +1051,16 @@ end
 
 Return a unique topological key for the net, which is a topological invariant of the net
 (i.e. it does not depend on its initial representation).
-
-The key is returned as a graph `g::PeriodicGraph{D}`, the litteral key can be extracted
-with `string(g)`.
 """
 function topological_key(net::CrystalNet{D,T}) where {D,T}
-    isempty(net.pos) && return zero(SMatrix{3,3,T}), Int[], PeriodicGraph{D}()
+    isempty(net.pos) && return "non-periodic"
     net, collisions = collision_nodes(net)
-    initial_graph = net.graph
-    if !isempty(collisions)
-        net, collision_vmap = shrink_collisions(net, collisions)
-    else
-        collision_vmap = Int[] # for type stability
+    if collisions isa Nothing
+        return string("unstable ", net.graph)
     end
+    collisions::Vector{CollisionNode}
 
-    candidates, category_map = find_candidates(net)
+    candidates, category_map = find_candidates(net, collisions)
     v, minimal_basis = popfirst!(candidates)
     n = nv(net.graph)
     _edgs = [(n + 1, 0, zero(SVector{D,T}))]
@@ -1091,13 +1078,13 @@ function topological_key(net::CrystalNet{D,T}) where {D,T}
 
     newbasis, edges = findbasis(minimal_edgs)
     graph = PeriodicGraph{D}(n, edges)
-    
+
     if !isempty(collisions)
-        minimal_vmap, graph = expand_collisions(collisions, graph, initial_graph, minimal_vmap, collision_vmap)
+        graph = expand_collisions(collisions, graph, minimal_vmap)
     end
 
     # finalbasis = minimal_basis * newbasis
     # return Int.(finalbasis), minimal_vmap, graph
-    return minimal_vmap, graph
+    return string(graph)
 end
 
