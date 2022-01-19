@@ -118,9 +118,8 @@ A translation is valid if it maps exactly each vertex to a vertex and each edge 
 
 See also: [`check_valid_symmetry`](@ref), [`possible_translations`](@ref)
 """
-function find_all_valid_translations(c::CrystalNet{D,T}) where {D,T}
+function find_all_valid_translations(shrunk_net::CrystalNet{D,T}, collisions) where {D,T}
     ret = NTuple{D, Vector{Tuple{Int, Int, SVector{D,T}}}}(ntuple(_->[], Val(D)))
-    shrunk_net, collisions = collision_nodes(c)
     for (nz, i_max_den, max_den, t) in possible_translations(shrunk_net)
         vmap = check_valid_symmetry(shrunk_net, t, collisions)
         if vmap isa Vector{Int}
@@ -271,12 +270,12 @@ end
 
 
 """
-    reduce_with_matrix(c::CrystalNet{D}, mat) where {D}
+    reduce_with_matrix(c::CrystalNet, mat, shrunk_net, collisions)
 
 Given the net and the output of `minimal_volume_matrix` computed on the valid translations
 of the net, return the new net representing the initial net in the computed unit cell.
 """
-function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
+function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat, collisions) where {D,T}
     U = widen(T)
     lengths = degree(c.graph)
     if D == 3
@@ -289,50 +288,94 @@ function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat) where {D,T}
     imat = soft_widen(T).(inv(mat)) # The inverse should only have integer coefficients
     @toggleassert all(isinteger, imat)
     @toggleassert all(all(x -> 0 ≤ x < 1, pos) for pos in c.pos)
+
     poscol = (U.(imat),) .* c.pos
+    n = length(poscol)
+    offset = Vector{SVector{D,Int}}(undef, n)
+    for (i, pos) in enumerate(poscol)
+        ofs = floor.(Int, pos)
+        offset[i] = ofs
+        poscol[i] = pos .- ofs
+    end
+    I_sort = sort(1:n; by=i->(poscol[i], hash_position(offset[i])))
+    i = popfirst!(I_sort)
+    @toggleassert iszero(offset[i])
+    I_kept = Int[i]
+    last_sortedcol = poscol[i]
+    
+    for i in I_sort
+        x = poscol[i]
+        if x != last_sortedcol
+            push!(I_kept, i)
+            last_sortedcol = x
+        end
+    end
 
-    I_kept = [i for (i,pos) in enumerate(poscol) if all(x -> 0 ≤ x < 1, pos)]
-    I_sort = sortperm(poscol[I_kept])
-    I_kept = I_kept[I_sort]
-    sortedcol = poscol[I_kept]
+    kept_collisions = Int[]
+    if !isempty(collisions)
+        m = n - length(collisions)
+        reorder = Vector{Int}(undef, length(I_kept))
+        idx = 0
+        for (j, i) in enumerate(I_kept)
+            if i > m
+                reorder[end-idx] = j
+                idx += 1
+                push!(kept_collisions, i-m)
+            else
+                reorder[j-idx] = j
+            end
+        end
+        I_kept = I_kept[reorder]
+    end
 
-    offset = [floor.(Int, x) for x in poscol]
-    for i in 1:length(poscol)
-        poscol[i] = poscol[i] .- offset[i]
+    sortedcol = [SVector{D,Rational{U}}(poscol[i]) for i in I_kept]
+
+    vmap = Vector{Int}(undef, n)
+    for (i, pos) in enumerate(poscol)
+        j = searchsortedfirst(sortedcol, pos)
+        @toggleassert j <= length(sortedcol) && sortedcol[j] == pos
+        vmap[i] = j
     end
 
     edges = PeriodicEdge{D}[]
     for i in 1:length(I_kept)
+        ofs_i = offset[I_kept[i]]
         for neigh in neighbors(c.graph, I_kept[i])
-            x = poscol[neigh.v]
-            j = searchsortedfirst(sortedcol, x)
-            @toggleassert j <= length(sortedcol) && sortedcol[j] == x
             ofs_x = offset[neigh.v]
-            push!(edges, (i, j, ofs_x .+ imat*neigh.ofs))
+            push!(edges, (i, vmap[neigh.v], ofs_x - ofs_i .+ imat*neigh.ofs))
         end
     end
+
+    newcollisions = [CollisionNode(collisions[i], vmap) for i in kept_collisions]
+    for newnode in newcollisions
+        if !allunique(newnode.neighs)
+            newcollisions = nothing
+            break
+        end
+    end
+
     graph = PeriodicGraph{D}(edges)
     @toggleassert degree(graph) == lengths[I_kept]
-    return CrystalNet(cell, c.types[I_kept], sortedcol, graph, c.options)
+    return CrystalNet(cell, c.types[I_kept], sortedcol, graph, c.options), newcollisions
 end
 
 
 """
-    minimize(net::CrystalNet)
+    minimize(net::CrystalNet, collisions::Vector{CollisionNode})
 
 Return a CrystalNet representing the same net as the input, but in a unit cell.
 
 The computed unit cell may depend on the representation of the input, i.e. it is not
 topologicallly invariant.
 """
-function minimize(net::CrystalNet)
-    translations = find_all_valid_translations(net)
+function minimize(net::CrystalNet, collisions::Vector{CollisionNode})
+    translations = find_all_valid_translations(net, collisions)
     if !all(isempty.(translations))
         mat = minimal_volume_matrix(translations)
-        net = reduce_with_matrix(net, mat)
-        @toggleassert all(isempty.(find_all_valid_translations(net)))
+        net, collisions = reduce_with_matrix(net, mat, collisions)
+        @toggleassert all(isempty.(find_all_valid_translations(net, collisions)))
     end
-    return net
+    return net, collisions
 end
 
 
@@ -1047,19 +1090,19 @@ end
 
 
 """
-    topological_key(net::CrystalNet{D}) where D
+    topological_key(net::CrystalNet)
 
 Return a unique topological key for the net, which is a topological invariant of the net
 (i.e. it does not depend on its initial representation).
 """
-function topological_key(net::CrystalNet{D,T}) where {D,T}
+function topological_key(net::CrystalNet)
     isempty(net.pos) && return "non-periodic"
-    net, collisions = collision_nodes(net)
-    if collisions isa Nothing
-        return string("unstable ", net.graph)
-    end
-    collisions::Vector{CollisionNode}
+    newnet, collisions = collision_nodes(net)
+    collisions isa Nothing && return string("unstable ", net.graph)
+    return topological_key(newnet, collisions::Vector{CollisionNode})
+end
 
+function topological_key(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}) where {D,T}
     candidates, category_map = find_candidates(net, collisions)
     v, minimal_basis = popfirst!(candidates)
     n = nv(net.graph)

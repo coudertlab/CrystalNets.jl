@@ -12,16 +12,20 @@ possibly if the `ignore_types` option is unset).
 !!! info
     Options must be passed directly within `net`.
 """
-function topological_genome(net::CrystalNet{D,T})::String where {D,T}
+function topological_genome(net::CrystalNet{D,T}) where {D,T}
     isempty(net.pos) && return "non-periodic"
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos,
                               net.graph, net.options)
     end
+    shrunk_net, _collisions = collision_nodes(net)
+    _collisions isa Nothing && return string("unstable ", net.graph)
+    collisions::Vector{CollisionNode} = _collisions
+
     if !net.options.skip_minimize
         flag = true
         try
-            net = minimize(net)
+            shrunk_net, _collisions = minimize(shrunk_net, collisions)
             flag = false
         catch e
             if T == BigInt || !(e isa OverflowError || e isa InexactError)
@@ -32,21 +36,29 @@ function topological_genome(net::CrystalNet{D,T})::String where {D,T}
             newnet = CrystalNet{D,widen(soft_widen(T))}(net; ignore_types=false)
             return topological_genome(newnet)
         end
+        _collisions isa Nothing && return string("unstable ", shrunk_net.graph)
+        collisions = _collisions
     end
+
     if isempty(net.options._pos) # could not be exported before
         export_default(net, "net", net.options.name, net.options.export_net; repeats=2)
     end
 
+    return topological_genome(shrunk_net, collisions)
+end
+
+topological_genome(net::CrystalNet{0,T}) where {T} = "non-periodic"
+
+function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNode})::String where {D,T}
     try
-        return topological_key(net)
+        return topological_key(net, collisions)
     catch e
         if T == BigInt || !(e isa OverflowError || e isa InexactError)
             rethrow()
         end
     end
-    return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net; skip_minimize=true))
+    return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), collisions)
 end
-topological_genome(net::CrystalNet{0,T}) where {T} = "non-periodic"
 
 """
     topological_genome(g::PeriodicGraph, options::Options=Options())
