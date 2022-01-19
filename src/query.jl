@@ -389,7 +389,7 @@ function guess_topologies(path, options)
     newgens = sort!(collect(skipmissing(newgenomes)))
     return Dict(ret), unique!(newgens), Dict(skipmissing(failed))
 end
-guess_topologies(path; kwargs...) = guess_topologies(path, db_options(; kwargs...))
+guess_topologies(path; kwargs...) = guess_topologies(path, db_options(; clustering_mode=ClusteringMode.Guess, kwargs...))
 
 
 """
@@ -408,7 +408,7 @@ This function is similar to [`determine_topologies`](@ref)`, but targets larger 
 for which performance is critical. In particular, no attempt to recognise the
 found topologies is performed: only the topological key is returned.
 
-It is strongly recommended to toggle warnings off (through `toggle_warning`) and
+It is strongly recommended to toggle warnings off (through [`toggle_warning`](@ref)) and
 not to export any file since those actions may critically reduce performance,
 especially for numerous files.
 
@@ -489,7 +489,7 @@ function topologies_dataset(path, save, autoclean, options::Options)
             isempty(l) && continue
             _i = 1; while l[_i] != '/'; _i+=1; end
             _j = _i+1; while l[_j] != '/'; _j+=1; end
-            push!(ret, Pair(l[1:_j-1-(_i==_j)], l[_j+1:end]))
+            push!(ret, Pair(l[1:_j-1-(_i+1==_j)], l[_j+1:end]))
         end
     end
     result::Dict{String,String} = Dict(ret)
@@ -517,4 +517,114 @@ function topologies_dataset(path, save, autoclean, options::Options)
 end
 function topologies_dataset(path, save=true, autoclean=true; kwargs...)
     topologies_dataset(path, save, autoclean, db_options(; kwargs...))
+end
+
+
+
+"""
+    guess_dataset(path, save, autoclean, options::Options)
+    guess_dataset(path, save=true, autoclean=true; kwargs...)
+
+Given a path to a directory containing structure input files, guess the topology of each
+structure within the directory using [`guess_topology`](@ref).
+Return a dictionary linking each file name to the result.
+The result is the corresponding topology name, if known, or the topological
+genome preceded by an "UNKNOWN" mention otherwise. In case of error, the result
+is the exception preceded by a "FAILED with" mention. Finally, if the input does
+not represent a periodic structure, the result is "non-periodic".
+
+It is strongly recommended to toggle warnings off (through [`toggle_warning`](@ref)) and
+not to export any file since those actions may critically reduce performance,
+especially for numerous files.
+
+The `save` and `autoclean` arguments work identically to their counterpart for
+[`topologies_dataset`](@ref).
+"""
+function guess_dataset(path, save, autoclean, options::Options)
+    if isdirpath(path)
+        path = dirname(path)
+    end
+    if startswith(basename(path), "guessed_") && isfile(joinpath(path), "data")
+        resultdir = path
+        path = only(readlines(joinpath(path, "data")))
+        alreadydone = String[]
+        for _f in readdir(resultdir; join=true)
+            basename(_f) == "data" && continue
+            io = open(_f, "r+")
+            pos = max(filesize(io) - 2, 0)
+            seek(io, pos)
+            while pos > 0 && read(io, Char) != '\n'
+                pos -= 1
+                seek(io, pos)
+            end
+            truncate(io, pos+(pos>0)) # remove the last line if incomplete
+            close(io)
+            for l in eachline(_f)
+                isempty(l) && continue
+                _i = 1; while l[_i] != '/'; _i+=1; end
+                push!(alreadydone, joinpath(path, l[1:_i-1]))
+            end
+        end
+        files = readdir(path; join=true, sort=true)
+        setdiff!(files, alreadydone)
+    else
+        resultdir = tmpexportname(dirname(path), "", "guessed", "")
+        mkdir(resultdir)
+        open(joinpath(resultdir, "data"), "w") do f
+            println(f, path)
+        end
+        files = readdir(path; join=true, sort=true)
+    end
+
+    @threads for f in files
+        file = splitdir(f)[2]
+
+        genome::String = try
+            guess_topology(f, options)
+        catch e
+            if e isa InterruptException ||
+              (e isa TaskFailedException && e.task.result isa InterruptException)
+                rethrow()
+            end
+            "FAILED with "*escape_string(string(e))
+        end
+        open(joinpath(resultdir, string(threadid())), "a") do results
+            println(results, file, '/', genome)
+        end
+    end
+
+    ret = Pair{String,String}[]
+    for _f in readdir(resultdir; join=true)
+        basename(_f) == "data" && continue
+        for l in eachline(_f)
+            isempty(l) && continue
+            _i = 1; while l[_i] != '/'; _i+=1; end
+            push!(ret, Pair(l[1:_i-1], l[_i+1:end]))
+        end
+    end
+    result::Dict{String,String} = Dict(ret)
+    if save
+        i = 0
+        tmpresultdir = resultdir*".OLD"*string(i)
+        while ispath(tmpresultdir)
+            i += 1
+            tmpresultdir = resultdir*".OLD"*string(i)
+        end
+        mv(resultdir, tmpresultdir)
+        Serialization.serialize(resultdir, result)
+        println("Guessed topologies of $path saved at $resultdir")
+        if autoclean
+            rm(tmpresultdir; recursive=true)
+        else
+            println("Temporary files kept at $tmpresultdir")
+        end
+    elseif autoclean
+        rm(resultdir; recursive=true)
+    else
+        println("Temporary files kept at $resultdir")
+    end
+    return result
+end
+function guess_dataset(path, save=true, autoclean=true; kwargs...)
+    guess_dataset(path, save, autoclean, db_options(; clustering_mode=ClusteringMode.Guess, kwargs...))
 end

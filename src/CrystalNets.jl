@@ -11,7 +11,7 @@ chemical file format called FILE, the entry point is the following execution:
 ```julia
 julia> using CrystalNets
 
-julia> recognize_topology(topological_genome(CrystalNet(parse_chemfile(FILE))))
+julia> determine_topology(FILE)
 ```
 """
 module CrystalNets
@@ -26,6 +26,7 @@ export CrystalNet,
        guess_topology,
        guess_topologies,
        topologies_dataset,
+       guess_dataset,
        BondingMode,
        ClusteringMode
 
