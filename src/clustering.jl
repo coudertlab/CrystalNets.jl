@@ -401,15 +401,20 @@ function split_sbu!(sbus, graph, i_sbu, classes)
             u = pop!(toexplore)
             push!(sbus.sbus[j], u)
             for x in neighbors(graph, u.v)
-                sbus.attributions[x.v] == i_sbu || continue
                 classes[x.v] == class || continue
-                sbus.attributions[x.v] = j
-                if x.v ∈ explored
-                    if seeninthissbu[x.v] != x.ofs .+ u.ofs
-                        push!(periodicsbus, j)
+                attrx = sbus.attributions[x.v]
+                ofs = x.ofs .+ u.ofs
+                wasnotexplored = true
+                if attrx == i_sbu || attrx == j
+                    seen = get(seeninthissbu, x.v, nothing)
+                    if seen isa SVector{3,Int}
+                        wasnotexplored = false
+                        seen == ofs || push!(periodicsbus, j)
                     end
-                else
-                    ofs = x.ofs .+ u.ofs
+                end
+                attrx == i_sbu || continue
+                sbus.attributions[x.v] = j
+                if wasnotexplored
                     seeninthissbu[x.v] = ofs
                     sbus.offsets[x.v] = ofs
                     push!(explored, x.v)
@@ -423,6 +428,7 @@ function split_sbu!(sbus, graph, i_sbu, classes)
         push!(sbus.classes, sbus.classes[i_sbu])
         push!(toexplore, PeriodicVertex3D(sbu[findfirst(∉(explored), sbu)]))
     end
+
     return periodicsbus
 end
 
@@ -1143,8 +1149,6 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
                 attd = clusters.attributions[d]
                 newofs = x.ofs .+ clusters.offsets[s] .- clusters.offsets[d]
                 if atts == attd && d != s
-                    # @toggleassert iszero(newofs)
-                    # continue
                     @toggleassert iszero(newofs)
                     continue
                 end
