@@ -58,7 +58,7 @@ function export_space_group_table(space_groups=collect_table_seto(),
             @assert i == num
             hall ∈ encountered && continue # should only happen for 324 (322), 328 (326) and 332 (330)
             push!(encountered, hall)
-            println(f, "    \"", hall, "\" => ", num, ',')
+            println(f, "    \"", lowercase(hall), "\" => ", num, ',')
         end
         @assert length(encountered) == length(space_groups) - 3
         @assert space_groups[322][3] == space_groups[324][3]

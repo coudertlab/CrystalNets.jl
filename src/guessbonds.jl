@@ -35,7 +35,7 @@ const ismetalloid = Bool[0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
 function guess_bonds(pos, types, mat, options)
     # Algorithm from chemfiles, itself from VMD
     @ifwarn begin
-        @warn "Guessing bonds with Chemfiles algorithm (from VMD). This may take a while for big structures and may be inexact."
+        @warn "Guessing bonds with custom algorithm (from Chemfiles and VMD). This may take a while for big structures and may be inexact."
         @info "To avoid guessing bonds, use a file format that contains the bonds."
     end
     bonds = Tuple{Int,Int,Float64}[]

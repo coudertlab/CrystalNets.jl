@@ -92,8 +92,8 @@ end
 
 function find_hall_number(hallsymbol, hm, it)
     if hallsymbol != ""
-        hallsymbol = hallsymbol[1]*lowercase(@view hallsymbol[2:end])
-        hall = get(SPACE_GROUP_HALL, replace(hallsymbol, ('_' => ' ')), 0)
+        hsymbol = lowercase(hallsymbol)
+        hall = get(SPACE_GROUP_HALL, replace(hsymbol, ('_' => ' ')), 0)
         if hall ∈ (322, 326, 330)
             if hall == 322
                 if endswith(hm, 'b')

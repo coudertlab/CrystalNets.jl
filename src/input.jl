@@ -96,6 +96,13 @@ function parsestrip(T, s)
 end
 parsestrip(s) = parsestrip(BigFloat, s)
 
+function popstring!(parsed, name)::String
+    x = pop!(parsed, name)
+    if x isa String
+        return x
+    end
+    return only(x::Vector{String})
+end
 
 """
     CIF(file_path::AbstractString)
@@ -112,23 +119,23 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     refid = find_refid(equivalentpositions)
     hall = find_hall_number(
             haskey(parsed, "space_group_name_Hall") ?
-                pop!(parsed, "space_group_name_Hall")::String :
+                popstring!(parsed, "space_group_name_Hall") :
                 haskey(parsed, "symmetry_space_group_name_Hall") ?
-                    pop!(parsed, "symmetry_space_group_name_Hall")::String : "",
+                    popstring!(parsed, "symmetry_space_group_name_Hall") : "",
             haskey(parsed, "space_group_name_H-M_alt") ?
-                pop!(parsed, "space_group_name_H-M_alt")::String :
+                popstring!(parsed, "space_group_name_H-M_alt") :
                 haskey(parsed, "symmetry_space_group_name_H-M") ?
-                    pop!(parsed, "symmetry_space_group_name_H-M")::String : "",
+                    popstring!(parsed, "symmetry_space_group_name_H-M") : "",
             haskey(parsed, "symmetry_Int_Tables_number") ?
-                parse(Int, pop!(parsed, "symmetry_Int_Tables_number")::String) :
+                parse(Int, popstring!(parsed, "symmetry_Int_Tables_number")) :
                 haskey(parsed, "space_group.IT_number") ? 
-                    parse(Int, pop!(parsed, "space_group.IT_number")::String) : 0)
-    cell = Cell(hall, (parsestrip(pop!(parsed, "cell_length_a")::String),
-                       parsestrip(pop!(parsed, "cell_length_b")::String),
-                       parsestrip(pop!(parsed, "cell_length_c")::String)),
-                      (parsestrip(pop!(parsed, "cell_angle_alpha")::String),
-                       parsestrip(pop!(parsed, "cell_angle_beta")::String),
-                       parsestrip(pop!(parsed, "cell_angle_gamma")::String)),
+                    parse(Int, popstring!(parsed, "space_group.IT_number")) : 0)
+    cell = Cell(hall, (parsestrip(popstring!(parsed, "cell_length_a")),
+                       parsestrip(popstring!(parsed, "cell_length_b")),
+                       parsestrip(popstring!(parsed, "cell_length_c"))),
+                      (parsestrip(popstring!(parsed, "cell_angle_alpha")),
+                       parsestrip(popstring!(parsed, "cell_angle_beta")),
+                       parsestrip(popstring!(parsed, "cell_angle_gamma"))),
                 parse.(EquivalentPosition, equivalentpositions, Ref(refid)))
 
     haskey(parsed, "symmetry_equiv_pos_site_id") && pop!(parsed, "symmetry_equiv_pos_site_id")
@@ -151,7 +158,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     symbols = String[]
     @inbounds for x in _symbols
         i = findfirst(!isletter, x)
-        push!(symbols, isnothing(i) ? x : x[1:i-1])
+        push!(symbols, uppercase(x[1])*lowercase(isnothing(i) ? x[2:end] : x[2:i-1]))
     end
     pos_x = pop!(parsed, "atom_site_fract_x")::Vector{String}
     pos_y = pop!(parsed, "atom_site_fract_y")::Vector{String}
@@ -162,8 +169,10 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     pos = Matrix{Float64}(undef, 3, natoms)
     correspondence = Dict{String, Int}()
     for i in 1:natoms
-        @toggleassert !haskey(correspondence, labels[i])
-        correspondence[labels[i]] = i
+        if get!(correspondence, labels[i], i) != i
+            correspondence[labels[i]] = 0 # indicates an atom appearing multiple times
+            @ifwarn @warn "Atom $(labels[i]) appears multiple time in the input CIF description."
+        end
         push!(types, Symbol(symbols[i]))
         pos[:,i] = parsestrip.(Float64, [pos_x[i], pos_y[i], pos_z[i]])
         pos[:,i] .-= floor.(Int, pos[:,i])
@@ -181,17 +190,15 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
                     parsestrip.(Float32, pop!(parsed, "geom_bond_distance")::Vector{String}) :
                     fill(zero(Float32), length(bond_a)))
         for i in 1:length(bond_a)
-            try
-                x = correspondence[bond_a[i]]
-                y = correspondence[bond_b[i]]
-                bonds[x,y] = bonds[y,x] = 1.001*dists[i] # to avoid rounding errors
-            catch e
-                if e isa KeyError
-                    @ifwarn @warn "Atom $(e.key) will be ignored since it has no placement in the CIF file."
-                else
-                    rethrow()
-                end
+            x = get(correspondence, bond_a[i], 0)
+            y = get(correspondence, bond_b[i], 0)
+            if (x|y) == 0
+                bonds = fill(Inf32, natoms, natoms)
+                missingatom = x == 0 ? bond_a[i] : bond_b[i]
+                @ifwarn @error "Atom $missingatom, used in a bond, has either zero or multiple placements in the CIF file. This invalidates all bonds from the file, which will thus be discarded."
+                break
             end
+            bonds[x,y] = bonds[y,x] = 1.001*dists[i] # to avoid rounding errors
         end
     end
 

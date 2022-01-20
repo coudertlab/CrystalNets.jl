@@ -105,6 +105,7 @@ end
 
 const atomic_numbers = IdDict{Symbol, Int}(
     :H => 1,
+    :D => 1,
     :He => 2,
     :Li => 3,
     :Be => 4,

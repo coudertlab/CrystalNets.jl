@@ -29,9 +29,9 @@ function find_refid(eqs)
     isempty(eqs) && return ("x", "y", "z")
     for eq in eqs # Normally it should be the first one but I'm not sure of the specs here
         ts = collect(tokenize(eq))
-        any(Tokenize.Tokens.isoperator∘Tokenize.Tokens.kind, ts) && continue
         refid = [""]
         not_at_the_end = true
+        immediate_continue = false
         for t in ts
             @toggleassert not_at_the_end
             k = Tokenize.Tokens.kind(t)
@@ -43,10 +43,12 @@ function find_refid(eqs)
                 push!(refid, "")
             elseif k === Tokenize.Tokens.ENDMARKER
                 not_at_the_end = false
-            elseif k !== Tokenize.Tokens.WHITESPACE
-                error("Input string {$eq} is not a valid symmetry equivalent")
+            elseif k !== Tokenize.Tokens.WHITESPACE && t.kind !== Tokenize.Tokens.PLUS
+                immediate_continue = true
+                break
             end
         end
+        immediate_continue && continue
         if not_at_the_end
             error("Unknown end of line marker for symmetry equivalent {$eq}")
         end
@@ -103,6 +105,13 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                     encountered_div = true
                     continue
                 end
+                if x.kind === Tokenize.Tokens.FLOAT
+                    @toggleassert isnothing(curr_val)
+                    @toggleassert isnothing(curr_num)
+                    @toggleassert !encountered_div
+                    curr_val = Rational{Int}(rationalize(Int8, parse(Float16, x.val)))
+                    continue
+                end
                 if !isnothing(curr_num)
                     @toggleassert isnothing(curr_val)
                     curr_val = curr_num
@@ -131,7 +140,7 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                     i += 1
                 else
                     k !== Tokenize.Tokens.ENDMARKER && error("Unknown end of line marker for symmetry equivalent {$s}")
-                    i!= 3 && error("Input string {$s} is not a valid symmetry equivalent")
+                    i != 3 && error("Input string {$s} is not a valid symmetry equivalent")
                 end
             end
         end
@@ -319,7 +328,7 @@ function remove_partial_occupancy(cif::CIF)
         return CIF(cif.cifinfo, cif.cell, cif.ids, cif.types, cif.pos, cif.bonds)
     end
     @ifwarn @warn "This CIF file contains at least one site with multiple atoms. Only one atom will be kept per atom site."
-    occupancies = parse.(Float64, get(cif.cifinfo, "atom_site_occupancy", 
+    occupancies = parsestrip.(Float64, get(cif.cifinfo, "atom_site_occupancy", 
                                       ["1.0" for _ in 1:length(cif.types)])::Vector{String})
     toremove = Int[]
     bonds = copy(cif.bonds)
