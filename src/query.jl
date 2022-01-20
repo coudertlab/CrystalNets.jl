@@ -363,13 +363,12 @@ not part of the archive and `failed` is a dictionary linking the name of the
 structure to the error and backtrace justifying its failure.
 """
 function guess_topologies(path, options)
-    dircontent = isdir(path) ? collect(enumerate(readdir(path))) : [(1, path)]
+    dircontent = isdir(path) ? collect(enumerate(recursive_readdir(path))) : [(1, path)]
     ret = Vector{Pair{String,String}}(undef, length(dircontent))
     newgenomes::Vector{Union{Missing, String}} = fill(missing, length(dircontent))
     failed::Vector{Union{Missing, Pair{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}}} =
         fill(missing, length(dircontent))
     @threads for (i, f) in dircontent
-        name = last(splitdir(f))
         # println(name)
         result::String = try
             guess_topology(joinpath(path, f), options)
@@ -378,10 +377,10 @@ function guess_topologies(path, options)
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            failed[i] = (name => (e, catch_backtrace()))
+            failed[i] = (f => (e, catch_backtrace()))
             "FAILED"
         end
-        ret[i] = (name => result)
+        ret[i] = (f => result)
         if startswith(result, "UNKNOWN")
             newgenomes[i] = result[9:end]
         end
@@ -443,12 +442,11 @@ function topologies_dataset(path, save, autoclean, options::Options)
             truncate(io, pos+(pos>0)) # remove the last line if incomplete
             close(io)
             for l in eachline(_f)
-                isempty(l) && continue
-                _i = 1; while l[_i] != '/'; _i+=1; end
-                push!(alreadydone, joinpath(path, l[1:_i-1]))
+                name = join(split(l, '/')[1:end-2], '/')
+                push!(alreadydone, joinpath(path, name))
             end
         end
-        files = readdir(path; join=true, sort=true)
+        files = recursive_readdir(path)
         setdiff!(files, alreadydone)
     else
         resultdir = tmpexportname(dirname(path), "", "results", "")
@@ -456,11 +454,11 @@ function topologies_dataset(path, save, autoclean, options::Options)
         open(joinpath(resultdir, "data"), "w") do f
             println(f, path)
         end
-        files = readdir(path; join=true, sort=true)
+        files = recursive_readdir(path)
     end
 
-    @threads for f in files
-        file = splitdir(f)[2]
+    @threads for file in files
+        f = joinpath(path, file)
 
         genomes::Vector{Tuple{Vector{Int},String}} = try
             topological_genome(CrystalNetGroup(parse_chemfile(f, options)))
@@ -487,9 +485,10 @@ function topologies_dataset(path, save, autoclean, options::Options)
         basename(_f) == "data" && continue
         for l in eachline(_f)
             isempty(l) && continue
-            _i = 1; while l[_i] != '/'; _i+=1; end
-            _j = _i+1; while l[_j] != '/'; _j+=1; end
-            push!(ret, Pair(l[1:_j-1-(_i+1==_j)], l[_j+1:end]))
+            splits = split(l, '/')
+            _genome = pop!(splits)
+            isempty(splits[end]) && pop!(splits)
+            push!(ret, Pair(join(splits, '/'), _genome))
         end
     end
     result::Dict{String,String} = Dict(ret)
@@ -565,7 +564,7 @@ function guess_dataset(path, save, autoclean, options::Options)
                 push!(alreadydone, joinpath(path, l[1:_i-1]))
             end
         end
-        files = readdir(path; join=true, sort=true)
+        files = recursive_readdir(path)
         setdiff!(files, alreadydone)
     else
         resultdir = tmpexportname(dirname(path), "", "guessed", "")
@@ -573,11 +572,11 @@ function guess_dataset(path, save, autoclean, options::Options)
         open(joinpath(resultdir, "data"), "w") do f
             println(f, path)
         end
-        files = readdir(path; join=true, sort=true)
+        files = recursive_readdir(path)
     end
 
-    @threads for f in files
-        file = splitdir(f)[2]
+    @threads for file in files
+        f = joinpath(path, file)
 
         genome::String = try
             guess_topology(f, options)
@@ -597,9 +596,9 @@ function guess_dataset(path, save, autoclean, options::Options)
     for _f in readdir(resultdir; join=true)
         basename(_f) == "data" && continue
         for l in eachline(_f)
-            isempty(l) && continue
-            _i = 1; while l[_i] != '/'; _i+=1; end
-            push!(ret, Pair(l[1:_i-1], l[_i+1:end]))
+            splits = split(l, '/')
+            _genome = pop!(splits)
+            push!(ret, Pair(join(splits, '/'), _genome))
         end
     end
     result::Dict{String,String} = Dict(ret)

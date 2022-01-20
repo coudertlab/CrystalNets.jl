@@ -30,6 +30,30 @@ macro ifwarn(ex)
     end
 end
 
+
+function recursive_readdir!(stored, prefix, path)
+    for f in readdir(path; sort=false, join=false)
+        name = joinpath(prefix, f)
+        file = joinpath(path, f)
+        if isdir(file)
+            recursive_readdir!(stored, name, file)
+        else
+            push!(stored, name)
+        end
+    end
+    nothing
+end
+function recursive_readdir(path)
+    ret = String[]
+    while isdirpath(path)
+        path = path[1:end-1]
+    end
+    sizehint!(ret, length(readdir(path; sort=false, join=false)))
+    recursive_readdir!(ret, "", path)
+    return ret
+end
+
+
 function tmpexportname(path, pre, name, ext)
     if name isa Nothing
         return tempname(path; cleanup=false)*ext
