@@ -104,6 +104,14 @@ function popstring!(parsed, name)::String
     return only(x::Vector{String})
 end
 
+function popvecstring!(parsed, name)::Vector{String}
+    x = pop!(parsed, name)
+    if x isa String
+        return String[x]
+    end
+    return x
+end
+
 """
     CIF(file_path::AbstractString)
 
@@ -113,9 +121,10 @@ CIF(file::AbstractString) = CIF(parse_cif(file))
 function CIF(parsed::Dict{String, Union{Vector{String},String}})
     natoms = length(parsed["atom_site_label"])
     equivalentpositions = haskey(parsed, "symmetry_equiv_pos_as_xyz") ?
-        pop!(parsed, "symmetry_equiv_pos_as_xyz")::Vector{String} : 
+        popvecstring!(parsed, "symmetry_equiv_pos_as_xyz") : 
         haskey(parsed, "space_group_symop_operation_xyz") ?
-            pop!(parsed, "space_group_symop_operation_xyz")::Vector{String} : String[]
+            popvecstring!(parsed, "space_group_symop_operation_xyz") : String[]
+    initiallyemptyequivalentpositions = isempty(equivalentpositions)
     refid = find_refid(equivalentpositions)
     hall = find_hall_number(
             haskey(parsed, "space_group_name_Hall") ?
@@ -141,28 +150,34 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     haskey(parsed, "symmetry_equiv_pos_site_id") && pop!(parsed, "symmetry_equiv_pos_site_id")
     haskey(parsed, "symmetry_cell_setting") && pop!(parsed, "symmetry_cell_setting")
 
-    removed_identity = false
-    for i in eachindex(cell.equivalents)
-        eq = cell.equivalents[i]
-        if isone(eq.mat) && iszero(eq.ofs)
-            deleteat!(cell.equivalents, i)
-            removed_identity = true
-            break
+    if initiallyemptyequivalentpositions
+        @ifwarn @warn "Missing _symmetry_equiv_pos_as_xyz and _space_group_symop_operation_xyz fields, will rely on other symmetry indications."
+    else
+        removed_identity = false
+        for i in eachindex(cell.equivalents)
+            eq = cell.equivalents[i]
+            if isone(eq.mat) && iszero(eq.ofs)
+                deleteat!(cell.equivalents, i)
+                removed_identity = true
+                break
+            end
+        end
+        if !removed_identity
+            @ifwarn @warn "The _symmetry_equiv_pos_as_xyz field did not contain the \"$(join(refid, ", "))\" entry."
         end
     end
-    @toggleassert removed_identity
 
-    labels =  pop!(parsed, "atom_site_label")::Vector{String}
+    labels = popvecstring!(parsed, "atom_site_label")
     _symbols = haskey(parsed, "atom_site_type_symbol") ?
-                    pop!(parsed, "atom_site_type_symbol")::Vector{String} : copy(labels)
+                popvecstring!(parsed, "atom_site_type_symbol") : copy(labels)
     symbols = String[]
     @inbounds for x in _symbols
         i = findfirst(!isletter, x)
         push!(symbols, uppercase(x[1])*lowercase(isnothing(i) ? x[2:end] : x[2:i-1]))
     end
-    pos_x = pop!(parsed, "atom_site_fract_x")::Vector{String}
-    pos_y = pop!(parsed, "atom_site_fract_y")::Vector{String}
-    pos_z = pop!(parsed, "atom_site_fract_z")::Vector{String}
+    pos_x = popvecstring!(parsed, "atom_site_fract_x")
+    pos_y = popvecstring!(parsed, "atom_site_fract_y")
+    pos_z = popvecstring!(parsed, "atom_site_fract_z")
 
 
     types = Symbol[]
@@ -184,15 +199,15 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     bonds = fill(Inf32, natoms, natoms)
     if haskey(parsed, "geom_bond_atom_site_label_1") &&
        haskey(parsed, "geom_bond_atom_site_label_2")
-        bond_a = pop!(parsed, "geom_bond_atom_site_label_1")::Vector{String}
-        bond_b = pop!(parsed, "geom_bond_atom_site_label_2")::Vector{String}
+        bond_a = popvecstring!(parsed, "geom_bond_atom_site_label_1")
+        bond_b = popvecstring!(parsed, "geom_bond_atom_site_label_2")
         dists = (haskey(parsed, "geom_bond_distance") ? 
-                    parsestrip.(Float32, pop!(parsed, "geom_bond_distance")::Vector{String}) :
+                    parsestrip.(Float32, popvecstring!(parsed, "geom_bond_distance")) :
                     fill(zero(Float32), length(bond_a)))
         for i in 1:length(bond_a)
             x = get(correspondence, bond_a[i], 0)
             y = get(correspondence, bond_b[i], 0)
-            if (x|y) == 0
+            if x == 0 || y == 0
                 bonds = fill(Inf32, natoms, natoms)
                 missingatom = x == 0 ? bond_a[i] : bond_b[i]
                 @ifwarn @error "Atom $missingatom, used in a bond, has either zero or multiple placements in the CIF file. This invalidates all bonds from the file, which will thus be discarded."

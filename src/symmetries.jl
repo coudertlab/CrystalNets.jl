@@ -145,7 +145,7 @@ function get_symmetry_equivalents(hall)
     translations = Array{Cdouble}(undef, 3, 192)
     len = ccall((:spg_get_symmetry_from_database, libsymspg), Cint,
                 (Ptr{Cint}, Ptr{Cdouble}, Cint), rotations, translations, hall)
-    @toggleassert len < 192
+    @toggleassert 0 < len ≤ 192
     eqs = EquivalentPosition[]
     for i in 1:len
         rot = SMatrix{3,3,Rational{Int},9}(transpose(@inbounds rotations[:,:,i]))

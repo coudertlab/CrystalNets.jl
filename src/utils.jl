@@ -37,7 +37,7 @@ function recursive_readdir!(stored, prefix, path)
         file = joinpath(path, f)
         if isdir(file)
             recursive_readdir!(stored, name, file)
-        else
+        elseif !isempty(splitext(f)[2]) # otherwise, not a crystallographic file
             push!(stored, name)
         end
     end
@@ -427,11 +427,13 @@ function nextword(l, i)
             if instatus
                 if inmultiline && c == ';' && l[prevind(l,i)] == '\n'
                     return (start, prevind(l, i-1), i)
-                elseif inquote && c == quotesymb && i != n &&
-                        (isspace(l[nextind(l, i)]) || l[nextind(l, i)] == '#')
-                    return (start, prevind(l, i), i)
+                elseif inquote && c == quotesymb && i != n
+                    nextl = l[nextind(l, i)]
+                    if isspace(nextl) || nextl == '#'
+                        return (start, prevind(l, i), i)
+                    end
                 end
-            elseif c == '#'
+            elseif c == '#' && isspace(l[prevind(l,i)])
                 return (start, prevind(l, i), prevind(l, i))
             end
             i = nextind(l, i)

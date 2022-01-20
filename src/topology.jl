@@ -183,7 +183,7 @@ function minimal_volume_matrix(translations::Tuple{T,T}) where T
         i, den, _ = nz1[j]
         if den > denmax[i]
             imax[i] = j
-            denmax[j] = den
+            denmax[i] = den
         end
     end
     for j in 1:2

@@ -79,7 +79,7 @@ by order in the `sbus` list.
 
 The cluster kinds used by default are
 `CrystalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C, :halogen],
-                           [:P], [:nonmetal, :metalloid]], [3, 4])`.
+                           [:P], [:nonmetal, :metalloid], [:noble]], [3, 4])`.
 This means that all atoms that are either metals, actinides or lanthanides are assigned to
 class 1 and all halogens and C atoms in SBUs of class 2.
 Afterwards, each group of adjacent P atoms is assigned either class 1 if any of its
@@ -156,7 +156,7 @@ end
 Base.length(sbus::ClusterKinds) = sbus.len
 
 const default_sbus = ClusterKinds([
-    [:metal, :actinide, :lanthanide], [:C, :halogen], [:P], [:nonmetal, :metalloid],
+    [:metal, :actinide, :lanthanide], [:C, :halogen], [:P], [:nonmetal, :metalloid], [:noble]
 ], [3, 4])
 
 

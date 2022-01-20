@@ -433,13 +433,13 @@ function split_sbu!(sbus, graph, i_sbu, classes)
 end
 
 """
-reclassify!(classes, graph, sbus, new_class, types, classof, sbu)
+reclassify!sbus, newperiodicsbus, newclass, graph, types, classof, i_sbu)
 
-Reclassify the atoms of `sbu` according to the following algorithm:
-- Let's call "target atom" any atom of type `typ` where `(typ => deg) ∈ classof` and either
+Reclassify the atoms of `sbus.sbus[i_sbu])` according to the following algorithm:
+- Let's call "target atom" any atom of type `typ` where `classof[typ] == deg` and either
   `deg == 0` or `deg > 0` and the degree of the atom is `deg`.
 - Assign a new SBU for each target atom (one new per atom).
-- Look at the connected components of atoms in `sbu` which are not target atoms.
+- Look at the connected components of atoms in the SBU which are not target atoms.
   For each connected component that is finite (aperiodic) and has only one neighbor
   which is a target atom, put that component in the same SBU as the neighbor.
 """
@@ -456,6 +456,10 @@ function reclassify!(sbus, newperiodicsbus, newclass, graph, types, classof, i_s
             targets[v] = length(newsbus)
             push!(handled, v)
         end
+    end
+    if isempty(handled)
+        push!(newperiodicsbus, i_sbu)
+        return false
     end
     isempty(newsbus) && return false
     delete!(thissbu, keys(targets))

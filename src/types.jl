@@ -242,9 +242,9 @@ function Base.show(io::IO, cell::Cell)
     print(io, Cell, "($(cell.hall), ($a, $b, $c), ($α, $β, $γ))")
 end
 function Base.show(io::IO, ::MIME"text/plain", cell::Cell)
-    (a, b, c), (α, β, γ) = Float64.(cell_parameters(cell))
+    a, b, c, α, β, γ = Float64.(cell_parameters(cell))
     hall_symbol, crystal_system = HALL_SYMBOLS[cell.hall]
-    print(io, Cell, " with Hall symbol $hall_symbol ($crystal_system) and parameters")
+    print(io, Cell, " with Hall symbol $hall_symbol ($crystal_system) and parameters ")
     print(io, "a=$a, b=$b, c=$c, α=$α, β=$β, γ=$γ")
 end
 
