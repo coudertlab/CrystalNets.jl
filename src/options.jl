@@ -216,6 +216,7 @@ struct Options
     detect_paddlewheels::Bool
     detect_heterocycles::Bool
     cluster_kinds::ClusterKinds
+    unify_sbu_decomposition::Bool
     export_attributions::String
     export_clusters::String
 
@@ -235,7 +236,7 @@ struct Options
                        authorize_pruning=true,
                        ignore_atoms=Set{Symbol}(),
                        ignore_homoatomic_bonds=Set{Symbol}(),
-                       ignore_homometallic_bonds=clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal, ClusteringMode.MOFWiderOrganicSBUs),
+                       ignore_homometallic_bonds=nothing,
                        ignore_low_occupancy=false,
                        export_input=DOEXPORT[],
                        dryrun=nothing,
@@ -243,6 +244,7 @@ struct Options
                        detect_paddlewheels=true,
                        detect_heterocycles=true,
                        cluster_kinds=default_sbus,
+                       unify_sbu_decomposition=false,
                        export_attributions="",
                        export_clusters="",
                        skip_minimize=false,
@@ -257,6 +259,12 @@ struct Options
         _export_clusters = ifbooltempdirorempty(export_clusters)
         _export_net = ifbooltempdirorempty(export_net)
 
+        _ignore_homometallic_bonds = if ignore_homometallic_bonds === nothing
+            clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal, ClusteringMode.MOFWiderOrganicSBUs)
+        else
+            ignore_homometallic_bonds
+        end
+
         new(
             name,
             bonding_mode,
@@ -265,7 +273,7 @@ struct Options
             authorize_pruning,
             Set{Symbol}(ignore_atoms),
             Set{Symbol}(ignore_homoatomic_bonds),
-            ignore_homometallic_bonds,
+            _ignore_homometallic_bonds,
             ignore_low_occupancy,
             _export_input,
             dryrun,
@@ -273,6 +281,7 @@ struct Options
             detect_paddlewheels,
             detect_heterocycles,
             cluster_kinds,
+            unify_sbu_decomposition,
             _export_attributions,
             _export_clusters,
             skip_minimize,
@@ -292,6 +301,8 @@ function Options(options::Options; kwargs...)
         val = if isconcretetype(T) && !(T <: Enum)
             if T <: Set
                 union(base[kwarg], T(val))
+            elseif T === String
+                val::Union{String,Bool}
             else
                 T(val)
             end

@@ -442,8 +442,7 @@ function topologies_dataset(path, save, autoclean, options::Options)
             truncate(io, pos+(pos>0)) # remove the last line if incomplete
             close(io)
             for l in eachline(_f)
-                name = join(split(l, '/')[1:end-2], '/')
-                push!(alreadydone, joinpath(path, name))
+                push!(alreadydone, join(split(l, '/')[1:end-2], '/'))
             end
         end
         files = recursive_readdir(path)
@@ -456,6 +455,8 @@ function topologies_dataset(path, save, autoclean, options::Options)
         end
         files = recursive_readdir(path)
     end
+    resultdir::String
+    files::Vector{String}
 
     @threads for file in files
         f = joinpath(path, file)
@@ -560,8 +561,7 @@ function guess_dataset(path, save, autoclean, options::Options)
             close(io)
             for l in eachline(_f)
                 isempty(l) && continue
-                _i = 1; while l[_i] != '/'; _i+=1; end
-                push!(alreadydone, joinpath(path, l[1:_i-1]))
+                push!(alreadydone, join(split(l, '/')[1:end-1], '/'))
             end
         end
         files = recursive_readdir(path)
@@ -574,9 +574,16 @@ function guess_dataset(path, save, autoclean, options::Options)
         end
         files = recursive_readdir(path)
     end
+    resultdir::String
+    files::Vector{String}
 
     @threads for file in files
         f = joinpath(path, file)
+
+        open(joinpath(resultdir, string(threadid())), "a") do results
+            print(results, file, '/')
+            flush(results)
+        end
 
         genome::String = try
             guess_topology(f, options)
@@ -588,7 +595,7 @@ function guess_dataset(path, save, autoclean, options::Options)
             "FAILED with "*escape_string(string(e))
         end
         open(joinpath(resultdir, string(threadid())), "a") do results
-            println(results, file, '/', genome)
+            println(results, genome)
         end
     end
 

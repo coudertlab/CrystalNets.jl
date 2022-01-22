@@ -433,7 +433,7 @@ function split_sbu!(sbus, graph, i_sbu, classes)
 end
 
 """
-reclassify!sbus, newperiodicsbus, newclass, graph, types, classof, i_sbu)
+    reclassify!(sbus, newperiodicsbus, newclass, graph, types, classof, i_sbu)
 
 Reclassify the atoms of `sbus.sbus[i_sbu])` according to the following algorithm:
 - Let's call "target atom" any atom of type `typ` where `classof[typ] == deg` and either
@@ -923,7 +923,6 @@ function find_sbus(crystal, kinds=default_sbus)
 
     new_class::Int = length(kinds)
     while !isempty(periodicsbus)
-        incr_newclass = false
         mergeto = Dict{Int,Tuple{SVector{3,Int},Int}}() # List of atoms to merge to the neighboring SBU
         compositions = [[crystal.types[x.v] for x in sbu] for sbu in sbus.sbus]
         unique_compositions = [unique!(sort(x)) for x in compositions]
@@ -944,7 +943,7 @@ function find_sbus(crystal, kinds=default_sbus)
                 if _m != _M && _M != 1
                     for (x, num) in zip(sbu, numneighbors)
                         num == _M || continue
-                        incr_newclass |= add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class+1, x.v)
+                        new_class += add_to_merge_or_newclass!(classes, mergeto, crystal.graph, sbus, periodicsbus, new_class+1, x.v)
                     end
                 else # always the same number of neighbors in different SBUs
                     if length(sbu) == 1
@@ -965,7 +964,7 @@ function find_sbus(crystal, kinds=default_sbus)
                     push!(sbus.sbus[attr], PeriodicVertex(v, ofs))
                     sbus.offsets[v] = ofs
                 end
-                new_class += incr_newclass
+                empty!(mergeto)
 
                 union!(newperiodicsbus, split_sbu!(sbus, crystal.graph, i_sbu, classes))
 
@@ -1029,7 +1028,7 @@ function find_sbus(crystal, kinds=default_sbus)
                         end
                         Dict{Symbol,Int}(__classof)
                     end
-                    #if crystal.options.unify_sbu_decomposition
+                    if crystal.options.unify_sbu_decomposition
                         toadd = Int[]
                         for (i, compo) in enumerate(unique_compositions)
                             if compo == uniquecompo
@@ -1038,7 +1037,7 @@ function find_sbus(crystal, kinds=default_sbus)
                             end
                         end
                         append!(list_periodicsbus, setdiff(toadd, periodicsbus))
-                    #end
+                    end
                     # @show _classof
                     _classof
                 end

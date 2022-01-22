@@ -460,27 +460,12 @@ function expand_symmetry(c::CIF)
     return CIF(cif.cifinfo, deepcopy(cif.cell), newids, copy(cif.types), reduce(hcat, newpos), bonds)
 end
 
-"""
-    edges_from_bonds(bonds, mat, pos)
-
-Given a bond list `bonds` containing triplets `(a, b, dist)` where atoms `a` and `b` are
-bonded if their distance is lower than `dist`, the 3×3 matrix of the cell `mat` and the
-Vector{SVector{3,Float64}} `pos` whose elements are the fractional positions of the
-atoms, extract the list of PeriodicEdge3D corresponding to the bonds.
-Since the adjacency matrix wraps bonds across the boundaries of the cell, the edges
-are extracted so that the closest representatives are chosen to form bonds.
-"""
-function edges_from_bonds(bonds, mat, pos)
+function _edges_from_bonds(adjacency, mat, pos)
     n = length(pos)
-    adjacency = zeros(n, n)
-    for (a, b, dist) in bonds
-        adjacency[a, b] = dist
-        adjacency[b, a] = dist
-    end
     edges = PeriodicEdge3D[]
     ref_dst = norm(mat*[1, 1, 1])
     for i in 1:n, k in (i+1):n
-        maxdist = adjacency[k,i]
+        maxdist = adjacency isa Dict ? get(adjacency, (i,k), 0f0) : adjacency[i,k]
         iszero(maxdist) && continue
         offset::Vector{SVector{3, Int}} = []
         old_dst = ref_dst
@@ -504,6 +489,30 @@ function edges_from_bonds(bonds, mat, pos)
         end
     end
     return edges
+end
+
+"""
+    edges_from_bonds(bonds, mat, pos)
+
+Given a bond list `bonds` containing triplets `(a, b, dist)` where atoms `a` and `b` are
+bonded if their distance is lower than `dist`, the 3×3 matrix of the cell `mat` and the
+Vector{SVector{3,Float64}} `pos` whose elements are the fractional positions of the
+atoms, extract the list of PeriodicEdge3D corresponding to the bonds.
+Since the adjacency matrix wraps bonds across the boundaries of the cell, the edges
+are extracted so that the closest representatives are chosen to form bonds.
+"""
+function edges_from_bonds(bonds, mat, pos)
+    n = length(pos)
+    if n < 2000
+        adjacency = zeros(n, n)
+        for (a, b, dist) in bonds
+            adjacency[a, b] = dist
+            adjacency[b, a] = dist
+        end
+        return _edges_from_bonds(adjacency, mat, pos)
+    end
+    adjdict = Dict{Tuple{Int,Int},Float32}([minmax(a,b) => dist for (a,b,dist) in bonds if !iszero(dist)])
+    return _edges_from_bonds(adjdict, mat, pos)
 end
 
 ## Clusters
