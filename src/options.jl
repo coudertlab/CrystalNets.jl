@@ -33,6 +33,8 @@ Selection mode for the clustering of vertices. The choices are:
 - `MOF`: discard the input residues and consider the input as a MOF. Identify organic and
   inorganic clusters using heuristics based on the atom types.
 - `Cluster`: similar to MOF but metallic atoms are not given a wider radius.
+- `Zeolite`: Same as `EachVertex` but attempt to enforce that each O atom has exactly two
+  neighbours and that they are not O atoms.
 - `Guess`: try to identify the clusters as in `Cluster`. If it fails, fall back to `Auto`.
 """
 module ClusteringMode
@@ -43,11 +45,12 @@ module ClusteringMode
         MOFWiderOrganicSBUs
         MOFMetalloidIsMetal
         Cluster
+        Zeolite
         Guess
         Auto
     end
     """See help for [`ClusteringMode`](@ref)"""
-    Input, EachVertex, MOF, Guess, Auto, Cluster
+    Input, EachVertex, MOF, Cluster, Zeolite, Guess, Auto
     """Internal clustering modes, similar to MOF but with different heuristics"""
     MOFWiderOrganicSBUs, MOFMetalloidIsMetal
 end
@@ -203,6 +206,7 @@ struct Options
     cutoff_coeff::Float64
     clustering_mode::ClusteringMode._ClusteringMode
     authorize_pruning::Bool
+    wider_metallic_bonds::Bool
     ignore_atoms::Set{Symbol}
     ignore_homoatomic_bonds::Set{Symbol}
     ignore_homometallic_bonds::Bool
@@ -213,9 +217,10 @@ struct Options
 
     # Clustering options
     bond_adjacent_sbus::Bool
+    cluster_kinds::ClusterKinds
     detect_paddlewheels::Bool
     detect_heterocycles::Bool
-    cluster_kinds::ClusterKinds
+    split_O_vertex::Bool
     unify_sbu_decomposition::Bool
     export_attributions::String
     export_clusters::String
@@ -233,6 +238,7 @@ struct Options
                        bonding_mode=BondingMode.Auto,
                        clustering_mode=ClusteringMode.Auto,
                        cutoff_coeff=0.75,
+                       wider_metallic_bonds=nothing,
                        authorize_pruning=true,
                        ignore_atoms=Set{Symbol}(),
                        ignore_homoatomic_bonds=Set{Symbol}(),
@@ -241,9 +247,10 @@ struct Options
                        export_input=DOEXPORT[],
                        dryrun=nothing,
                        bond_adjacent_sbus=false,
+                       cluster_kinds=default_sbus,
                        detect_paddlewheels=true,
                        detect_heterocycles=true,
-                       cluster_kinds=default_sbus,
+                       split_O_vertex=true,
                        unify_sbu_decomposition=false,
                        export_attributions="",
                        export_clusters="",
@@ -260,9 +267,17 @@ struct Options
         _export_net = ifbooltempdirorempty(export_net)
 
         _ignore_homometallic_bonds = if ignore_homometallic_bonds === nothing
-            clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal, ClusteringMode.MOFWiderOrganicSBUs)
+            clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal,
+                               ClusteringMode.MOFWiderOrganicSBUs)
         else
             ignore_homometallic_bonds
+        end
+
+        _wider_metallic_bonds = if wider_metallic_bonds === nothing
+            clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal,
+                               ClusteringMode.MOFWiderOrganicSBUs, ClusteringMode.Zeolite)
+        else
+            wider_metallic_bonds
         end
 
         new(
@@ -270,6 +285,7 @@ struct Options
             bonding_mode,
             cutoff_coeff,
             clustering_mode,
+            _wider_metallic_bonds,
             authorize_pruning,
             Set{Symbol}(ignore_atoms),
             Set{Symbol}(ignore_homoatomic_bonds),
@@ -278,9 +294,10 @@ struct Options
             _export_input,
             dryrun,
             bond_adjacent_sbus,
+            cluster_kinds,
             detect_paddlewheels,
             detect_heterocycles,
-            cluster_kinds,
+            split_O_vertex,
             unify_sbu_decomposition,
             _export_attributions,
             _export_clusters,

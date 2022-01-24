@@ -298,6 +298,8 @@ function main(args)
                     ClusteringMode.EachVertex
                 elseif cluster_mode == "mof"
                     ClusteringMode.MOF
+                elseif cluster_mode == "zeolite"
+                    ClusteringMode.Zeolite
                 elseif cluster_mode == "cluster"
                     ClusteringMode.Cluster
                 elseif cluster_mode == "guess"

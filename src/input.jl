@@ -491,7 +491,11 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, passO, passCN, mat,
     # First pass over H, since those are likely bonded to their closest neighbor
     for i in passO
         t = :O
-        @reduce_valence dofix 0 2 2
+        if options.clustering_mode == ClusteringMode.Zeolite
+            @reduce_valence dofix 0 2
+        else
+            @reduce_valence dofix 0 2 2
+        end
     end
     for i in passCN
         t = types[i]

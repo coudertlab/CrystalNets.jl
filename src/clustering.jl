@@ -1057,9 +1057,7 @@ end
 
 function _split_this_sbu!(toremove, graph, k, types, stopiftype)
     for x in neighbors(graph, k)
-        if types[x.v] === stopiftype
-            return nothing
-        end
+        types[x.v] === stopiftype && return nothing
     end
     push!(toremove, k)
     neighs = reverse(neighbors(graph, k))
@@ -1072,7 +1070,7 @@ function _split_this_sbu!(toremove, graph, k, types, stopiftype)
     end
 end
 
-function split_special_sbu!(graph, sbus, types)
+function split_special_sbu!(graph, sbus, types, splitO)
     toremove = Int[]
     uniqueCs = Int[]
     for (k, sbu) in enumerate(sbus)
@@ -1087,7 +1085,7 @@ function split_special_sbu!(graph, sbus, types)
             end
         end
         uniquetypes === Symbol("") && continue
-        if uniquetypes === :O
+        if uniquetypes === :O && splitO
             _split_this_sbu!(toremove, graph, k, types, uniquetypes)
         elseif uniquetypes == :C && length(sbu) == 1
             push!(uniqueCs, k)
@@ -1117,6 +1115,19 @@ function split_special_sbu!(graph, sbus, types)
     return rem_vertices!(graph, toremove)
 end
 
+function split_O_vertices(c)
+    toremove = Int[]
+    graph = deepcopy(c.graph)
+    for (k, t) in enumerate(c.types)
+        (t === :O && degree(graph, k) > 2) || continue
+        _split_this_sbu!(toremove, graph, k, c.types, :O)
+    end
+    tokeep = collect(1:length(c.types))
+    deleteat!(tokeep, toremove)
+    pos = c.pos[tokeep]
+    return Crystal{Nothing}(c.cell, c.types[tokeep], pos, graph, Options(c.options; _pos=pos))
+end
+
 
 struct InvalidSBU <: ClusteringError
     msg::String
@@ -1131,7 +1142,10 @@ transformed into a new vertex.
 function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mode, ::Val{_attempt}=Val(1)) where _attempt
     crystal = trim_monovalent(c)
     clusters, clustering = find_clusters(crystal, mode)
-    if clustering == ClusteringMode.EachVertex
+    if clustering == ClusteringMode.EachVertex || clustering == ClusteringMode.Zeolite
+        if crystal.options.split_O_vertex
+            return split_O_vertices(crystal)
+        end
         return Crystal{Nothing}(crystal; _pos=crystal.pos)
     end
     edgs = PeriodicEdge3D[]
@@ -1182,7 +1196,7 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
     if ne(graph) == 0
         return Crystal{Nothing}(crystal.cell, Symbol[], SVector{3,Float64}[], graph, Options(crystal.options; _pos=SVector{3,Float64}[]))
     end
-    sbus = clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.types)]
+    sbus = clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.types, crystal.options.split_O_vertex)]
     n = length(sbus)
     if !isempty(crystal.options.export_attributions)
         path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")

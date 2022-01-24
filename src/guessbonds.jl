@@ -41,8 +41,7 @@ function guess_bonds(pos, types, mat, options)
     n = length(pos)
     bonds = [Tuple{Int,Float32}[] for _ in 1:n]
     typs = [atomic_numbers[t] for t in types]
-    mof = options.clustering_mode == ClusteringMode.MOF
-    radii = [vdwradii[t]*(1 + mof*(ismetal[t]|ismetalloid[t])*0.5) for t in typs]
+    radii = [vdwradii[t]*(1 + options.wider_metallic_bonds*(ismetal[t]|ismetalloid[t])*0.5) for t in typs]
     cutoff = 3*(options.cutoff_coeff^3.1) * max(maximum(radii), 0.833)
     cutoff2 = 13*options.cutoff_coeff/15
     for i in 1:n
@@ -52,11 +51,14 @@ function guess_bonds(pos, types, mat, options)
         #ignoreifmetallic = typi === :C
         #ignoreifC = ismetal[atomic_numbers[typi]]
         skiphomoatomic = typi ∈ options.ignore_homoatomic_bonds ||
-                         (options.ignore_homometallic_bonds &&
-                          ismetal[atomic_numbers[typi]])
+                         (options.ignore_homometallic_bonds && ismetal[atomic_numbers[typi]])
+        acceptonlyO = options.clustering_mode === ClusteringMode.Zeolite && typi !== :O
+        acceptallbutO = options.clustering_mode === ClusteringMode.Zeolite && typi === :O
         for j in (i+1):n
-            #typj = types[j]
-            skiphomoatomic && types[j] === typi && continue
+            typj = types[j]
+            skiphomoatomic && typj === typi && continue
+            acceptonlyO && typj !== :O && continue
+            acceptallbutO && typj === :O && continue
             #(ignoreifC & (typj === :C)) && continue
             #ignoreifmetallic && ismetal[atomic_numbers[typj]] && continue
             radius_j = radii[j]

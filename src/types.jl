@@ -1080,8 +1080,8 @@ end
 
 find_clusters(c::Crystal) = find_clusters(c, c.options.clustering_mode)
 function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _ClusteringMode} where T
-    if mode == ClusteringMode.EachVertex
-        return Clusters(length(c.types)), ClusteringMode.EachVertex
+    if mode == ClusteringMode.EachVertex || mode == ClusteringMode.Zeolite
+        return Clusters(length(c.types)), mode
     elseif mode == ClusteringMode.Auto
         if T === Clusters
             return c.clusters, ClusteringMode.Auto
