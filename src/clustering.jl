@@ -1055,7 +1055,12 @@ function find_sbus(crystal, kinds=default_sbus)
     return sbus
 end
 
-function _split_this_sbu!(toremove, graph, k)
+function _split_this_sbu!(toremove, graph, k, types, stopiftype)
+    for x in neighbors(graph, k)
+        if types[x.v] === stopiftype
+            return nothing
+        end
+    end
     push!(toremove, k)
     neighs = reverse(neighbors(graph, k))
     n = length(neighs)
@@ -1083,7 +1088,7 @@ function split_special_sbu!(graph, sbus, types)
         end
         uniquetypes === Symbol("") && continue
         if uniquetypes === :O
-            _split_this_sbu!(toremove, graph, k)
+            _split_this_sbu!(toremove, graph, k, types, uniquetypes)
         elseif uniquetypes == :C && length(sbu) == 1
             push!(uniqueCs, k)
         end
@@ -1106,7 +1111,7 @@ function split_special_sbu!(graph, sbus, types)
         if all(otherwiseconnected)
             push!(toremove, k)
         else
-            _split_this_sbu!(toremove, graph, k)
+            _split_this_sbu!(toremove, graph, k, types, types[only(sbus[k]).v])
         end
     end
     return rem_vertices!(graph, toremove)
