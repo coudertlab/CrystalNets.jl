@@ -40,15 +40,15 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
                 sty = sty[1:13]*"etc" # otherwise VMD fails to load the .vtf
             end
             name = colorname ? get!(encounteredtypes, ty) do
-                string(numencounteredtypes+=1)
-            end : string(i)
+                string(" name ", numencounteredtypes+=1,)
+            end : n ≥ 32768 ? "" : string(" name ", i)
             str_ty = string(ty)
             atomnum = isempty(str_ty) ? i :
                       get(atomic_numbers, length(str_ty) ≥ 2 && str_ty[2] > 'Z' ? 
                             Symbol(str_ty[1:2]) : Symbol(str_ty[1]), i)
             push!(atomnums, atomnum)
             resid = colorname ? i : 0
-            println(f, "atom $(i-1) type $sty name $name resid $resid atomicnumber $atomnum")
+            println(f, "atom $(i-1) type $sty$name resid $resid atomicnumber $atomnum")
         end
         j = n + 1
         for _ in 1:repeatedges
@@ -72,10 +72,11 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
             if length(sty) > 16
                 sty = sty[1:13]*"etc"
             end
-            name = colorname ? encounteredtypes[ty] : string(v)
+            name = colorname ? string(" name ", encounteredtypes[ty]) :
+                    n ≥ 32768 ? "" : string(" name ", v)
             atomnum = atomnums[v]
             resid = colorname ? i : PeriodicGraphs.hash_position(ofs)
-            println(f, "atom $(i-1) type $sty name $name resid $resid atomicnumber $atomnum")
+            println(f, "atom $(i-1) type $sty$name resid $resid atomicnumber $atomnum")
         end
         println(f)
 
