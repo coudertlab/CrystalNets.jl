@@ -196,7 +196,6 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     invids = sortperm(types)
     types = types[invids]
     ids = invperm(invids)
-    bonds = fill(Inf32, natoms, natoms)
     if haskey(parsed, "geom_bond_atom_site_label_1") &&
        haskey(parsed, "geom_bond_atom_site_label_2")
         bond_a = popvecstring!(parsed, "geom_bond_atom_site_label_1")
@@ -204,20 +203,30 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
         dists = (haskey(parsed, "geom_bond_distance") ? 
                     parsestrip.(Float32, popvecstring!(parsed, "geom_bond_distance")) :
                     fill(zero(Float32), length(bond_a)))
+        bonds = [Tuple{Int,Float32}[] for _ in 1:natoms]
         for i in 1:length(bond_a)
             x = get(correspondence, bond_a[i], 0)
             y = get(correspondence, bond_b[i], 0)
             if x == 0 || y == 0
-                bonds = fill(Inf32, natoms, natoms)
+                empty!(bonds)
                 missingatom = x == 0 ? bond_a[i] : bond_b[i]
                 @ifwarn @error "Atom $missingatom, used in a bond, has either zero or multiple placements in the CIF file. This invalidates all bonds from the file, which will thus be discarded."
                 break
             end
-            bonds[x,y] = bonds[y,x] = 1.001*dists[i] # to avoid rounding errors
+            d = 1.001*dists[i] # to avoid rounding errors
+            if d ≤ 0f0 || isinf(d) || isnan(d)
+                @ifwarn @error "Invalid bond distance of $d between atoms $(bond_a[i]) and $(bond_b[i])"
+                continue
+            end
+            push!(bonds[x], (y, d))
+            push!(bonds[y], (x, d))
         end
+        foreach(sortprune_bondlist!, bonds)
+    else
+        bonds = Vector{Tuple{Int,Float32}}[]
     end
 
-    return CIF(parsed, cell, ids, types, pos, bonds)
+    return CIF(parsed, cell, ids, types, pos, bonds::Vector{Vector{Tuple{Int,Float32}}})
 end
 
 
@@ -783,7 +792,7 @@ function parse_as_cif(cif::CIF, options, name)
         push!(pos, cif.pos[:,i])
         #push!(pos, cif.cell.mat * cif.pos[:,i])
     end
-    if all(==(Inf32), cif.bonds) || options.bonding_mode == BondingMode.Guess
+    if isempty(cif.bonds) || options.bonding_mode == BondingMode.Guess
         if options.bonding_mode == BondingMode.Input
             throw(ArgumentError("Cannot use input bonds since there are none. Use another option for --bonds-detect or provide bonds in the CIF file."))
         end
@@ -791,7 +800,7 @@ function parse_as_cif(cif::CIF, options, name)
 
         bonds = guess_bonds(pos, types, Float64.(cif.cell.mat), options)
     else
-        bonds = Tuple{Int,Int,Float32}[]
+        bonds = [Tuple{Int,Float32}[] for _ in 1:n]
         _i = 1 # correction to i based on ignored atoms
         current_ignored_i = get(ignored, 1, 0)
         for i in 1:n
@@ -808,10 +817,12 @@ function parse_as_cif(cif::CIF, options, name)
                     current_ignored_j = get(ignored, _j, 0)
                     continue
                 end
-                dist = cif.bonds[i,j]
-                if dist < Inf32
-                    push!(bonds, (i - _i + 1, j - _j + 1, dist))
-                end
+                dist = get_bondlist(cif.bonds[i], j)
+                dist == Inf32 && continue
+                __i = i - _i + 1
+                __j = j - _j + 1
+                push!(bonds[__i], (__j, dist))
+                push!(bonds[__j], (__i, dist))
             end
         end
     end
@@ -856,11 +867,16 @@ function parse_as_chemfile(frame, options, name)
     if Chemfiles.bonds_count(topology) == 0
         guessed_bonds = true
         bonds = guess_bonds(pos, types, Float64.(cell.mat), options)
-        for (u, v, _) in bonds
-            Chemfiles.add_bond!(frame, u-1, v-1)
+        for (u, bondu) in enumerate(bonds), (v, _) in bondu
+            v > u && Chemfiles.add_bond!(frame, u-1, v-1)
         end
     else
-        bonds = [(a+1, b+1, -1f0) for (a,b) in eachcol(Chemfiles.bonds(topology))]
+        bonds = [Tuple{Int,Float32}[] for _ in 1:n]
+        for (a, b) in eachcol(Chemfiles.bonds(topology))
+            push!(bonds[a+1], (b+1, -1f0))
+            push!(bonds[b+1], (a+1, -1f0))
+        end
+        @toggleassert all(issorted, bonds)
         if !(options.dryrun isa Nothing) && options.bonding_mode == BondingMode.Auto
             options.dryrun[:try_Input_bonds] = nothing
         end

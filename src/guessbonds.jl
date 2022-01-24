@@ -38,13 +38,13 @@ function guess_bonds(pos, types, mat, options)
         @warn "Guessing bonds with custom algorithm (from Chemfiles and VMD). This may take a while for big structures and may be inexact."
         @info "To avoid guessing bonds, use a file format that contains the bonds."
     end
-    bonds = Tuple{Int,Int,Float64}[]
+    n = length(pos)
+    bonds = [Tuple{Int,Float32}[] for _ in 1:n]
     typs = [atomic_numbers[t] for t in types]
     mof = options.clustering_mode == ClusteringMode.MOF
     radii = [vdwradii[t]*(1 + mof*(ismetal[t]|ismetalloid[t])*0.5) for t in typs]
     cutoff = 3*(options.cutoff_coeff^3.1) * max(maximum(radii), 0.833)
     cutoff2 = 13*options.cutoff_coeff/15
-    n = length(pos)
     for i in 1:n
         radius_i = radii[i]
         posi = pos[i]
@@ -64,7 +64,8 @@ function guess_bonds(pos, types, mat, options)
             d1 = periodic_distance(posi, posj, mat)
             maxdist = cutoff2*(radius_i + radius_j)
             if d1 < cutoff && 0.5 < d1 < maxdist
-                push!(bonds, (i, j, maxdist))
+                push!(bonds[i], (j, maxdist))
+                push!(bonds[j], (i, maxdist))
             end
         end
     end

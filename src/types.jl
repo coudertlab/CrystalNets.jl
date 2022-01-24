@@ -140,7 +140,7 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                     i += 1
                 else
                     k !== Tokenize.Tokens.ENDMARKER && error("Unknown end of line marker for symmetry equivalent {$s}")
-                    i != 3 && error("Input string {$s} is not a valid symmetry equivalent")
+                    i != 3 && error("Input string \"$s\" is not a valid symmetry equivalent")
                 end
             end
         end
@@ -261,9 +261,79 @@ struct CIF
     ids::Vector{Int}
     types::Vector{Symbol}
     pos::Matrix{Float64}
-    bonds::Matrix{Float32}
+    bonds::Vector{Vector{Tuple{Int,Float32}}}
 end
 
+function keepinbonds(bonds, keep)
+    @toggleassert issorted(keep)
+    (isempty(keep) || isempty(bonds)) && return Vector{Tuple{Int,Float32}}[]
+    n = length(bonds)
+    idxs =  Vector{Int}(undef, n)
+    idx = 0
+    keepidx = keep[1]
+    for i in 1:n
+        if i == keepidx
+            idx += 1
+            keepidx = idx == length(keep) ? 0 : keep[idx + 1]
+        end
+        idxs[i] = idx
+    end
+    ret = [Tuple{Int,Float32}[] for _ in 1:length(keep)]
+    for _i in 1:length(keep)
+        vec = ret[_i]
+        for (j, d) in bonds[keep[_i]]
+            idx = idxs[j]
+            if keep[idx] == j
+                push!(vec, (idx, d))
+            end
+        end
+    end
+    return ret
+end
+
+function add_to_bondlist!(bondlist, x, d)
+    addedflag = false
+    for (i, (j, _)) in enumerate(bondlist)
+        if j ≥ x
+            if j == x
+                bondlist[i] = (x, d)
+            else
+                splice!(bondlist, i:i-1, (x, d))
+            end
+            addedflag = true
+            break
+        end
+    end
+    addedflag || push!(bondlist, (x, d))
+    nothing
+end
+
+function get_bondlist(bondlist, x)
+    for (j, d) in bondlist
+        if j ≥ x
+            if j == x
+                return d
+            end
+            return Inf32
+        end
+    end
+    return Inf32
+end
+
+function sortprune_bondlist!(bondlist)
+    sort!(bondlist)
+    toremove = Int[]
+    k = 0
+    for (i, (j, _)) in enumerate(bondlist)
+        if j == k
+            push!(toremove, i)
+        else
+            k = j
+        end
+    end
+    isempty(toremove) || deleteat!(bondlist, toremove)
+    nothing
+end
 
 function keep_atoms(cif::CIF, kept)
     kept_ids = sort!([cif.ids[i] for i in kept])
@@ -273,7 +343,7 @@ function keep_atoms(cif::CIF, kept)
         idmap[x] = i
     end
     return CIF(cif.cifinfo, cif.cell, [idmap[cif.ids[i]] for i in kept],
-               cif.types[kept_ids], cif.pos[:, kept], cif.bonds[kept, kept])
+               cif.types[kept_ids], cif.pos[:, kept], keepinbonds(cif.bonds, kept))
 end
 
 
@@ -303,7 +373,7 @@ function remove_partial_occupancy(cif::CIF)
     points::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     perm = sortperm(points)
     n = length(perm)
-    minimal_length = cbrt(norm(cif.cell.mat))*4e-4 # TODO: find an appropriate value
+    # minimal_length = cbrt(norm(cif.cell.mat))*4e-4 # TODO: find an appropriate value
     last_triplet = points[perm[1]] .+ (1,1,1)
     last_position = 0
     toalias = Vector{Int}[]
@@ -331,27 +401,39 @@ function remove_partial_occupancy(cif::CIF)
     occupancies = parsestrip.(Float64, get(cif.cifinfo, "atom_site_occupancy", 
                                       ["1.0" for _ in 1:length(cif.types)])::Vector{String})
     toremove = Int[]
-    bonds = copy(cif.bonds)
+    bonds = [copy(b) for b in cif.bonds]
     for alias in toalias
         m = length(alias)
         occup = @view occupancies[alias]
         max_occupancy = maximum(occup)
         with_max_occupancy = [alias[i] for i in 1:m if occup[i] == max_occupancy]
         representative = minimum(with_max_occupancy)
-        addtoremove = Int[]
+        append!(toremove, a for a in alias if a != representative)
+
+        isempty(bonds) && continue
+        allbonds = bonds[representative]
         for a in alias
-            a == representative && continue
-            push!(addtoremove, a)
-            bonds[representative,:] .= min.((@view bonds[a,:]), @view bonds[representative,:])
-            bonds[:,representative] .= min.((@view bonds[:,a]), @view bonds[:,representative])
+            append!(allbonds, bonds[a])
         end
-        bonds[representative,representative] = Inf32
-        append!(toremove, addtoremove)
+        sort!(allbonds)
+
+        k = 0
+        newbonds = Tuple{Int,Float32}[]
+        bonds[representative] = newbonds
+        for bond in allbonds
+            bond[1] == k && continue
+            k = bond[1]
+            k == representative && continue
+            push!(newbonds, bond)
+            bondk = bonds[k]
+            add_to_bondlist!(bondk, representative, bond[2])
+        end
     end
+
     sort!(toremove)
     ids = deleteat!(copy(cif.ids), toremove)
     tokeep = deleteat!(collect(1:n), toremove)
-    bonds = bonds[tokeep, tokeep]
+    bonds = keepinbonds(bonds, tokeep)
     pos = cif.pos[:,tokeep]
     @toggleassert allunique(collect(eachcol(pos)))
     return CIF(cif.cifinfo, cif.cell, ids, cif.types, pos, bonds)
@@ -381,7 +463,7 @@ function prune_collisions(cif::CIF)
     unique!(sort!(toremove))
     ids = deleteat!(copy(cif.ids), toremove)
     tokeep = deleteat!(collect(1:n), toremove)
-    bonds = cif.bonds[tokeep, tokeep]
+    bonds = keepinbonds(cif.bonds, tokeep)
     pos = cif.pos[:,tokeep]
     return true, CIF(cif.cifinfo, cif.cell, ids, cif.types, pos, bonds)
 end
@@ -396,22 +478,40 @@ function expand_symmetry(c::CIF)
     if isempty(cif.cell.equivalents)
         return CIF(cif.cifinfo, deepcopy(cif.cell), cif.ids, cif.types, cif.pos, cif.bonds)
     end
+
+    if isempty(cif.bonds)
+        oldbonds = Vector{Tuple{Int,Float32}}[]
+        knownbondlengths = true
+        bonds = Vector{Tuple{Int,Float32}}[]
+    else
+        maxid = maximum(cif.ids)
+        @toggleassert minimum(cif.ids) ≥ 1
+        rev_id = [Int[] for _ in 1:maxid]
+        for (i, idi) in enumerate(cif.ids)
+            push!(rev_id[idi], i)
+        end
+        oldbonds = [Tuple{Int,Float32}[] for _ in 1:maxid]
+        for (idi, revidi) in enumerate(rev_id)
+            bondsidi = oldbonds[idi]
+            for i in revidi
+                for (j, d) in cif.bonds[i]
+                    push!(bondsidi, (cif.ids[j], d))
+                end
+            end
+            sortprune_bondlist!(bondsidi)
+        end
+        knownbondlengths = !any(any(x -> iszero(x[2]), b) for b in oldbonds)
+        bonds = [Tuple{Int,Float32}[] for _ in 1:length(cif.ids)]
+
+        if !knownbondlengths
+            # This means that the bonds are determined as symmetric images of bonds of the
+            # asymetric unit, which may or may not be the convention used in the CIF files.
+            # Most CIF files having geom_bond_atom_site_labels should have geom_bond_distance anyway.
+            @ifwarn @warn "Expanding CIF symmetry without knowing the bond lengths: the resulting bonds might be erroneous"
+        end
+    end
+
     n = length(cif.ids)
-    _oldbonds = Dict{Tuple{Int64, Int64}, Float32}((cif.ids[i],cif.ids[j]) => cif.bonds[i,j]
-                    for i in 1:n for j in (i+1):n if cif.bonds[i,j] < Inf32)
-    knownbondlengths = !any(iszero, values(_oldbonds))
-    
-    if !isempty(_oldbonds) && !knownbondlengths
-        # This means that the bonds are determined as symmetric images of bonds of the
-        # asymetric unit, which may or may not be the convention used in the CIF files.
-        # Most CIF files having geom_bond_atom_site_labels should have geom_bond_distance anyway.
-        @ifwarn @warn "Expanding CIF symmetry without knowing the bond lengths: the resulting bonds might be erroneous"
-    end
-    newbonds = Set{Tuple{Int,Int}}(keys(_oldbonds))
-    oldbonds = copy(_oldbonds)
-    for ((i,j), bond) in _oldbonds
-        oldbonds[(j,i)] = bond
-    end
     newids::Vector{Int} = copy(cif.ids)
     newpos::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     smallmat = Float64.(cif.cell.mat)
@@ -430,42 +530,58 @@ function expand_symmetry(c::CIF)
             if image[i] == 0
                 push!(newpos, p)
                 push!(newids, cif.ids[i])
+                isempty(bonds) || push!(bonds, Tuple{Int,Float32}[])
                 image[i] = length(newpos)
             end
         end
         if !knownbondlengths
-            for (i,j) in keys(oldbonds)
-                push!(newbonds, minmax(image[i], image[j]))
+            for (i, bondi) in enumerate(cif.bonds), (j, _) in bondi
+                imi = image[newids[i]]
+                imj = image[newids[j]]
+                add_to_bondlist!(bonds[imi], imj, 0f0)
+                add_to_bondlist!(bonds[imj], imi, 0f0)
             end
         end
     end
-    m = length(newids)
-    bonds = fill(Inf32, m, m)
-    if knownbondlengths
+
+    if knownbondlengths && !isempty(bonds)
+        m = length(newids)
         for i in 1:m
             for j in (i+1):m
-                bondlength = get(oldbonds, (newids[i], newids[j]), Inf32)
+                bondlength = get_bondlist(oldbonds[newids[i]], newids[j])
                 bondlength < Inf32 || continue
                 if abs(periodic_distance(newpos[i], newpos[j], smallmat) - bondlength) < 0.55
-                    bonds[i,j] = bonds[j,i] = bondlength
+                    push!(bonds[i], (j, bondlength))
+                    push!(bonds[j], (i, bondlength))
                 end
             end
         end
-    else
-        for (i,j) in newbonds
-            bonds[i,j] = bonds[j,i] = zero(Float32)
-        end
     end
+
+    @toggleassert all(issorted, cif.bonds)
+    @toggleassert all(allunique, cif.bonds)
 
     return CIF(cif.cifinfo, deepcopy(cif.cell), newids, copy(cif.types), reduce(hcat, newpos), bonds)
 end
 
-function _edges_from_bonds(adjacency, mat, pos)
+
+"""
+    edges_from_bonds(bonds, mat, pos)
+
+Given a bond list `bonds` containing triplets `(a, b, dist)` where atoms `a` and `b` are
+bonded if their distance is lower than `dist`, the 3×3 matrix of the cell `mat` and the
+Vector{SVector{3,Float64}} `pos` whose elements are the fractional positions of the
+atoms, extract the list of PeriodicEdge3D corresponding to the bonds.
+Since the adjacency matrix wraps bonds across the boundaries of the cell, the edges
+are extracted so that the closest representatives are chosen to form bonds.
+"""
+function edges_from_bonds(bonds, mat, pos)
     n = length(pos)
     edges = PeriodicEdge3D[]
     ref_dst = norm(mat*[1, 1, 1])
-    for i in 1:n, k in (i+1):n
-        maxdist = adjacency isa Dict ? get(adjacency, (i,k), 0f0) : adjacency[i,k]
+    for i in 1:n, (k, maxdist) in bonds[i]
+        k < i && continue
+        @toggleassert k != i
         iszero(maxdist) && continue
         offset::Vector{SVector{3, Int}} = []
         old_dst = ref_dst
@@ -489,30 +605,6 @@ function _edges_from_bonds(adjacency, mat, pos)
         end
     end
     return edges
-end
-
-"""
-    edges_from_bonds(bonds, mat, pos)
-
-Given a bond list `bonds` containing triplets `(a, b, dist)` where atoms `a` and `b` are
-bonded if their distance is lower than `dist`, the 3×3 matrix of the cell `mat` and the
-Vector{SVector{3,Float64}} `pos` whose elements are the fractional positions of the
-atoms, extract the list of PeriodicEdge3D corresponding to the bonds.
-Since the adjacency matrix wraps bonds across the boundaries of the cell, the edges
-are extracted so that the closest representatives are chosen to form bonds.
-"""
-function edges_from_bonds(bonds, mat, pos)
-    n = length(pos)
-    if n < 2000
-        adjacency = zeros(n, n)
-        for (a, b, dist) in bonds
-            adjacency[a, b] = dist
-            adjacency[b, a] = dist
-        end
-        return _edges_from_bonds(adjacency, mat, pos)
-    end
-    adjdict = Dict{Tuple{Int,Int},Float32}([minmax(a,b) => dist for (a,b,dist) in bonds if !iszero(dist)])
-    return _edges_from_bonds(adjdict, mat, pos)
 end
 
 ## Clusters
