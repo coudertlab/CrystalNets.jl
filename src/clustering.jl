@@ -1055,9 +1055,12 @@ function find_sbus(crystal, kinds=default_sbus)
     return sbus
 end
 
-function _split_this_sbu!(toremove, graph, k, types, stopiftype)
-    for x in neighbors(graph, k)
-        types[x.v] === stopiftype && return nothing
+function _split_this_sbu!(toremove, graph, k, types, stopiftype, sbus)
+    if sbus !== nothing
+        for x in neighbors(graph, k)
+            othersbu = sbus[x.v]
+            length(othersbu) == 1 && types[othersbu[1].v] === stopiftype && return nothing
+        end
     end
     push!(toremove, k)
     neighs = reverse(neighbors(graph, k))
@@ -1086,7 +1089,7 @@ function split_special_sbu!(graph, sbus, types, splitO)
         end
         uniquetypes === Symbol("") && continue
         if uniquetypes === :O && splitO
-            _split_this_sbu!(toremove, graph, k, types, uniquetypes)
+            _split_this_sbu!(toremove, graph, k, types, uniquetypes, sbus)
         elseif uniquetypes == :C && length(sbu) == 1
             push!(uniqueCs, k)
         end
@@ -1109,7 +1112,7 @@ function split_special_sbu!(graph, sbus, types, splitO)
         if all(otherwiseconnected)
             push!(toremove, k)
         else
-            _split_this_sbu!(toremove, graph, k, types, types[only(sbus[k]).v])
+            _split_this_sbu!(toremove, graph, k, types, types[only(sbus[k]).v], sbus)
         end
     end
     return rem_vertices!(graph, toremove)
@@ -1120,12 +1123,11 @@ function split_O_vertices(c)
     graph = deepcopy(c.graph)
     for (k, t) in enumerate(c.types)
         (t === :O && degree(graph, k) > 2) || continue
-        _split_this_sbu!(toremove, graph, k, c.types, :O)
+        _split_this_sbu!(toremove, graph, k, c.types, :O, nothing)
     end
-    tokeep = collect(1:length(c.types))
-    deleteat!(tokeep, toremove)
-    pos = c.pos[tokeep]
-    return Crystal{Nothing}(c.cell, c.types[tokeep], pos, graph, Options(c.options; _pos=pos))
+    vmap = rem_vertices!(graph, toremove)
+    pos = c.pos[vmap]
+    return Crystal{Nothing}(c.cell, c.types[vmap], pos, graph, Options(c.options; _pos=pos))
 end
 
 
