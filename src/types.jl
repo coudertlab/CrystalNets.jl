@@ -283,7 +283,7 @@ function keepinbonds(bonds, keep)
         vec = ret[_i]
         for (j, d) in bonds[keep[_i]]
             idx = idxs[j]
-            if keep[idx] == j
+            if idx != 0 && keep[idx] == j
                 push!(vec, (idx, d))
             end
         end
@@ -298,7 +298,7 @@ function add_to_bondlist!(bondlist, x, d)
             if j == x
                 bondlist[i] = (x, d)
             else
-                splice!(bondlist, i:i-1, (x, d))
+                splice!(bondlist, i:i-1, [(x, d)])
             end
             addedflag = true
             break

@@ -168,7 +168,7 @@ function export_cif(file, c::Union{Crystal, CIF})
                 ["atom_site_label", "atom_site_type_symbol",
                  "atom_site_fract_x", "atom_site_fract_y", "atom_site_fract_z"])
         labels = String[string(c.types[c isa CIF ? c.ids[i] : i])*string(i) for i in 1:n]
-        pos = string.(round.(reduce(hcat, c.pos); sigdigits=6))
+        pos = string.(round.(c isa Crystal ? reduce(hcat, c.pos) : c.pos; sigdigits=6))
         append!(loops[n][2], [labels, string.(c.types[x] for x in (c isa CIF ? c.ids : collect(1:n))),
                 pos[1,:], pos[2,:], pos[3,:]])
 

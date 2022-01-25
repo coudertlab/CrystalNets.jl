@@ -306,16 +306,30 @@ end
 
 function parse_atom_name(name::AbstractString)
     firstsep = findfirst(x -> ispunct(x) || isspace(x) || isnumeric(x), name)
-    if firstsep isa Nothing
-        return String(name)
+    symb::Symbol = if firstsep isa Nothing
+        Symbol(name)
     else
         firstsep::Int
         if firstsep != 1 && !any(isuppercase, @view name[nextind(name, firstsep):end])
-            return String(name[1:prevind(name, firstsep)])
+            Symbol(name[1:prevind(name, firstsep)])
         else
-            return String(name)
+            Symbol(name)
         end
     end
+    initstr = String(symb)
+    if get(atomic_numbers, symb, 0) != 0
+        return initstr
+    end
+    if length(initstr) > 2
+        str = initstr[1:2]
+        if get(atomic_numbers, Symbol(str), 0) != 0
+            return str
+        end
+    end
+    if get(atomic_numbers, Symbol(initstr[1]), 0) != 0
+        return string(initstr[1])
+    end
+    return initstr
 end
 
 function parse_atom(name)
@@ -514,6 +528,7 @@ end
 Special heuristics to remove atoms that seem to arise from an improper cleaning of the file.
 Currently implemented:
 - C atoms suspiciously close to metallic atoms.
+- One of two identical metallic atoms suspiciously close to one another
 TODO:
 - O atoms with 4 coplanar bonds (warning only).
 """
@@ -530,17 +545,26 @@ function sanitize_removeatoms!(graph::PeriodicGraph{N}, pos, types, mat, options
             if flag && any(>(2.6), lengths)
                 # This warning could be out of a  @ifwarn because it reliably indicates
                 # cases where the input was not properly cleaned
-                @ifwarn @error "Very suspicious connectivity found for $(options.name)"
+                @ifwarn @error "Very suspicious connectivity found for $(options.name)."
                 flag = false
             end
         elseif ismetal[atomic_numbers[t]]
             for u in neighbors(graph, i)
-                if types[u.v] === :C
+                typu = types[u.v]
+                if typu === :C
                     u.v ∈ toremove && continue
                     bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
                     bondlength > 1.45 && continue
                     @ifwarn if isempty(toremove)
-                        @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed"
+                        @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed."
+                    end
+                    push!(toremove, u.v)
+                elseif typu == t && u.v > i
+                    u.v ∈ toremove && continue
+                    bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
+                    bondlength > 0.9 && continue
+                    @ifwarn if isempty(toremove)
+                        @warn "$t atoms suspiciously close to one another(bond length: $bondlength). One will be removed."
                     end
                     push!(toremove, u.v)
                 end
