@@ -40,12 +40,22 @@ function guess_bonds(pos, types, mat, options)
     end
     n = length(pos)
     bonds = [Tuple{Int,Float32}[] for _ in 1:n]
-    typs = [atomic_numbers[t] for t in types]
-    radii = [vdwradii[t]*(1 + options.wider_metallic_bonds*(ismetal[t]|ismetalloid[t])*0.5) for t in typs]
+    @toggleassert n == length(types)
+    radii = Vector{Float32}(undef, n)
+    for (i, typ) in enumerate(types)
+        t = get(atomic_numbers, typ, nothing)
+        if t isa Int
+            radii[i] = vdwradii[t]*(1 + options.wider_metallic_bonds*(ismetal[t]|ismetalloid[t])*0.5)
+        else
+            radii[i] = 0.0
+            @ifwarn @warn "Unrecognized atom type \"$t\" will be considered a dummy atom."
+        end
+    end
     cutoff = 3*(options.cutoff_coeff^3.1) * max(maximum(radii), 0.833)
     cutoff2 = 13*options.cutoff_coeff/15
     for i in 1:n
         radius_i = radii[i]
+        iszero(radius_i) && continue
         posi = pos[i]
         typi = types[i]
         #ignoreifmetallic = typi === :C
@@ -62,6 +72,7 @@ function guess_bonds(pos, types, mat, options)
             #(ignoreifC & (typj === :C)) && continue
             #ignoreifmetallic && ismetal[atomic_numbers[typj]] && continue
             radius_j = radii[j]
+            iszero(radius_j) && continue
             posj = pos[j]
             d1 = periodic_distance(posi, posj, mat)
             maxdist = cutoff2*(radius_i + radius_j)

@@ -90,13 +90,21 @@ function parse_cif(file)
     return all_data
 end
 
+
 function parsestrip(T, s)
     s = s[end] == ')' ? s[1:prevind(s, findlast('(', s))] : s
-    return parse(T, s)
+    x = tryparse(T, s)
+    if x isa T
+        return x
+    end
+    throw(ArgumentError("Invalid CIF file (cannot parse \"$s\" as a $T)."))
 end
 parsestrip(s) = parsestrip(BigFloat, s)
 
 function popstring!(parsed, name)::String
+    if !haskey(parsed, name)
+        throw(ArgumentError("Invalid CIF file (cannot find \"_$name\" field)."))
+    end
     x = pop!(parsed, name)
     if x isa String
         return x
@@ -105,6 +113,9 @@ function popstring!(parsed, name)::String
 end
 
 function popvecstring!(parsed, name)::Vector{String}
+    if !haskey(parsed, name)
+        throw(ArgumentError("Invalid CIF file (cannot find \"_$name\" field in loop)."))
+    end
     x = pop!(parsed, name)
     if x isa String
         return String[x]
@@ -548,25 +559,31 @@ function sanitize_removeatoms!(graph::PeriodicGraph{N}, pos, types, mat, options
                 @ifwarn @error "Very suspicious connectivity found for $(options.name)."
                 flag = false
             end
-        elseif ismetal[atomic_numbers[t]]
-            for u in neighbors(graph, i)
-                typu = types[u.v]
-                if typu === :C
-                    u.v ∈ toremove && continue
-                    bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
-                    bondlength > 1.45 && continue
-                    @ifwarn if isempty(toremove)
-                        @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed."
+        else
+            at = get(atomic_numbers, t, nothing)
+            if at === nothing
+                @ifwarn "Unrecognized atom type \"$t\" will be considered a dummy atom."
+                push!(toremove, i)
+            elseif ismetal[at::Int]
+                for u in neighbors(graph, i)
+                    typu = types[u.v]
+                    if typu === :C
+                        u.v ∈ toremove && continue
+                        bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
+                        bondlength > 1.45 && continue
+                        @ifwarn if isempty(toremove)
+                            @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed."
+                        end
+                        push!(toremove, u.v)
+                    elseif typu == t && u.v > i
+                        u.v ∈ toremove && continue
+                        bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
+                        bondlength > 0.9 && continue
+                        @ifwarn if isempty(toremove)
+                            @warn "$t atoms suspiciously close to one another(bond length: $bondlength). One will be removed."
+                        end
+                        push!(toremove, u.v)
                     end
-                    push!(toremove, u.v)
-                elseif typu == t && u.v > i
-                    u.v ∈ toremove && continue
-                    bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
-                    bondlength > 0.9 && continue
-                    @ifwarn if isempty(toremove)
-                        @warn "$t atoms suspiciously close to one another(bond length: $bondlength). One will be removed."
-                    end
-                    push!(toremove, u.v)
                 end
             end
         end

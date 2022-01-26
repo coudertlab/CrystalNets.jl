@@ -55,7 +55,7 @@ function find_refid(eqs)
         if length(refid) != 3 || refid[end] == ""
             error("Input string {$eq} is not a valid symmetry equivalent")
         end
-        return tuple(refid[1], refid[2], refid[3])
+        return tuple(lowercase(refid[1]), lowercase(refid[2]), lowercase(refid[3]))
     end
     return ("x", "y", "z")
 end
@@ -70,7 +70,7 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
     encountered_div::Bool = false
     i = 1
     something_written = false
-    for x in tokenize(s)
+    for x in tokenize(lowercase(s))
         k = Tokenize.Tokens.kind(x)
         k === Tokenize.Tokens.WHITESPACE && continue
         if k === Tokenize.Tokens.INTEGER
