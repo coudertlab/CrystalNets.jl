@@ -123,25 +123,44 @@ function rational_lu(A::SparseMatrixCSC, check::Bool=true, ::Type{Ti}=BigRationa
     col_offset = zeros(Int, minmn) # for each col, index of the pivot element
     idx_cols = [[I[i] for i in getcolptr(A)[col+1]-1:-1:getcolptr(A)[col]] for col in 1:minmn]
     # For each column, indices of the non-zeros elements
-    @inbounds for col in 2:minmn
+    in_idx_colscol = falses(n)
+    for col in 2:minmn
         sort!(idx_cols[col-1]; rev=true)
         # All idx_cols[x] are sorted by decreasing order for x < col
         # @show idx_cols[col]
-        for row_j in idx_cols[col]
+        idx_colscol = idx_cols[col]
+        in_idx_colscol[idx_colscol] .= true
+        for row_j in idx_colscol
             row_j >= col && continue
             col_offset[col] += 1
             # @show idx_cols[row_j]
-            for row_i in idx_cols[row_j]
-                row_i <= row_j && break # Because the row_i are sorted in decreasing order
-                # TODO optimize using the fact that the row_i arrive in decreasing order
-                # and the fact that idx_cols[col] is initially sorted in decreasing order
-                row_i ∈ idx_cols[col] && continue
-                push!(idx_cols[col], row_i)
-                push!(J, col)
-                push!(I, row_i)
-                push!(V, 0)
+            idx_colsj = idx_cols[row_j]
+            sizcol = length(idx_colscol)
+            for row_i in idx_colsj
+                if row_i ≤ row_j
+                    break # Because the row_i are sorted in decreasing order
+                end
+                if !in_idx_colscol[row_i]
+                    push!(idx_colscol, row_i)
+                    in_idx_colscol[row_i] = true
+                end
+            end
+            countadd = length(idx_colscol) - sizcol
+            if countadd > 0
+                siz = length(I)
+                resize!(I, siz + countadd)
+                resize!(J, siz + countadd)
+                resize!(V, siz + countadd)
+                for i in 1:countadd
+                    row_i = idx_colscol[sizcol+i]
+                    _idx = siz + i
+                    J[_idx] = col
+                    I[_idx] = row_i
+                    V[_idx] = 0
+                end
             end
         end
+        in_idx_colscol[idx_colscol] .= false
     end
     B = sparse(I, J, Ti.(V)) # TODO update with Pivot
     # lu!(B, col_offset, check)
