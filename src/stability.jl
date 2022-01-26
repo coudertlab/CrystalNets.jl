@@ -436,7 +436,7 @@ net is truly stable. Otherwise, return `nothing`.
 Also return an updated net where the vertices in a `CollisionNode` are collapsed into a new
 vertex, appearing after the non-colliding vertices.
 """
-function collision_nodes(net::CrystalNet{D}) where D
+function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     collision_sites, collision_vertices = collect_collisions(net)
 
     isempty(collision_sites) && return net, CollisionNode[] # no collision at all
@@ -493,7 +493,7 @@ function collision_nodes(net::CrystalNet{D}) where D
     @toggleassert idx == n+1
 
     newgraph = net.graph[vmap]
-    newpos = net.pos[vmap]
+    newpos = [soft_widen(T).(net.pos[i]) for i in vmap]
     ofs = newpos[1]
     offsets = Vector{SVector{D,Int}}(undef, n)
     for (i, x) in enumerate(newpos)

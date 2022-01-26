@@ -1227,7 +1227,6 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
         types[i] = length(sbu) == 1 ? crystal.types[first(sbu).v] : Symbol(join(last.(newname))) # Symbol(clusters.classes[clusters.attributions[i]])
     end
     ret = Crystal{Nothing}(crystal.cell, types, pos, graph, Options(crystal.options; _pos=pos))
-    export_default(ret, "clusters", crystal.options.name,
-                   crystal.options.export_clusters; repeats=2)
+    export_default(ret, "clusters", crystal.options.name, crystal.options.export_clusters)
     return ret
 end

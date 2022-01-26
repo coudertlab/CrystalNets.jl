@@ -883,7 +883,7 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
     offsets = Vector{SVector{D,Int}}(undef, n)
     @inbounds for (i, x) in enumerate(eachcol(placement))
         offsets[i] = floor.(Int, x)
-        pos[i] = x .- offsets[i]
+        pos[i] = Base.unsafe_rational.(getfield.(x, :num) .- getfield.(x, :den).*offsets[i], getfield.(x, :den))
     end
     s = sortperm(pos)
     pos = pos[s]
@@ -952,7 +952,7 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
     if !isempty(opts.export_net) && !isempty(opts._pos)
         pos = opts._pos[initialvmap]
         export_default(Crystal{Nothing}(cell, types, pos, graph, opts), 
-                       "net", opts.name, opts.export_net; repeats=2)
+                       "net", opts.name, opts.export_net)
     end
     dimensions = PeriodicGraphs.dimensionality(graph)
 

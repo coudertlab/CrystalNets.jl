@@ -28,7 +28,7 @@ function topological_genome(net::CrystalNet{D,T}) where {D,T}
             shrunk_net, _collisions = minimize(shrunk_net, collisions)
             flag = false
         catch e
-            if T == BigInt || !(e isa OverflowError || e isa InexactError)
+            if T == Rational{BigInt} || !(e isa OverflowError || e isa InexactError)
                 rethrow()
             end
         end
@@ -41,7 +41,7 @@ function topological_genome(net::CrystalNet{D,T}) where {D,T}
     end
 
     if isempty(net.options._pos) # could not be exported before
-        export_default(net, "net", net.options.name, net.options.export_net; repeats=2)
+        export_default(net, "net", net.options.name, net.options.export_net)
     end
 
     return topological_genome(shrunk_net, collisions)
@@ -53,7 +53,7 @@ function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNo
     try
         return topological_key(net, collisions)
     catch e
-        if T == BigInt || !(e isa OverflowError || e isa InexactError)
+        if T == Rational{BigInt} || !(e isa OverflowError || e isa InexactError)
             rethrow()
         end
     end
