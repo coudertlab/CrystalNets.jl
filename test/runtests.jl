@@ -13,7 +13,8 @@ function _finddirs()
     return joinpath(root, "test", "cif"), root
 end
 
-const known_unstable_nets = ("sxt", "llw-z") # special case for these known unstable nets
+const known_unstable_nets = ("sxt",) # special case for these known unstable nets
+# llw-z is unstable but part of those handled by CrystalNets
 
 function capture_out(name)
     result = open(name, "w") do out
