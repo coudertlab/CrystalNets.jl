@@ -1029,10 +1029,11 @@ function find_candidates_fallback(net::CrystalNet3D{T}, reprs, othercats, catego
             mats = SMatrix{3,3,T,9}[]
             posu = net.pos[u]
             neighu = neighbors(net.graph, u)
-            for (j1, x1) in enumerate(neighu)
-                category_map[x1.v] > mincats[1] && category_map[x1.v] > mincats[2] && continue
+            for (j1, _x1) in enumerate(neighu)
+                category_map[_x1.v] > mincats[1] && category_map[_x1.v] > mincats[2] && continue
                 for j2 in j1+1:length(neighu)
                     x2 = neighu[j2]
+                    x1 = _x1
                     if category_map[x1.v] > category_map[x2.v]
                         x1, x2 = x2, x1
                     end
@@ -1043,7 +1044,7 @@ function find_candidates_fallback(net::CrystalNet3D{T}, reprs, othercats, catego
                     vec1 = net.pos[x1.v] .+ x1.ofs .- posu
                     vec2 = net.pos[x2.v] .+ x2.ofs .- posu
                     j = iszero(vec1[1]) ? iszero(vec1[2]) ? 3 : 2 : 1
-                    vec1[j] * vec2 == vec2[j] .* vec1 && continue # colinear
+                    vec1[j] * vec2 == vec2[j] * vec1 && continue # colinear
                     for v in cat
                         posv = net.pos[v]
                         for x3 in neighbors(net.graph, v)
