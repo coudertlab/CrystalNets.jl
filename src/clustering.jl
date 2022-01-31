@@ -1163,8 +1163,9 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
                 if length(neighs) > 2
                     for y in neighs
                         atty = clusters.attributions[y.v]
-                        (atts == atty || crystal.types[y.v] === :C) && continue
+                        crystal.types[y.v] === :C && continue
                         newofs = x.ofs .+ y.ofs .+ clusters.offsets[s] .- clusters.offsets[y.v]
+                        atts == atty && iszero(newofs) && continue
                         push!(edgs, PeriodicEdge3D(atts, atty, newofs))
                     end
                 end
@@ -1180,14 +1181,14 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
             end
         end
     end
-    if isempty(edgs)
-        if _attempt == 1 && clustering == ClusteringMode.MOF
-            return coalesce_sbus(crystal, ClusteringMode.MOFWiderOrganicSBUs, Val(2))
-        end
-        if _attempt == 2
-           return coalesce_sbus(crystal, ClusteringMode.MOFMetalloidIsMetal, Val(3))
-        end
-    end
+    # if isempty(edgs)
+    #     if _attempt == 1 && clustering == ClusteringMode.MOF
+    #         return coalesce_sbus(crystal, ClusteringMode.MOFWiderOrganicSBUs, Val(2))
+    #     end
+    #     if _attempt == 2
+    #        return coalesce_sbus(crystal, ClusteringMode.MOFMetalloidIsMetal, Val(3))
+    #     end
+    # end
     export_default(crystal, "trimmed", crystal.options.name,
                    crystal.options.export_input)
     n = length(clusters.sbus)
