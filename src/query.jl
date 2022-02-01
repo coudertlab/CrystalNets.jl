@@ -61,16 +61,19 @@ function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNo
 end
 
 """
-    topological_genome(g::PeriodicGraph, options::Options=Options())
-    topological_genome(g::PeriodicGraph; kwargs...)
+    topological_genome(g::Union{String,PeriodicGraph}, options::Options=Options())
+    topological_genome(g::Union{String,PeriodicGraph}; kwargs...)
 
 Compute the topological genome of a periodic graph.
+If given a topological key (as a string), it is converted to a `PeriodicGraph` first.
 """
 function topological_genome(g::PeriodicGraph, options::Options)
     net = CrystalNet(g, options)
     return topological_genome(net)
 end
-topological_genome(g::PeriodicGraph; kwargs...) = topological_genome(g, Options(; kwargs...))
+topological_genome(s::String, options::Options) = topological_genome(PeriodicGraph(s), options)
+topological_genome(g::Union{String,PeriodicGraph}; kwargs...) = topological_genome(g, Options(; kwargs...))
+
 
 function _loop_group!(ex, id, net, group)
     for j in 1:length(ex.args)
