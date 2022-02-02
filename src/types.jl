@@ -183,8 +183,9 @@ end
 Representation of a periodic cell in 3D. Contains information about the cell
 (axes lengths and angles) and its symmetry group, through its Hall number.
 
-See SPACE_GROUP_HALL, SPACE_GROUP_FULL, SPACE_GROUP_HM et SPACE_GROUP_IT for
-the correspondance between Hall number and usual symbolic representations.
+See [`SPACE_GROUP_HALL`](@ref), [`SPACE_GROUP_FULL`](@ref), [`SPACE_GROUP_HM`](@ref)`
+and [`SPACE_GROUP_IT`](@ref) for the correspondance between Hall number and usual symbolic
+representations.
 """
 struct Cell
     hall::Int
