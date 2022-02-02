@@ -213,7 +213,7 @@ function Cell(hall, (a, b, c), (α, β, γ), eqs=EquivalentPosition[])
 end
 Cell() = Cell(1, (10, 10, 10), (90, 90, 90), EquivalentPosition[])
 
-function cell_parameters(mat::StaticArray{Tuple{3,3},BigFloat})
+function cell_parameters(mat::AbstractMatrix)
     _a, _b, _c = eachcol(mat)
     a = norm(_a)
     b = norm(_b)
@@ -347,20 +347,59 @@ function keep_atoms(cif::CIF, kept)
 end
 
 
-"""
-    periodic_distance(u, v, mat)
+function prepare_periodic_distance_computations(mat)
+    a, b, c, α, β, γ = cell_parameters(mat)
+    ortho = all(x -> isapprox(Float16(x), 90; rtol=0.02), (α, β, γ))
+    _a, _b, _c = eachcol(mat)
+    safemin = min(dot(cross(_b, _c), _a)/(b*c),
+                  dot(cross(_c, _a), _b)/(a*c),
+                  dot(cross(_a, _b), _c)/(a*b))/2
+    # safemin is the half-distance between opposite planes of the unit cell
+    return MVector{3,Float64}(undef), ortho, safemin
+end
 
-Distance between points u and v, given as triplets of fractional coordinates, in
-a repeating unit cell of matrix mat.
-The distance is the shortest between all equivalents of u and v.
-"""
-function periodic_distance(u, v, mat)
-    x = similar(u)
-    #=@inbounds=# for i in 1:3
-        diff = u[i] - v[i] + 0.5
-        x[i] = diff - floor(diff) - 0.5
+function periodic_distance!(buffer, u, mat, ortho, safemin)
+    @simd for i in 1:3
+        diff = u[i] + 0.5
+        buffer[i] = diff - floor(diff) - 0.5
     end
-    return norm(mat*x)
+    ref = norm(mat*buffer)
+    (ortho || ref ≤ safemin) && return ref
+    @inbounds for i in 1:3
+        buffer[i] += 1
+        newnorm = norm(mat*buffer)
+        newnorm < ref && return newnorm # in a reduced lattice, there should be at most one
+        buffer[i] -= 2
+        newnorm = norm(mat*buffer)
+        newnorm < ref && return newnorm
+        buffer[i] += 1
+    end
+    return ref
+end
+
+"""
+    periodic_distance(u, mat, ortho=nothing, safemin=nothing)
+
+Distance between point `u` and the origin, given as a triplet of fractional coordinates, in
+a repeating unit cell of matrix `mat`.
+The distance is the shortest between all equivalents of `u` and the origin.
+If `ortho` is set to `true`, the angles α, β and γ of the cell are assumed right, which
+accelerates the computation by up to 7 times.
+If a distance lower than `safemin` is computed, stop trying to find a periodic image of `u`
+closer to the origin.
+If unspecified, both `ortho` and `safemin` are automatically determined from `mat`.
+
+This implementation assumes that the cell corresponds to a reduced lattice. It may be
+invalid for some edge cases otherwise.
+
+For optimal performance, use `periodic_distance!` with `buffer`, `ortho` and `safemin`
+obtained from `prepare_periodic_distance_computations`.
+"""
+function periodic_distance(u, mat, ortho=nothing, safemin=nothing)
+    if ortho === nothing || safemin === nothing
+        _, ortho, safemin = prepare_periodic_distance_computations(mat)
+    end
+    periodic_distance!(similar(u), u, mat, ortho, safemin)
 end
 
 
@@ -451,8 +490,9 @@ function prune_collisions(cif::CIF)
     points::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     n = length(points)
     smallmat = Float64.(cif.cell.mat)
+    buffer, ortho, safemin = prepare_periodic_distance_computations(smallmat)
     for i in 1:n, j in (i+1):n
-        if periodic_distance(points[i], points[j], smallmat) < 0.55
+        if periodic_distance!(buffer, points[i] .- points[j], smallmat, ortho, safemin) < 0.55
             push!(toremove, j)
         end
     end
@@ -515,6 +555,7 @@ function expand_symmetry(c::CIF)
     newids::Vector{Int} = copy(cif.ids)
     newpos::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     smallmat = Float64.(cif.cell.mat)
+    buffer, ortho, safemin = prepare_periodic_distance_computations(smallmat)
     #=@inbounds=# for equiv in cif.cell.equivalents
         image = zeros(Int, n)
         for i in 1:length(cif.ids)
@@ -522,7 +563,7 @@ function expand_symmetry(c::CIF)
             p = Vector(equiv.mat*v .+ equiv.ofs)
             p .-= floor.(p)
             for j in 1:length(newpos)
-                if periodic_distance(newpos[j], p, smallmat) < 0.55
+                if periodic_distance!(buffer, newpos[j] .- p, smallmat, ortho, safemin) < 0.55
                     image[i] = j
                     break
                 end
@@ -550,7 +591,7 @@ function expand_symmetry(c::CIF)
             for j in (i+1):m
                 bondlength = get_bondlist(oldbonds[newids[i]], newids[j])
                 bondlength < Inf32 || continue
-                if abs(periodic_distance(newpos[i], newpos[j], smallmat) - bondlength) < 0.55
+                if abs(periodic_distance!(buffer, newpos[i] .- newpos[j], smallmat, ortho, safemin) - bondlength) < 0.55
                     push!(bonds[i], (j, bondlength))
                     push!(bonds[j], (i, bondlength))
                 end

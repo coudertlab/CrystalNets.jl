@@ -40,6 +40,12 @@ function parse_cif(file)
 
             # From this point, the loop has been specified
             @toggleassert loopisspecified
+            if startswith(l[i:j], "data")
+                inloop = false
+                @toggleassert !haskey(all_data, "atom_site_fract_x")
+                i, j, x = nextword(l, x)
+                continue
+            end
             if l[i] != '_' && l[i:j] != "loop_"
                 for k in 1:loop_n
                     push!(all_data[loopspec[k]], l[i:j])
@@ -71,7 +77,7 @@ function parse_cif(file)
                 loopspec = String[]
                 lastword = ""
             elseif j-i > 4 && l[i:i+4] == "data_"
-                @toggleassert !haskey(all_data, "data")
+                @toggleassert !haskey(all_data, "data") || !haskey(all_data, "atom_site_fract_x")
                 all_data["data"] = l[i+5:j]
             else
                 complete_lastword = get(all_data, lastword, "")
@@ -397,10 +403,11 @@ returned list.
 function check_collision(pos, mat)
     n = length(pos)
     toremove = Int[]
+    buffer, ortho, safemin = prepare_periodic_distance_computations(mat)
     for i in 1:n
         posi = pos[i]
         for j in (i+1):n
-            if periodic_distance(posi, pos[j], mat) < 0.55
+            if periodic_distance!(buffer, posi .- pos[j], mat, ortho, safemin) < 0.55
                 push!(toremove, j)
             end
         end

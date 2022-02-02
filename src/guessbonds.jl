@@ -53,6 +53,7 @@ function guess_bonds(pos, types, mat, options)
     end
     cutoff = 3*(options.cutoff_coeff^3.1) * max(maximum(radii), 0.833)
     cutoff2 = 13*options.cutoff_coeff/15
+    buffer, ortho, safemin = prepare_periodic_distance_computations(mat)
     for i in 1:n
         radius_i = radii[i]
         iszero(radius_i) && continue
@@ -74,7 +75,7 @@ function guess_bonds(pos, types, mat, options)
             radius_j = radii[j]
             iszero(radius_j) && continue
             posj = pos[j]
-            d1 = periodic_distance(posi, posj, mat)
+            d1 = periodic_distance!(buffer, posi .- posj, mat, ortho, safemin)
             maxdist = cutoff2*(radius_i + radius_j)
             if d1 < cutoff && 0.5 < d1 < maxdist
                 push!(bonds[i], (j, maxdist))
