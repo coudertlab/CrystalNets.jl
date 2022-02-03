@@ -692,8 +692,8 @@ function small_cycles_around(graph, pos, mat, i, u_init, classes, acceptedclasse
             new_vec = mat * (pos[x.v] .+ x.ofs .- last_posu)
             α = angle(last_vec, .-new_vec)
             100 < α < 145 || continue
-            β = dihedral(last_prev_vec, last_vec, new_vec)
-            β < 10 || β > 170 || continue
+            #β = dihedral(last_prev_vec, last_vec, new_vec)
+            #β < 20 || β > 160 || continue
             ofs = last_offset .+ x.ofs
             γ = angle(init_vec, mat * (pos[x.v] .+ ofs .- pos_init))
             if last_parent == i
