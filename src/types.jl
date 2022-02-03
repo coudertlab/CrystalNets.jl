@@ -16,7 +16,7 @@ using Tokenize
 Representation of a symmetry operation in 3D, defined by an affine function.
 """
 struct EquivalentPosition
-    mat::SMatrix{3,3,Rational{Int}, 9}
+    mat::SMatrix{3,3,Int,9}
     ofs::SVector{3,Rational{Int}}
 end
 
@@ -62,7 +62,7 @@ end
 
 function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "y", "z"))
     const_dict = Dict{String, Int}(refid[1]=>1, refid[2]=>2, refid[3]=>3)
-    mat = zeros(Rational{Int}, 3, 3)
+    mat = zeros(Int, 3, 3)
     ofs = zeros(Rational{Int}, 3)
     curr_num::Union{Int, Nothing} = nothing
     curr_val::Union{Rational{Int}, Nothing} = nothing
@@ -92,7 +92,7 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                     curr_num = nothing
                 end
                 sign = isnothing(curr_sign) ? 1 : 2*curr_sign - 1
-                val = isnothing(curr_val)  ? Rational{Int}(1) : curr_val
+                val = isnothing(curr_val)  ? 1 : curr_val
                 j = const_dict[Tokenize.Tokens.untokenize(x)]
                 mat[i,j] += sign * val
                 curr_val = nothing
@@ -145,16 +145,16 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
             end
         end
     end
-    EquivalentPosition(SMatrix{3, 3, Rational{Int}, 9}(mat), SVector{3, Rational{Int}}(ofs))
+    EquivalentPosition(SMatrix{3,3,Int,9}(mat), SVector{3,Rational{Int}}(ofs))
 end
 
 function Base.show(io::IO, eq::EquivalentPosition)
-    function rationaltostring(x::Rational{<:Integer}, notofs::Bool, first::Bool)
+    function rationaltostring(x, notofs::Bool, first::Bool)
         if notofs && (x == 1 || x == -1)
             return x < 0 ? '-' : first ? "" : "+"
         end
         sign = x < 0 || first ? "" : "+"
-        sign * (x.den == 1 ? string(x.num) : string(x.num)*'/'*string(x.den))
+        sign * (denominator(x) == 1 ? string(numerator(x)) : string(numerator(x))*'/'*string(denominator(x)))
     end
     xyz = ('x', 'y', 'z')
     for i in 1:3

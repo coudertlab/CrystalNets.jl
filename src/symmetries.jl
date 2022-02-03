@@ -148,7 +148,7 @@ function get_symmetry_equivalents(hall)
     @toggleassert 0 < len ≤ 192
     eqs = EquivalentPosition[]
     for i in 1:len
-        rot = SMatrix{3,3,Rational{Int},9}(transpose(@inbounds rotations[:,:,i]))
+        rot = SMatrix{3,3,Int,9}(transpose(@inbounds rotations[:,:,i]))
         tr = SVector{3,Cdouble}(@inbounds translations[:,i])
         trans = SVector{3,Rational{Int}}(round.(Int, 360 .* tr) .// 360)
         push!(eqs, EquivalentPosition(rot, trans))
