@@ -200,14 +200,28 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     types = Symbol[]
     pos = Matrix{Float64}(undef, 3, natoms)
     correspondence = Dict{String, Int}()
+    alreadywarned = Set{String}()
     for i in 1:natoms
         if get!(correspondence, labels[i], i) != i
             correspondence[labels[i]] = 0 # indicates an atom appearing multiple times
-            @ifwarn @warn "Atom $(labels[i]) appears multiple time in the input CIF description."
+            @ifwarn begin
+                lab = labels[i]
+                if lab ∉ alreadywarned
+                    @warn "Atom of label \"$lab\" appears multiple time in the input CIF description."
+                    push!(alreadywarned, lab)
+                end
+            end
         end
         push!(types, Symbol(symbols[i]))
         pos[:,i] = parsestrip.(Float64, [pos_x[i], pos_y[i], pos_z[i]])
         pos[:,i] .-= floor.(Int, pos[:,i])
+    end
+    @ifwarn begin
+        if !isempty(alreadywarned)
+            if any(x -> length(x) ≥ 1 && !isnumeric(last(x)), alreadywarned)
+                @info "Atom labels should be unique identifiers, you may want to add a number after the atom symbol to the label."
+            end
+        end
     end
 
     invids = sortperm(types)
@@ -495,7 +509,7 @@ macro reduce_valence(dofix, n1, n2, nm=0)
         ($invalidcond) && push!(invalidatoms, t)
         if $dofix && ___m > ___n2
             ___posi = pos[i]
-            ___noHatoms = [x for x in ___neighs if types[x.v] !== :H]
+            ___noHatoms = [x for x in ___neighs if types[x.v] !== :H && types[x.v] !== :D]
             ___Δs = [norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___noHatoms]
             ___toremove = least_plausible_neighbours(___Δs, ___m - ___n2)
             for v in ___toremove
@@ -777,7 +791,7 @@ function sanity_checks!(graph, pos, types, mat, options)
                     push!(removeedges, e)
                 end
             end
-        elseif (bondlength < 0.65 && types[s] !== :H && types[d] !== :H)
+        elseif (bondlength < 0.65 && types[s] !== :H && types[s] !== :D && types[d] !== :H && types[d] !== :D)
             smallbondsflag = true
             push!(removeedges, e)
         end
@@ -961,7 +975,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
         passO = Int[]
         passCN = Int[]
         for (i, t) in enumerate(types)
-            if t === :H
+            if t === :H || t === :D
                 @reduce_valence_to1
             elseif t === :O
                 push!(passO, i)

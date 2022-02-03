@@ -87,7 +87,7 @@ function find_sbus_naive(crystal)
     classes = Vector{Int}(undef, n)
     for i in 1:n
         typ = crystal.types[i]
-        if typ === :C || typ === :H
+        if typ === :C || typ === :H || typ === :D
             classes[i] = 2
         elseif typ ∈ (:O, :Cd, :Co, :Cu, :Ni, :Sc, :W, :Zn, :Zr, :N)
             classes[i] = 1

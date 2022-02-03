@@ -286,15 +286,16 @@ function guess_topology(path, defopts)
     # end
     # invalidatoms = union(get(dryrun, :invalidatoms, Set{Symbol}()),
     #                      get(dryrun, :suspect_smallbonds, Set{Symbol}()))
-    # hashydrogens = :H ∈ atoms
+    # hashydrogens = :H ∈ atoms || :D ∈ atoms
     # if hashydrogens
-    #     @ifvalidgenomereturn Options(defopts; ignore_atoms=(:H,)) "ignoring H"
+    #     @ifvalidgenomereturn Options(defopts; ignore_atoms=(:H,:D)) "ignoring H"
     #     # delete!(invalidatoms, :H)
+    #     # delete!(invalidatoms, :D)
     # end
     # for a in invalidatoms
     #     @ifvalidgenomereturn Options(defopts; ignore_atoms=tuple(a)) "ignoring $a"
     #     if hashydrogens
-    #         @ifvalidgenomereturn Options(defopts; ignore_atoms=(a, :H)) "ignoring H and $a"
+    #         @ifvalidgenomereturn Options(defopts; ignore_atoms=(a, :H, :D)) "ignoring H and $a"
     #     end
     # end
     # if any(==(:C), atoms)# && :C ∉ invalidatoms # organic solvent
