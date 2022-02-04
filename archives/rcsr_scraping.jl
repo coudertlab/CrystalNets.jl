@@ -14,6 +14,14 @@ end
 
 const rcsr3D = getrcsr(3)
 
+function precise_round(x, n)
+    u = 10^(n+1)
+    y = floor(Int, u*x)
+    r = rem(y+5, 10)
+    ret = (y - r + ifelse(r == 0, 0, 5)) / u
+    ret == 1.0 && return precise_round(x, n+1)
+    ret
+end
 
 """
 Given a position `u`, return a vector of offsets `ofs` such that `u .+ ofs` are the
@@ -34,13 +42,11 @@ function periodic_neighbor!(buffer, u, mat, ortho, safemin, ε)
     totry = if ortho
         _totry = SVector{3,Int}[]
         for i in 1:3
-            if isapprox(buffer[i], 0.5; rtol=0.01)
-                __totry = MVector{3,Int}(ofs)
-                __totry[i] -= 1
-                push!(_totry, __totry)
-            elseif isapprox(buffer[i], -0.5; rtol=0.01)
+            if isapprox(buffer[i], -0.5; rtol=0.01)
                 __totry = MVector{3,Int}(ofs)
                 __totry[i] += 1
+                push!(_totry, __totry)
+                __totry[i] -= 2
                 push!(_totry, __totry)
             end
         end
@@ -48,6 +54,7 @@ function periodic_neighbor!(buffer, u, mat, ortho, safemin, ε)
     else
         [ofs .+ x for x in SVector{3,Int}[(1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)]]
     end
+    # totry = [ofs .+ x for x in SVector{3,Int}[(1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)]]
 
     for newofs in totry
         buffer .= u .+ newofs
@@ -146,9 +153,12 @@ function try_from_edges(_cife, mat, round_i, pos, dpos, ε, seqs)
     progression[end] = 0
     progression_made = true
     edgs = PeriodicEdge3D[]
+    counter = 0
     while progression_made
         progression_made = false
         empty!(edgs)
+        counter ≥ 8192 && break
+        counter += 1
         for (i, nn) in enumerate(nns)
             if !progression_made
                 if progression[i] == length(nn)
@@ -167,8 +177,22 @@ function try_from_edges(_cife, mat, round_i, pos, dpos, ε, seqs)
     return nothing
 end
 
+function try_from_closest(mat, poss, seqs)
+    edgs = PeriodicEdge3D[]
+    for (i, pos) in enumerate(poss)
+        idxs, _, closest_pos = closest_positions(pos, mat, poss, Inf, seqs[i][1] + 1)
+        length(closest_pos) == seqs[i][1] + 1 || return nothing
+        @assert idxs[1] == i && iszero(floor.(Int, closest_pos[1]))
+        popfirst!(idxs); popfirst!(closest_pos)
+        append!(edgs, PeriodicEdge3D(i, idx, floor.(Int, pos)) for (idx, pos) in zip(idxs, closest_pos))
+    end
+    g = PeriodicGraph(edgs)
+    check_graph(g, seqs) && return g
+    nothing
+end
 
-function try_from_closest(_cifv::CIF, cifv::CIF, mat, round_i, poss, dpos, ε, seqs)
+
+function try_from_closest_OLD(_cifv::CIF, cifv::CIF, mat, round_i, poss, dpos, ε, seqs)
     n = length(_cifv.ids)
     m = length(cifv.ids)
     num_symm = length(cifv.cell.equivalents)
@@ -205,7 +229,7 @@ function try_from_closest(_cifv::CIF, cifv::CIF, mat, round_i, poss, dpos, ε, s
     closest_neighbours = Vector{Vector{PeriodicVertex3D}}(undef, n)
     for (i, pos) in enumerate(eachcol(_cifv.pos))
         idxs, _, closest_pos = closest_positions(pos, mat, poss, ε, seqs[i][1] + 3)
-        @assert length(closest_pos) ≥ seqs[i][1]
+        @assert length(closest_pos) ≥ seqs[i][1] + 1
         closest_neighbours[i] = [PeriodicVertex3D(idx, floor.(Int, pos)) for (idx, pos) in zip(idxs, closest_pos)]
         @assert closest_neighbours[i][1] == PeriodicVertex3D(i)
         popfirst!(closest_neighbours[i])
@@ -267,16 +291,18 @@ function determine_graph(_cifv, _cife, cell, _seqs)
     _pos = Float32.(cifv.pos)
     pos = _pos
     round_i = 1
-    while round_i ≤ 5
+    while round_i ≤ 8
         pos = [SVector{3,Float32}(x) for x in eachcol(round.(_pos; digits=round_i))]
-        allunique(pos) && break
         round_i += 1
+        allunique(pos) && break
     end
+    pos = [SVector{3,Float32}(x) for x in eachcol(precise_round.(_pos, round_i))]
     @assert allunique(pos)
     dpos = Dict{SVector{3,Float32},Int}([p => j for (j,p) in enumerate(pos)])
     ε = cbrt(det(mat) / length(cifv.ids))
 
-    g1 = try_from_closest(_cifv, cifv, mat, round_i, pos, dpos, ε, seqs)
+    # g1 = try_from_closest(_cifv, cifv, mat, round_i, pos, dpos, ε, seqs)
+    g1 = try_from_closest(mat, pos, seqs)
     g1 === nothing || return g1
 
     g2 = try_from_edges(_cife, mat, round_i, pos, dpos, ε, seqs)
@@ -420,6 +446,7 @@ function extract_graphs(rcsr=rcsr3D)
     names, cifvs, cifes, cells, seqss, symmetry_issues = extract_rcsr_data(rcsr)
     n = length(names)
     ret = Vector{Pair{String,PeriodicGraph3D}}(undef, n)
+    errored = [Int[] for _ in 1:nthreads()]
     failed = [Int[] for _ in 1:nthreads()]
     @threads for i in 1:n
         name = names[i]
@@ -427,7 +454,12 @@ function extract_graphs(rcsr=rcsr3D)
         cife = cifes[i]
         cell = cells[i]
         seqs = seqss[i]
-        graph = determine_graph(cifv, cife, cell, seqs)
+        graph = try
+            determine_graph(cifv, cife, cell, seqs)
+        catch e
+            push!(errored[threadid()], i)
+            continue
+        end
         if graph isa PeriodicGraph3D
             ret[i] = name => graph
         else
@@ -435,10 +467,12 @@ function extract_graphs(rcsr=rcsr3D)
         end
     end
     _failed = reduce(vcat, failed)
-    sort!(_failed)
-    deleteat!(ret, _failed)
+    _errored = reduce(vcat, errored)
+    toremove = vcat(_failed, _errored)
+    sort!(toremove)
+    deleteat!(ret, toremove)
 
-    return Dict(ret), names[_failed], symmetry_issues
+    return Dict(ret), names[_failed], names[_errored], symmetry_issues
 end
 
 
