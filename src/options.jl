@@ -24,38 +24,72 @@ import .BondingMode
 """
     StructureType
 
-Selection mode for the clustering of vertices. The choices are:
-- `Input`: use the input residues as clusters. Fail if some atom does not belong to a
-  residue.
-- `EachVertex`: each vertex is its own cluster.
-- `Auto`: attempt `Input` and fall back to `EachVertex` if the input does not provide
-  adequate residues.
-- `MOF`: discard the input residues and consider the input as a MOF. Identify organic and
-  inorganic clusters using heuristics based on the atom types.
+Selection mode for the crystal structure. This choice impacts the bond detection algorithm
+as well as the clustering algorithm used.
+
+The choices are:
+- `Auto`: No specific structure information. Use Van der Waals radii for bond detection and
+  `Input` as [`Clustering`](@ref), or `EachVertex` if the input does not provide residues.
+- `MOF`: Use Van der Waals radii for non-metallic atoms and larger radii for metals. Detect
+  organic and inorganic clusters and subdivide them according to `AllNodes` and
+  `SingleNodes` to identify underlying nets.
 - `Cluster`: similar to MOF but metallic atoms are not given a wider radius.
-- `Zeolite`: Same as `EachVertex` but attempt to enforce that each O atom has exactly two
-  neighbours and that they are not O atoms.
+- `Zeolite`: Same as `Auto` but use larger radii for metals (and metalloids) and attempt
+  to enforce that each O atom has exactly two neighbours and that they are not O atoms.
 - `Guess`: try to identify the clusters as in `Cluster`. If it fails, fall back to `Auto`.
 """
 module StructureType
     @enum _StructureType begin
-        Input
-        EachVertex
+        Auto
         MOF
-        MOFWiderOrganicSBUs
-        MOFMetalloidIsMetal
         Cluster
         Zeolite
         Guess
-        Auto
     end
     """See help for [`StructureType`](@ref)"""
-    Input, EachVertex, MOF, Cluster, Zeolite, Guess, Auto
-    """Internal clustering modes, similar to MOF but with different heuristics"""
-    MOFWiderOrganicSBUs, MOFMetalloidIsMetal
+    Auto, MOF, Cluster, Zeolite, Guess
 end
 import .StructureType
 import .StructureType: _StructureType
+
+
+"""
+    Clustering
+
+The clustering algorithm used to group atoms into vertices.
+
+This choice only affects the creation of a `CrystalNetGroup` from a `Crystal`, not the
+`Crystal` itself, and in particular not the bond detection algorithm.
+
+The choices are:
+- `Auto`: determined using the [`StructureType`](@ref).
+- `Input`: use the input residues as vertices. Fail if some atom does not belong to a
+  residue.
+- `EachVertex`: each atom is its own vertex. Vertices with degree 2 or lower are
+  iteratively collapsed into edges until all vertices have degree 3 or more.
+- `SingleNodes`: each already-defined cluster (such as organic and inorganic clusters
+  defined by the `MOF` structure) is mapped to a vertex.
+  If a cluster is infinite (such as the inorganic clusters in rod MOFs), it is split into
+  finite sub-clusters using heuristics, and each of those is mapped to a new vertex.
+- `AllNodes`: collapse aromatic cycles into separate vertices. The rest of the already-defined
+  clusters are handled like for `SingleNodes`.
+- `Standard`: make each metallic atom its own vertex. The rest of the already-defined
+  clusters are handled like for `SingleNodes`.
+"""
+module Clustering
+    @enum _Clustering begin
+        Auto
+        Input
+        EachVertex
+        SingleNodes
+        AllNodes
+        Standard
+    end
+    """See help for [`Clustering`](@ref)"""
+    Auto, Input, EachVertex, SingleNodes, AllNodes, Standard
+end
+import .Clustering
+import .Clustering: _Clustering
 
 
 """
@@ -175,28 +209,59 @@ end
 """
     Options
 
-Different options, passed as keyword arguments:
-- name: a name for the structure
-- export_input: path to the directory in which to store the .vtf representing
-            the parsed structure. Empty string if none.
-- export_attributions: path to the directory in which to store the .pdb
-            representing the attribution of vertices into SBUs. Empty if none.
-- export_clusters: path to the directory in which to store the .vtf representing
-            the clustering of vertices. Empty string if none.
-- export_net: path to the directory in which to store the .vtf representing the
-            extracted net on which the topology is computed. Empty string if none.
-- bonding_mode: one of the [`BondingMode`](@ref) options.
-- cutoff_coeff: coefficient used to detect bonds. Default is 0.75, higher
-            values will include bonds that were considered to long before.
+Different options, passed as keyword arguments.
+
+## Basic options
+- name: a name for the structure.
+- bonding_mode: one of the [`BondingMode`](@ref) options. Default is `Auto`
+- structure: one of the [`StructureTypes`](@ref) options. Default is `Auto`
+- clustering: one of the [`Clustering`](@ref) options. Default is `Auto`
+
+## Exports
+For each export option, the accepted values are either a string, indicating the path to
+the directory in which to store the export, or a boolean, specifying whether or not to do
+the export. If the value is `true`, a path will be automatically determined. An empty
+string is equivalent to `false`.
+- export_input: the parsed structure, as a .vtf
+- export_attributions: the attribution of vertices into SBUs, as a .pdb. Only relevant for
+  the `MOF` [`StructureType`](@ref).
+- export_clusters: the clustering of vertices, as a .vtf
+- export_net: the extracted net on which the topology is computed, as a .vtf
+
+## Other options
 - ignore_atoms: set of atom symbols to ignore (for instance `[:C,:H]` will
-            remove carbohydrate solvent residues).
-- bond_adjacent_sbus: bond together SBUs which are only separated by a single C atom.
+  remove carbohydrate solvent residues).
+- ignore_types: disregard atom types to compute the topology, making pcu and
+  pcu-b identical for example (default is true)
+- cutoff_coeff: coefficient used to detect bonds. Default is 0.75, higher
+  values will include bonds that were considered too long before.
 - skip_minimize: assume that the cell is already the unit cell (default is false).
 - dimensions: the set of crystal net dimensions to consider. For instance, putting
-            `Set(3)` will ensure that only 3-dimensional nets are considered.
-            Default is `Set([1,2,3])`.
-- ignore_types: disregard atom types to compute the topology, making pcu and
-            pcu-b identical for example (default is true)
+  `Set(3)` will ensure that only 3-dimensional nets are considered.
+  Default is `Set([1,2,3])`.
+- cluster_kinds: a [`ClusterKinds`](@ref). Default separates organic and inorganic SBUs.
+- ignore_homoatomic_bonds: a `Set{Symbol}` such that all X-X bonds of the net are removed
+  if X is an atom whose type is in `ignore_homoatomic_bonds`.
+
+## Miscellaneous options
+These boolean options have a default value determined by [`BondingMode`](@ref),
+[`StructureType`](@ref) and [`Clustering`](@ref). They can be directly overriden here.
+- bond_adjacent_sbus: bond together SBUs which are only separated by a single C atom.
+- authorize_pruning: remove colliding atoms in the input. Default is true.
+- wider_metallic_bonds: for bond detections, metals have a radius equal to 1.5× their Van
+  der Waals radius.
+- ignore_homometallic_bonds: do not bond two metallic atoms of the same type.
+- ignore_low_occupancy: atoms with occupancy lower than 0.5 are ignored. Default is false.
+- detect_paddlewheels: detect paddle-wheel pattern and group them into an inorganic vertex.
+- detect_heterocycles: detect heterocycles and mark all belonging atoms as organic.
+- split_O_vertex: if a vertex is composed of a single O, remove it and bond together all of
+  its neighbors.
+- unify_sbu_decomposition: apply the same rule to decompose both periodic and finite SBUs.
+
+## Internal fields
+These fields are for internal use and should probably not be modified by the user:
+- dryrun: store information on possible options to try (for `guess_topology`).
+- _pos: the positions of the centre of the clusters collapsed into vertices.
 """
 struct Options
     name::String # used for exports
@@ -213,9 +278,8 @@ struct Options
     ignore_low_occupancy::Bool
     export_input::String
 
-    dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
-
     # Clustering options
+    clustering::Clustering._Clustering
     bond_adjacent_sbus::Bool
     cluster_kinds::ClusterKinds
     detect_paddlewheels::Bool
@@ -233,6 +297,7 @@ struct Options
 
     # Internal
     _pos::Vector{SVector{3,Float64}}
+    dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
 
     function Options(; name="unnamed",
                        bonding_mode=BondingMode.Auto,
@@ -245,7 +310,7 @@ struct Options
                        ignore_homometallic_bonds=nothing,
                        ignore_low_occupancy=false,
                        export_input=DOEXPORT[],
-                       dryrun=nothing,
+                       clustering=Clustering.Auto,
                        bond_adjacent_sbus=false,
                        cluster_kinds=default_sbus,
                        detect_paddlewheels=true,
@@ -259,6 +324,7 @@ struct Options
                        ignore_types=true,
                        export_net=DOEXPORT[],
                        _pos=SVector{3,Float64}[],
+                       dryrun=nothing,
                     )
 
         _export_input = ifbooltempdirorempty(export_input)
@@ -267,15 +333,13 @@ struct Options
         _export_net = ifbooltempdirorempty(export_net)
 
         _ignore_homometallic_bonds = if ignore_homometallic_bonds === nothing
-            structure ∈ (StructureType.MOF, StructureType.MOFMetalloidIsMetal,
-                               StructureType.MOFWiderOrganicSBUs)
+            structure == StructureType.MOF
         else
             ignore_homometallic_bonds
         end
 
         _wider_metallic_bonds = if wider_metallic_bonds === nothing
-            structure ∈ (StructureType.MOF, StructureType.MOFMetalloidIsMetal,
-                               StructureType.MOFWiderOrganicSBUs, StructureType.Zeolite)
+            structure == StructureType.MOF || structure == StructureType.Zeolite
         else
             wider_metallic_bonds
         end
@@ -292,7 +356,7 @@ struct Options
             _ignore_homometallic_bonds,
             ignore_low_occupancy,
             _export_input,
-            dryrun,
+            clustering,
             bond_adjacent_sbus,
             cluster_kinds,
             detect_paddlewheels,
@@ -306,6 +370,7 @@ struct Options
             ignore_types,
             _export_net,
             _pos,
+            dryrun,
         )
     end
 end

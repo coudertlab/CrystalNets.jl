@@ -30,16 +30,24 @@ function parse_commandline(args)
     s = ArgParseSettings(prog = "CrystalNets" * (Sys.iswindows() ? ".exe" : ""),
                          description = "Automatic recognition of crystal net topologies.",
                          epilog = """\n\n\n\nSTRUCTURE options:\n\n
-                         \ua0\ua0\ua0* input: use the input residues as clusters. Fail if some atom does not belong to a residue.\n\n
-                         \ua0\ua0\ua0* atom: each atom is its own cluster.\n\n
-                         \ua0\ua0\ua0* mof: discard the input residues and consider the input as a MOF. Identify organic and inorganic clusters using a simple heuristic based on the atom types.\n\n
-                         \ua0\ua0\ua0* guess: discard the input residues and try clustering mode "mof". If it fails, fall back to "atom".\n\n
-                         \ua0\ua0\ua0* auto: if the input assigns each atom to a residue, equivalent to "input". Otherwise, fall back to "guess". Default option.\n\n
+                         \ua0\ua0\ua0* mof: consider the input as a MOF. Identify organic and inorganic clusters using heuristics.\n\n
+                         \ua0\ua0\ua0* zeolite: attempt to force each O atom two have exactly 2 non-O neighbours.\n\n
+                         \ua0\ua0\ua0* cluster: like mof but metallic atoms are not given a larger radius for bond detection.
+                         \ua0\ua0\ua0* guess: discard the input residues and try structure mode "cluster". If it fails, fall back to "auto".\n\n
+                         \ua0\ua0\ua0* auto: no specific structure. Default option.\n\n
                          \n\n
                          BONDING_MODE options:\n\n
                          \ua0\ua0\ua0* input: use the bonds explicitly given by the input file. Fail if bonds are not provided by the input.\n\n
                          \ua0\ua0\ua0* guess: guess bonds using a variant of chemfiles / VMD algorithm.\n\n
                          \ua0\ua0\ua0* auto: if the input possesses explicit bonds, use them unless they are suspicious. Otherwise, fall back to "guess". Default option.\n\n
+                         \n\n
+                         CLUSTERING options:\n\n
+                         \ua0\ua0\ua0* auto: cluster according to the structure.\n\n
+                         \ua0\ua0\ua0* input: use the input residues as clusters. Fail if some atom does not belong to a residue.\n\n
+                         \ua0\ua0\ua0* atom: each atom is its own cluster.\n\n
+                         \ua0\ua0\ua0* singlenodes: each SBU is clustered into a single vertex.\n\n
+                         \ua0\ua0\ua0* allnodes: within each SBU, atomatic cycles are collapsed into vertices.\n\n
+                         \ua0\ua0\ua0* standard: each metal is its own vertex.\n\n
                          \n\n
                          CREATE_MODE options:\n\n
                          \ua0\ua0\ua0* empty: empty archive, unable to recognize any topological structure.\n\n
@@ -52,10 +60,10 @@ function parse_commandline(args)
                          add_help = false,
                          usage = """
                    usage: CrystalNets [-a ARCHIVE_PATH [-u NAME [-f] | -r [-f]]]
-                                      [[-c STRUCTURE] [-b BONDING_MODE] | -g]
-                                      [--no-export | -e DIR_PATH] CRYSTAL_FILE   (Form A)
-                          CrystalNets -a ARCHIVE_PATH -n [CREATE_MODE] [-f]      (Form B)
-                          CrystalNets -a ARCHIVE_PATH -d [-f]                    (Form C)
+                                      [[-s STRUCTURE] [-b BONDING_MODE] [-c CLUSTERING] | -k]
+                                      [--no-export | -e DIR_PATH] CRYSTAL_FILE                (Form A)
+                          CrystalNets -a ARCHIVE_PATH -n [CREATE_MODE] [-f]                   (Form B)
+                          CrystalNets -a ARCHIVE_PATH -d [-f]                                 (Form C)
                    """)
 
     add_arg_group!(s, "Options common to all forms")
@@ -71,8 +79,9 @@ function parse_commandline(args)
         "--archive", "-a"
             help = """Specify the path to an archive used to recognize topologies.
             If unspecified while using Form A, defaults to a combination of the RCSR
-            Systre archive (available at http://rcsr.net/systre) and the known zeolite
-            topologies (registered at http://www.iza-structure.org/).
+            Systre archive (available at http://rcsr.net/systre), the known zeolite
+            topologies (registered at http://www.iza-structure.org/) and EPINET s-nets
+            (available at http://epinet.anu.edu.au).
             """
             metavar = "ARCHIVE_PATH"
 
@@ -90,11 +99,17 @@ function parse_commandline(args)
             required = false
             metavar = "CRYSTAL_FILE"
 
-        "--clustering", "-c"
-            help = """Clustering mode, to be chosen between input, atom, mof, guess and auto.
+        "--structure", "-s"
+            help = """Structure mode, to be chosen between mof, zeolite, cluster, guess and auto.
             See bottom for more details.
             """
             metavar = "STRUCTURE"
+
+        "--clustering", "-c"
+            help = """Clustering algorithm, to be chosen between auto, input, atom, singlenodes, allnodes and standard.
+            See bottom for more details.
+            """
+            metavar = "CLUSTERING"
 
         "--bond-detect", "-b"
             help = """Bond detection mode, to be chosen between input, guess and auto.
@@ -111,9 +126,9 @@ function parse_commandline(args)
             By default this option is enabled with DIR_PATH=$(tempdir())"""
             metavar = "DIR_PATH"
 
-        "--genome", "-g"
-            help = """If set, consider the CRYSTAL_FILE parameter as a topological
-            genome rather than the path to a crystal.
+        "--key", "-k"
+            help = """If set, consider the CRYSTAL_FILE parameter as a topological key
+            rather than the path to a crystal.
             """
             action = :store_true
 
@@ -287,33 +302,52 @@ function main(args)
             return 0
         end
 
-        @parse_to_str_or_nothing clustering cluster_mode
-        clustering::StructureType._StructureType = begin
-            if cluster_mode isa Nothing
+        @parse_to_str_or_nothing structure structure_mode
+        structure::StructureType._StructureType = begin
+            if structure_mode isa Nothing
                 StructureType.Auto
             else
-                if cluster_mode == "input"
-                    StructureType.Input
-                elseif cluster_mode == "atom"
-                    StructureType.EachVertex
-                elseif cluster_mode == "mof"
+                if structure_mode == "mof"
                     StructureType.MOF
-                elseif cluster_mode == "zeolite"
+                elseif structure_mode == "zeolite"
                     StructureType.Zeolite
-                elseif cluster_mode == "cluster"
+                elseif structure_mode == "cluster"
                     StructureType.Cluster
-                elseif cluster_mode == "guess"
+                elseif structure_mode == "guess"
                     StructureType.Guess
-                elseif cluster_mode == "auto"
+                elseif structure_mode == "auto"
                     StructureType.Auto
                 else
-                    return parse_error("""Unknown clustering mode: $cluster_mode. Choose between "input", "atom", "mof", "guess" and "auto".""")
+                    return parse_error("""Unknown structure type: $structure_mode. Choose between "mof", "zeolite", "cluster", "guess" and "auto".""")
+                end
+            end
+        end
+
+        @parse_to_str_or_nothing clustering clustering_mode
+        clustering::Clustering._Clustering = begin
+            if clustering_mode isa Nothing
+                Clustering.Auto
+            else
+                if clustering_mode == "auto"
+                    Clustering.Auto
+                elseif clustering_mode == "input"
+                    Clustering.Input
+                elseif clustering_mode == "atom"
+                    Clustering.EachVertex
+                elseif clustering_mode == "singlenodes"
+                    Clustering.SingleNodes
+                elseif clustering_mode == "allnodes"
+                    Clustering.AllNodes
+                elseif clustering_mode == "standard"
+                    Clustering.Standard
+                else
+                    return parse_error("""Unknown clustering mode: $structure_mode. Choose between "auto", "input", "atom", "singlenodes", "allnodes" and "standard".""")
                 end
             end
         end
 
         @parse_to_str_or_nothing bond_detect
-        bondingmode::BondingMode._BondingMode = begin
+        bonding_mode::BondingMode._BondingMode = begin
             if bond_detect isa Nothing
                 BondingMode.Auto
             else
@@ -342,9 +376,10 @@ function main(args)
             return parse_error("""Cannot both add and remove a topology from the archive. Choose only one of the options --update-archive and --remove-from-archive.""")
         end
 
-        isgenome::Bool = parsed_args[:genome]
-        if isgenome && cluster_mode isa String
-            return parse_error("""Cannot consider the input as a topological genome while also using a specified clustering method on its vertices because genomes miss atom type information.""")
+        iskey::Bool = parsed_args[:key]
+        if iskey && (structure_mode isa String || clustering_mode isa String)
+            msg = structure_mode isa String ? "structure type" : "clustering mode"
+            return parse_error("""Cannot consider the input as a topological key while also using a specified $(msg) because keys miss atom type information.""")
         end
 
         @parse_to_str_or_nothing input input_file
@@ -362,11 +397,11 @@ function main(args)
             end
         end
 
-        genome::String = if isgenome
+        genome::String = if iskey
             g = try
                 PeriodicGraph(input_file)
             catch e
-                return invalid_input_error("""Impossible to parse the given topological genome because of the following error:""",
+                return invalid_input_error("""Impossible to parse the given topological key because of the following error:""",
                                            e, catch_backtrace())
             end
             try
@@ -378,8 +413,11 @@ function main(args)
         else
             crystal::Crystal = try
                 parse_chemfile(input_file, Options(; export_input=export_path,
-                                                     export_clusters=export_path,
-                                                     bonding_mode, clustering))
+                                                     export_net=export_path,
+                                                     structure,
+                                                     bonding_mode,
+                                                     clustering,
+                                                  ))
             catch e
                 return invalid_input_error("""The input file could not be correctly parsed as as a crystal because of the following error:""",
                                            e, catch_backtrace())

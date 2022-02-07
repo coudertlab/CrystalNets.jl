@@ -762,7 +762,7 @@ function Crystal{Clusters}(c::Crystal, clusters::Clusters; kwargs...)
                             Options(c.options; kwargs...))
 end
 
-trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(coalesce_sbus(c, c.clusters))
+trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(collapse_clusters(c, c.clusters))
 function trimmed_crystal(c::Crystal{Nothing})
     vmap, graph = trim_topology(c.graph)
     return Crystal{Nothing}(c.cell, c.types[vmap], c.pos[vmap], graph, c.options)
@@ -1110,63 +1110,54 @@ end
 
 
 function CrystalNet(crystal::Crystal)
-    c = coalesce_sbus(crystal)
+    c = collapse_clusters(crystal)
     CrystalNet(c.cell, c.types, c.graph, c.options)
 end
 
 function CrystalNetGroup(crystal::Crystal)
-    c = coalesce_sbus(crystal)
+    c = collapse_clusters(crystal)
     CrystalNetGroup(c.cell, c.types, c.graph, c.options)
 end
 
 
-find_clusters(c::Crystal) = find_clusters(c, c.options.structure)
-function find_clusters(c::Crystal{T}, mode::_StructureType)::Tuple{Clusters, _StructureType} where T
-    if mode == StructureType.EachVertex || mode == StructureType.Zeolite
-        return Clusters(length(c.types)), mode
-    elseif mode == StructureType.Auto
-        if T === Clusters
-            return c.clusters, StructureType.Auto
-        else
-            return find_clusters(c, StructureType.EachVertex)
+find_clusters(c::Crystal, structure=c.options.structure) = find_clusters(c, structure, c.options.clustering)
+function find_clusters(c::Crystal{T}, structure::_StructureType, clustering::_Clustering)::Tuple{Clusters,_StructureType,_Clustering} where T
+    if clustering == Clustering.Auto
+        if structure == StructureType.Auto
+            if T === Clusters
+                return c.clusters, structure, clustering
+            else
+                return find_clusters(c, structure, Clustering.EachVertex)
+            end
+        elseif structure == StructureType.Zeolite
+            return find_clusters(c, structure, Clustering.EachVertex)
+        elseif structure == StructureType.Guess
+            crystal = Crystal{Nothing}(c)
+            try
+                return find_clusters(crystal, StructureType.Cluster, clustering)
+            catch e
+                if !(e isa ClusteringError)
+                    rethrow()
+                end
+            end
+            return find_clusters(c, StructureType.Auto, clustering)
+        elseif structure == StructureType.MOF || structure == StructureType.Cluster
+            return find_clusters(c, structure, Clustering.AllNodes)
         end
-    elseif mode == StructureType.Input
+    elseif clustering == Clustering.EachVertex
+        return Clusters(length(c.types)), structure, clustering
+    elseif clustering == Clustering.Input
         if T === Nothing
             throw(ArgumentError("Cannot use input residues as clusters: the input does not have residues."))
         else
-            return c.clusters, StructureType.Input
+            return c.clusters, structure, clustering
         end
-    elseif mode == StructureType.MOF || mode == StructureType.Cluster
-        clusters = find_sbus(c, c.options.cluster_kinds)
-        if length(clusters.sbus) <= 1 && c.options.cluster_kinds == default_sbus
-            return find_clusters(c, StructureType.MOFWiderOrganicSBUs)
-        end
-        return clusters, StructureType.MOF
-    elseif mode == StructureType.MOFWiderOrganicSBUs
-        sbus2 = ClusterKinds([
-            [:metal, :actinide, :lanthanide, :metalloid], [:C, :halogen, :nonmetal],
-        ])
-        clusters = find_sbus(c, sbus2)
-        if length(clusters.sbus) <= 1
-            return find_clusters(c, StructureType.MOFMetalloidIsMetal)
-        end
-        return clusters, StructureType.MOF
-    elseif mode == StructureType.MOFMetalloidIsMetal
-        sbus3 = ClusterKinds([
-            [:metal, :actinide, :lanthanide, :metalloid], [:C, :halogen], [:nonmetal]
-        ], Int[3])
-        clusters = find_sbus(c, sbus3)
-        return clusters, StructureType.MOF
-    elseif mode == StructureType.Guess
-        crystal = Crystal{Nothing}(c)
-        try
-            return find_clusters(crystal, StructureType.Cluster)
-        catch e
-            if !(e isa ClusteringError)
-                rethrow()
-            end
-        end
-        return find_clusters(c, StructureType.Auto)
+    else
+        @toggleassert clustering == Clustering.SingleNodes ||
+                      clustering == Clustering.AllNodes    ||
+                      clustering == Clustering.Standard
+        clusters = find_sbus(c, c.options.cluster_kinds, clustering)
+        return clusters, structure, clustering
     end
 end
 

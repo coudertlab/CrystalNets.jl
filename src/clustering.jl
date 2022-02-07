@@ -75,28 +75,28 @@ struct MissingAtomInformation <: ClusteringError
 end
 
 
-"""
-    find_sbus_naive(crystal)
+# """
+#     find_sbus_naive(crystal)
 
-Naive automatic clustering functions for MOFs
-Simply assign to an organic clusters carbons and hydrogens, and to inorganic
-clusters any atom in (Cd, Co, Cu, N, Ni, O, Sc, W, Zn, Zr). Fail for other atoms.
-"""
-function find_sbus_naive(crystal)
-    n = nv(crystal.graph)
-    classes = Vector{Int}(undef, n)
-    for i in 1:n
-        typ = crystal.types[i]
-        if typ === :C || typ === :H || typ === :D
-            classes[i] = 2
-        elseif typ ∈ (:O, :Cd, :Co, :Cu, :Ni, :Sc, :W, :Zn, :Zr, :N)
-            classes[i] = 1
-        else
-            throw(MissingAtomInformation("unknown atom type: $typ."))
-        end
-    end
-    return first(regroup_sbus(crystal.graph, classes))
-end
+# Naive automatic clustering functions for MOFs
+# Simply assign to an organic clusters carbons and hydrogens, and to inorganic
+# clusters any atom in (Cd, Co, Cu, N, Ni, O, Sc, W, Zn, Zr). Fail for other atoms.
+# """
+# function find_sbus_naive(crystal)
+#     n = nv(crystal.graph)
+#     classes = Vector{Int}(undef, n)
+#     for i in 1:n
+#         typ = crystal.types[i]
+#         if typ === :C || typ === :H || typ === :D
+#             classes[i] = 2
+#         elseif typ ∈ (:O, :Cd, :Co, :Cu, :Ni, :Sc, :W, :Zn, :Zr, :N)
+#             classes[i] = 1
+#         else
+#             throw(MissingAtomInformation("unknown atom type: $typ."))
+#         end
+#     end
+#     return first(regroup_sbus(crystal.graph, classes))
+# end
 
 
 function _trim_monovalent!(graph)
@@ -821,12 +821,12 @@ end
 
 
 """
-    find_sbus(crystal, kinds=default_sbus)
+    find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clustering)
 
 This is an automatic clustering function for MOFs.
 Recognize SBUs using a heuristic based on the atom types.
 """
-function find_sbus(crystal, kinds=default_sbus)
+function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clustering)
     n = nv(crystal.graph)
     classes = Vector{Int}(undef, n)
     for i in 1:n
@@ -1136,15 +1136,15 @@ struct InvalidSBU <: ClusteringError
 end
 
 """
-    coalesce_sbus(crystal::Crystal, clusters::Clusters)
+    collapse_clusters(crystal::Crystal)
 
 Return the new crystal corresponding to the input where each cluster has been
 transformed into a new vertex.
 """
-function coalesce_sbus(c::Crystal, mode::_StructureType=c.options.structure, ::Val{_attempt}=Val(1)) where _attempt
+function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.structure)#, ::Val{_attempt}=Val(1)) where _attempt
     crystal = trim_monovalent(c)
-    clusters, clustering = find_clusters(crystal, mode)
-    if clustering == StructureType.EachVertex || clustering == StructureType.Zeolite
+    clusters, structure, clustering = find_clusters(crystal, _structure)
+    if clustering == Clustering.EachVertex || structure == StructureType.Zeolite
         if crystal.options.split_O_vertex
             return split_O_vertices(crystal)
         end
@@ -1181,20 +1181,12 @@ function coalesce_sbus(c::Crystal, mode::_StructureType=c.options.structure, ::V
             end
         end
     end
-    # if isempty(edgs)
-    #     if _attempt == 1 && clustering == StructureType.MOF
-    #         return coalesce_sbus(crystal, StructureType.MOFWiderOrganicSBUs, Val(2))
-    #     end
-    #     if _attempt == 2
-    #        return coalesce_sbus(crystal, StructureType.MOFMetalloidIsMetal, Val(3))
-    #     end
-    # end
     export_default(crystal, "trimmed", crystal.options.name,
                    crystal.options.export_input)
     n = length(clusters.sbus)
     graph = PeriodicGraph3D(n, edgs)
-    if mode == StructureType.Guess && nv(graph) == 1
-        return coalesce_sbus(crystal, StructureType.Auto)
+    if _structure == StructureType.Guess && nv(graph) == 1
+        return collapse_clusters(crystal, StructureType.Auto)
     end
     if ne(graph) == 0
         return Crystal{Nothing}(crystal.cell, Symbol[], SVector{3,Float64}[], graph, Options(crystal.options; _pos=SVector{3,Float64}[]))
