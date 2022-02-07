@@ -275,7 +275,7 @@ end
 Given the net and the output of `minimal_volume_matrix` computed on the valid translations
 of the net, return the new net representing the initial net in the computed unit cell.
 """
-function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat, collisions) where {D,T}
+function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where {D,T}
     U = widen(T)
     lengths = degree(c.graph)
     if D == 3
@@ -356,7 +356,7 @@ function reduce_with_matrix(c::CrystalNet{D,<:Rational{T}}, mat, collisions) whe
 
     graph = PeriodicGraph{D}(edges)
     @toggleassert degree(graph) == lengths[I_kept]
-    return CrystalNet(cell, c.types[I_kept], sortedcol, graph, c.options), newcollisions
+    return CrystalNet{D,Rational{U}}(cell, c.types[I_kept], sortedcol, graph, c.options), newcollisions
 end
 
 

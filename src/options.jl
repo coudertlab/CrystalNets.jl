@@ -58,7 +58,7 @@ import .StructureType: _StructureType
 
 The clustering algorithm used to group atoms into vertices.
 
-This choice only affects the creation of a `CrystalNetGroup` from a `Crystal`, not the
+This choice only affects the creation of a `UnderlyingNets` from a `Crystal`, not the
 `Crystal` itself, and in particular not the bond detection algorithm.
 
 The choices are:

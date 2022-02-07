@@ -310,7 +310,7 @@ function make_archive(path, destination, verbose=false)
         flag = false
         flagerror = Ref{Any}(Tuple{Vector{Int},String}[])
         genomes::Vector{Tuple{Vector{Int},String}} = try
-            x = topological_genome(CrystalNetGroup(parse_chemfile(path*f)))
+            x = topological_genome(UnderlyingNets(parse_chemfile(path*f)))
             verbose && println(name*" done.")
             x
         catch e

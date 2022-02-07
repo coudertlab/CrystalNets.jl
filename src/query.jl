@@ -12,7 +12,7 @@ possibly if the `ignore_types` option is unset).
 !!! info
     Options must be passed directly within `net`.
 """
-function topological_genome(net::CrystalNet{D,T}) where {D,T}
+function topological_genome(net::CrystalNet{D,T})::String where {D,T}
     isempty(net.pos) && return "non-periodic"
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos,
@@ -60,6 +60,14 @@ function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNo
     return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), collisions)
 end
 
+topological_genome((x, _)::Tuple{CrystalNet,Nothing}) = topological_genome(x)
+function topological_genome((x1, x2)::NTuple{2,CrystalNet})::String
+    if x1 == x2
+        return topological_genome(x1)
+    end
+    topological_genome(x1) * "\tderived from\t" * topological_genome(x2)
+end
+
 """
     topological_genome(g::Union{String,PeriodicGraph}, options::Options=Options())
     topological_genome(g::Union{String,PeriodicGraph}; kwargs...)
@@ -67,7 +75,7 @@ end
 Compute the topological genome of a periodic graph.
 If given a topological key (as a string), it is converted to a `PeriodicGraph` first.
 """
-function topological_genome(g::PeriodicGraph, options::Options)
+function topological_genome(g::PeriodicGraph, options::Options)::String
     net = CrystalNet(g, options)
     return topological_genome(net)
 end
@@ -102,7 +110,7 @@ macro loop_group(ex)
         group = :(group.$D)
         newex = quote
             if !isempty(group)
-                currallowed = first(group)[2].options.dimensions
+                currallowed = first(group)[2][1].options.dimensions
                 if isempty(currallowed) || $i in currallowed
                     $(deepcopy(ex))
                 end
@@ -115,14 +123,14 @@ macro loop_group(ex)
 end
 
 """
-    topological_genome(group::CrystalNetGroup)::Vector{Tuple{Vector{Int},String}}
+    topological_genome(group::UnderlyingNets)::Vector{Tuple{Vector{Int},String}}
 
 Compute the topological genome of each subnet stored in `group`.
 
 !!! info
     Options must be passed directly within the subnets.
 """
-function topological_genome(group::CrystalNetGroup)
+function topological_genome(group::UnderlyingNets)
     ret = Tuple{Vector{Int},String}[]
     @loop_group for (id, net) in group
         push!(ret, (id, topological_genome(net)))
@@ -136,7 +144,7 @@ end
 
 Attempt to recognize a topological genome from an archive of known genomes.
 
-The second form is used on the output of topological_genome(::CrystalNetGroup).
+The second form is used on the output of topological_genome(::UnderlyingNets).
 """
 function recognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
     genome == "non-periodic" && return genome
@@ -153,13 +161,13 @@ end
 
 Compute the topology of the structure described in the file located at `path`.
 This is essentially equivalent to calling
-`recognize_topology(topological_genome(CrystalNetGroup(parse_chemfile(path, options))))`.
+`recognize_topology(topological_genome(UnderlyingNets(parse_chemfile(path, options))))`.
 In the case where the structure is not made of interpenetrating nets, return the name of
 the only net.
 """
 function determine_topology(path, options::Options)
     genomes::Vector{Tuple{Vector{Int},String}} =
-        topological_genome(CrystalNetGroup(parse_chemfile(path, options)))
+        topological_genome(UnderlyingNets(parse_chemfile(path, options)))
     if length(genomes) == 1
         return recognize_topology(genomes[1][2])
     end
@@ -195,7 +203,7 @@ function determine_topologies(path, options::Options)
         name = last(splitdir(f))
         # println(name)
         genomes::Vector{Tuple{Vector{Int},String}} = try
-            topological_genome(CrystalNetGroup(parse_chemfile(f, options)))
+            topological_genome(UnderlyingNets(parse_chemfile(f, options)))
         catch e
             if e isa InterruptException ||
               (e isa TaskFailedException && e.task.result isa InterruptException)
@@ -231,22 +239,25 @@ macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
 
     return esc(quote
     $crystaldef
-    group = CrystalNetGroup(crystal)
+    group = UnderlyingNets(crystal)
     dim, subnets = isempty(group.D3) ? isempty(group.D2) ? (1, group.D1) : (2, group.D2) : (3, group.D3)
-    for (_, net) in subnets
-        sig = string(net.graph)::String
-        sig = get(encountered_graphs, sig, sig)
-        if haskey(encountered_genomes, sig)
-            encountered_genomes[sig] += 1
-        else
-            genome = recognize_topology(topological_genome(net)::String)
-            if dim == maxdim && !startswith(genome, "UNKNOWN") &&
-                    !startswith(genome, "unstable") && !startswith(genome, "non-periodic")
-                $ifprintinfo
-                return genome
+    for (_, nets) in subnets
+        for net in nets
+            net isa CrystalNet || continue
+            sig = string(net.graph)::String
+            sig = get(encountered_graphs, sig, sig)
+            if haskey(encountered_genomes, sig)
+                encountered_genomes[sig] += 1
+            else
+                genome = recognize_topology(topological_genome(net)::String)
+                if dim == maxdim && !startswith(genome, "UNKNOWN") &&
+                        !startswith(genome, "unstable") && !startswith(genome, "non-periodic")
+                    $ifprintinfo
+                    return genome
+                end
+                encountered_graphs[sig] = genome
+                encountered_genomes[genome] = 1
             end
-            encountered_graphs[sig] = genome
-            encountered_genomes[genome] = 1
         end
     end
     end)
@@ -466,7 +477,7 @@ function topologies_dataset(path, save, autoclean, options::Options)
         f = joinpath(path, file)
 
         genomes::Vector{Tuple{Vector{Int},String}} = try
-            topological_genome(CrystalNetGroup(parse_chemfile(f, options)))
+            topological_genome(UnderlyingNets(parse_chemfile(f, options)))
         catch e
             if e isa InterruptException ||
               (e isa TaskFailedException && e.task.result isa InterruptException)

@@ -7,7 +7,7 @@ function Base.showerror(io::IO, e::ClusteringError)
 end
 
 """
-    regroup_sbus(graph::PeriodicGraphs.PeriodicGraph3D, classes::AbstractVector{<:Integer},
+    regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer},
                  keeptogether=Dict{Int,Vector{PeriodicVertex3D}}())
 
 Given a classification of vertices into classes, separate the vertices into clusters
@@ -1141,14 +1141,15 @@ end
 Return the new crystal corresponding to the input where each cluster has been
 transformed into a new vertex.
 """
-function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.structure)#, ::Val{_attempt}=Val(1)) where _attempt
+function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.structure,
+                                       _clustering::_Clustering=c.options.clustering)
     crystal = trim_monovalent(c)
-    clusters, structure, clustering = find_clusters(crystal, _structure)
+    clusters, structure, clustering = find_clusters(crystal, _structure, _clustering)
     if clustering == Clustering.EachVertex || structure == StructureType.Zeolite
         if crystal.options.split_O_vertex
-            return split_O_vertices(crystal)
+            return split_O_vertices(crystal), structure, clustering
         end
-        return Crystal{Nothing}(crystal; _pos=crystal.pos)
+        return Crystal{Nothing}(crystal; _pos=crystal.pos), structure, clustering
     end
     edgs = PeriodicEdge3D[]
     for s in vertices(crystal.graph)
@@ -1189,7 +1190,9 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
         return collapse_clusters(crystal, StructureType.Auto)
     end
     if ne(graph) == 0
-        return Crystal{Nothing}(crystal.cell, Symbol[], SVector{3,Float64}[], graph, Options(crystal.options; _pos=SVector{3,Float64}[]))
+        return (Crystal{Nothing}(crystal.cell, Symbol[], SVector{3,Float64}[], graph,
+                                Options(crystal.options; _pos=SVector{3,Float64}[])),
+                structure, clustering)
     end
     sbus = clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.types, crystal.options.split_O_vertex)]
     n = length(sbus)
@@ -1212,14 +1215,133 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
             else
                 sym = name[j-1]
                 str_sym = counter == 1 ? string(sym) : string(sym, counter)
-                anum = sym === :O ? 6 : sym === :N ? 7 : sym === :C ? 8 : atomic_numbers[sym]
+                anum = sym === :C ? 200 : atomic_numbers[sym] # C is put first to identify organic clusters
                 push!(newname, (anum, str_sym))
+                counter = 1
             end
         end
         sort!(newname; by=first, rev=true)
-        types[i] = length(sbu) == 1 ? crystal.types[first(sbu).v] : Symbol(join(last.(newname))) # Symbol(clusters.classes[clusters.attributions[i]])
+        types[i] = length(sbu) == 1 ? crystal.types[first(sbu).v] : Symbol(join(last.(newname)))
     end
     ret = Crystal{Nothing}(crystal.cell, types, pos, graph, Options(crystal.options; _pos=pos))
     export_default(ret, "clusters", crystal.options.name, crystal.options.export_clusters)
+    return ret, structure, clustering
+end
+
+
+function allnodes_to_singlenodes(cryst::Crystal{Nothing})
+    n = length(cryst.types)
+    organics = falses(n)
+    for (i,t) in enumerate(cryst.types)
+        if t === :C || (s = string(t); length(s) ≥ 2 && s[1] == 'C' && !islowercase(s[2]))
+            organics[i] = true
+        end
+    end
+    vmap = zeros(Int, n)
+    counter = 0
+    for i in 1:n
+        vmap[i] == 0 || continue
+        counter += 1
+        if !organics[i]
+            vmap[i] = counter
+            continue
+        end
+        encountered = Dict{Int,SVector{3,Int}}(i => zero(SVector{3,Int}))
+        Q = [PeriodicVertex3D(i)]
+        periodic = false
+        for u in Q
+            for x in neighbors(cryst.graph, u.v)
+                if organics[x.v]
+                    @toggleassert vmap[x.v] == 0
+                    ofs = u.ofs .+ x.ofs
+                    if haskey(encountered, x.v)
+                        if !periodic && encountered[x.v] != ofs
+                            periodic = true
+                        end
+                    else
+                        encountered[x.v] = ofs
+                        push!(Q, PeriodicVertex3D(x.v, ofs))
+                    end
+                end
+            end
+        end
+        for (j, u) in enumerate(Q)
+            # if the organic SBU is periodic, do not coalesce its vertices
+            vmap[u.v] = ifelse(periodic, counter, counter+j-1)
+        end
+        counter += length(Q)*periodic
+    end
+
+    clusters, periodicsbus = regroup_sbus(cryst.graph, vmap)
+    @toggleassert isempty(periodicsbus)
+    edgs = PeriodicEdge3D[]
+    for e in edges(cryst.graph)
+        src = clusters.attributions[e.src]
+        dst = clusters.attributions[e.dst.v]
+        if src != dst
+            ofs = e.dst.ofs .+ clusters.offsets[e.dst.v] .- clusters.offsets[e.src]
+            push!(edgs, PeriodicEdge3D(src, dst, ofs))
+        end
+    end
+    graph = PeriodicGraph3D(edgs)
+
+    m = length(clusters.sbus)
+    @toggleassert nv(graph) == m
+    pos = Vector{SVector{3,Float64}}(undef, m)
+    types = Vector{Symbol}(undef, m)
+    for (i, sbu) in enumerate(clusters.sbus)
+        compo = Vector{Vector{Tuple{Symbol,Int}}}(undef, length(sbu))
+        for (k, x) in enumerate(sbu)
+            styp = string(cryst.types[x.v])
+            thiscompo = Tuple{Symbol,Int}[]
+            insymb = true
+            currsymb = Symbol("")
+            last_j = 1
+            for j in 2:length(styp)
+                c = styp[j]
+                if insymb
+                    if isuppercase(c)
+                        push!(thiscompo, (Symbol(styp[last_j:j-1]), 1))
+                        last_j = j
+                    elseif isnumeric(c)
+                        insymb = false
+                        currsymb = Symbol(styp[last_j:j-1])
+                        last_j = j
+                    end
+                elseif isletter(c)
+                    @toggleassert isuppercase(c)
+                    insymb = true
+                    push!(thiscompo, (currsymb, parse(Int, styp[last_j:j-1])))
+                    last_j = j
+                end
+            end
+            push!(thiscompo, (currsymb, parse(Int, styp[last_j:end])))
+            compo[k] = thiscompo
+        end
+        lengths = [sum(last, comp) for comp in compo]
+        total_length = sum(lengths)
+        pos[i] = mean((cryst.pos[x.v] .+ x.ofs) .* (lengths[k]/total_length) for (k,x) in enumerate(sbu))
+
+        name = reduce(vcat, compo)
+        sort!(name; by=first)
+        push!(name, (Symbol(""), 0))
+        newname = Tuple{Int,String}[]
+        counter = name[1][2]
+        for j in 2:length(name)
+            if name[j][1] == name[j-1][1]
+                counter += name[j][2]
+            else
+                sym = name[j-1][1]
+                str_sym = counter == 1 ? string(sym) : string(sym, counter)
+                anum = sym === :C ? 200 : atomic_numbers[sym] # C is put first to identify organic clusters
+                push!(newname, (anum, str_sym))
+                counter = name[j][2]
+            end
+        end
+        sort!(newname; by=first, rev=true)
+        types[i] = Symbol(join(last.(newname)))
+    end
+    ret = Crystal{Nothing}(cryst.cell, types, pos, graph, Options(cryst.options; _pos=pos))
+    export_default(ret, "clusters (single nodes)", cryst.options.name, cryst.options.export_clusters)
     return ret
 end

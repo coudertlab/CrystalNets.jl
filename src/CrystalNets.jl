@@ -17,7 +17,7 @@ julia> determine_topology(FILE)
 module CrystalNets
 
 export CrystalNet,
-       CrystalNetGroup,
+       UnderlyingNets,
        parse_chemfile,
        topological_genome,
        recognize_topology,

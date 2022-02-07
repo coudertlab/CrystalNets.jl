@@ -942,18 +942,20 @@ function trim_crystalnet!(graph, types, tohandle, keep)
     return vmap
 end
 
-struct CrystalNetGroup
-    D1::Vector{Tuple{Vector{Int},CrystalNet1D}}
-    D2::Vector{Tuple{Vector{Int},CrystalNet2D}}
-    D3::Vector{Tuple{Vector{Int},CrystalNet3D}}
+struct UnderlyingNets
+    D1::Vector{Tuple{Vector{Int},Tuple{CrystalNet1D,Union{Nothing,CrystalNet1D}}}}
+    D2::Vector{Tuple{Vector{Int},Tuple{CrystalNet2D,Union{Nothing,CrystalNet2D}}}}
+    D3::Vector{Tuple{Vector{Int},Tuple{CrystalNet3D,Union{Nothing,CrystalNet3D}}}}
 end
-CrystalNetGroup() = CrystalNetGroup(Tuple{Vector{Int},CrystalNet1D}[], Tuple{Vector{Int},CrystalNet2D}[], Tuple{Vector{Int},CrystalNet3D}[])
+UnderlyingNets() = UnderlyingNets(Tuple{Vector{Int},Tuple{CrystalNet1D,Union{Nothing,CrystalNet1D}}}[],
+                                  Tuple{Vector{Int},Tuple{CrystalNet1D,Union{Nothing,CrystalNet2D}}}[],
+                                  Tuple{Vector{Int},Tuple{CrystalNet1D,Union{Nothing,CrystalNet3D}}}[])
 
 function _separategroups!(ex, groups, i)
     for j in 1:length(ex.args)
         arg = ex.args[j]
         if arg isa Symbol
-            if arg === :CrystalNetGroups
+            if arg === :UnderlyingNets
                 ex.args[j] = groups
             elseif arg === :CrystalNet
                 ex.args[j] = :(CrystalNet{$i})
@@ -986,10 +988,11 @@ macro separategroups(D, groups, ex)
 end
 
 
-function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
-                         graph::PeriodicGraph, opts::Options)
-    initialvmap, graph = trim_topology(PeriodicGraphs.change_dimension(PeriodicGraph3D, graph))
-    types = types[initialvmap]
+function UnderlyingNets(c::Crystal, flag)
+    cell = c.cell
+    opts = c.options
+    initialvmap, graph = trim_topology(PeriodicGraphs.change_dimension(PeriodicGraph3D, c.graph))
+    types = c.types[initialvmap]
     remove_homoatomic_bonds!(graph, types, opts.ignore_homoatomic_bonds)
     if !isempty(opts.export_net) && !isempty(opts._pos)
         pos = opts._pos[initialvmap]
@@ -1009,7 +1012,7 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
         initialvmap = initialvmap[vmap0]
     end
 
-    groups = CrystalNetGroup()
+    groups = UnderlyingNets()
 
     for D in sort(collect(keys(dimensions)))
         dimD = @inbounds dimensions[D]
@@ -1045,18 +1048,25 @@ function CrystalNetGroup(cell::Cell, types::AbstractVector{Symbol},
                 t = typesD[vmap]
                 vmap = vmapD[vmap]
             end
-            @separategroups D groups push!(groups, (vmap, CrystalNet(cell, t, g, opts)))
+            if !(flag isa Nothing) # add singlenodes alternative
+                cryst = allnodes_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
+                if cryst.graph != g
+                    @separategroups D groups push!(groups, (vmap, (CrystalNet(cell, t, g, opts),
+                        CrystalNet(cell, cryst.types, cryst.graph, opts))))
+                    continue
+                end
+            end
+            @separategroups D groups push!(groups, (vmap, (CrystalNet(cell, t, g, opts), nothing)))
         end
     end
 
     return groups
 end
 
-function CrystalNet(cell::Cell, types::AbstractVector{Symbol},
-                    graph::PeriodicGraph, options::Options)::CrystalNet
-    group = CrystalNetGroup(cell, types, graph, options)
+function CrystalNet(c::Crystal, ::Nothing)::CrystalNet
+    group = UnderlyingNets(c, nothing)
     D = isempty(group.D3) ? isempty(group.D2) ? isempty(group.D1) ? 0 : 1 : 2 : 3
-    D == 0 && return CrystalNet{0,Int8}(cell, Symbol[], SVector{0,Int8}[], PeriodicGraph{0}(), options)
+    D == 0 && return CrystalNet{0,Int8}(c.cell, Symbol[], SVector{0,Int8}[], PeriodicGraph{0}(), c.options)
     nonuniqueD = D != 1 && (!isempty(group.D1) || (D == 3 && !isempty(group.D2)))
     if nonuniqueD
         @ifwarn @warn "Presence of periodic structures of different dimensionalities. Only the highest dimensionality ($D here) will be retained."
@@ -1066,7 +1076,7 @@ function CrystalNet(cell::Cell, types::AbstractVector{Symbol},
         interpenetratingD = length(group) > 1
     end
     if interpenetratingD
-        error(ArgumentError("Multiple interpenetrating $D-dimensional structures. Cannot handle this as a single CrystalNet, use CrystalNetGroup instead."))
+        error(ArgumentError("Multiple interpenetrating $D-dimensional structures. Cannot handle this as a single CrystalNet, use UnderlyingNets instead."))
     end
     @separategroups D group begin
         return last(first(group))
@@ -1079,6 +1089,35 @@ function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
     return CrystalNet{D}(cell, types, g, options)
 end
 
+function CrystalNet(x::UnderlyingNets)
+    if isempty(x.D3)
+        if isempty(x.D2)
+            if isempty(x.D1)
+                error("Empty UnderlyingNets cannot be converted to a CrystalNet.")
+            end
+            if length(x.D1) == 1
+                return x.D1[1][2][1]
+            end
+        end
+        if length(x.D2) == 1 && isempty(x.D1)
+            return x.D2[1][2][1]
+        end
+    end
+    if length(x.D3) == 1 && isempty(x.D2) && isempty(x.D1)
+        return x.D3[1][2][1]
+    end
+    error("UnderlyingNets contain multiple nets, cannot be converted to a single CrystalNet.")
+end
+function CrystalNet{D}(x::UnderlyingNets) where D
+    if D == 3
+        return only(x.D3)[2][1]
+    elseif D == 2
+        return only(x.D2)[2][1]
+    elseif D == 1
+        return only(x.D1)[2][1]
+    end
+    @toggleassert 1 ≤ D ≤ 3
+end
 
 
 macro tryinttype(T)
@@ -1110,13 +1149,16 @@ end
 
 
 function CrystalNet(crystal::Crystal)
-    c = collapse_clusters(crystal)
-    CrystalNet(c.cell, c.types, c.graph, c.options)
+    c, structure, clustering = collapse_clusters(crystal)
+    CrystalNet(c, nothing)
 end
 
-function CrystalNetGroup(crystal::Crystal)
-    c = collapse_clusters(crystal)
-    CrystalNetGroup(c.cell, c.types, c.graph, c.options)
+function UnderlyingNets(crystal::Crystal)
+    c, structure, clustering = collapse_clusters(crystal)
+    if clustering == Clustering.AllNodes && crystal.options.clustering != Clustering.AllNodes
+        return UnderlyingNets(c, structure)
+    end
+    UnderlyingNets(c, nothing)
 end
 
 
@@ -1161,15 +1203,18 @@ function find_clusters(c::Crystal{T}, structure::_StructureType, clustering::_Cl
     end
 end
 
-function CrystalNet(g::Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D},
-                    options::Options)
+const PseudoGraph = Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D}
+function UnderlyingNets(g::PseudoGraph, options::Options)
     graph = PeriodicGraph(g)
     cell = Cell()
     n = nv(graph)
     types = [Symbol("") for _ in 1:n]
-    return CrystalNet(cell, types, graph, options)
+    pos = [zero(SVector{3,Float64}) for _ in 1:n]
+    return UnderlyingNets(Crystal{Nothing}(cell, types, pos, graph, options), nothing)
 end
-function CrystalNet(g::Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D};
-                    kwargs...)
-    return CrystalNet(g, Options(; kwargs...))
-end
+UnderlyingNets(g::PseudoGraph; kwargs...) = UnderlyingNets(g, Options(; kwargs...))
+
+CrystalNet(g::PseudoGraph, options::Options) = CrystalNet(UnderlyingNets(g, options))
+CrystalNet(g::PseudoGraph; kwargs...) = CrystalNet(g, Options(; kwargs...))
+CrystalNet{D}(g::PseudoGraph, options::Options) where {D} = CrystalNet{D}(UnderlyingNets(g, options))
+CrystalNet{D}(g::PseudoGraph; kwargs...) where {D} = CrystalNet{D}(UnderlyingNets(g; kwargs...))

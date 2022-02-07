@@ -503,7 +503,7 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     offset_representatives!(newgraph, .-offsets)
     # net.pos[1] should always be [0,0,0]
 
-    newnet = CrystalNet(net.cell, net.types[vmap], newpos, newgraph, net.options)
+    newnet = CrystalNet{D,soft_widen(T)}(net.cell, net.types[vmap], newpos, newgraph, net.options)
     newnodes = [CollisionNode(newnet.graph, node) for node in collisions]
     return shrink_collisions(newnet, collisions), newnodes
 end
