@@ -796,7 +796,7 @@ function sanity_checks!(graph, pos, types, mat, options)
             push!(removeedges, e)
         end
     end
-    if options.bonding_mode == BondingMode.Auto
+    if options.bonding == Bonding.Auto
         if !isempty(removeedges)
             @ifwarn if smallbondsflag
                 @warn "Suspicious small bond lengths found. Such bonds are probably spurious and will be deleted."
@@ -858,8 +858,8 @@ function parse_as_cif(cif::CIF, options, name)
         push!(pos, cif.pos[:,i])
         #push!(pos, cif.cell.mat * cif.pos[:,i])
     end
-    if isempty(cif.bonds) || options.bonding_mode == BondingMode.Guess
-        if options.bonding_mode == BondingMode.Input
+    if isempty(cif.bonds) || options.bonding == Bonding.Guess
+        if options.bonding == Bonding.Input
             throw(ArgumentError("Cannot use input bonds since there are none. Use another option for --bonds-detect or provide bonds in the CIF file."))
         end
         guessed_bonds = true
@@ -943,7 +943,7 @@ function parse_as_chemfile(frame, options, name)
             push!(bonds[b+1], (a+1, -1f0))
         end
         @toggleassert all(issorted, bonds)
-        if !(options.dryrun isa Nothing) && options.bonding_mode == BondingMode.Auto
+        if !(options.dryrun isa Nothing) && options.bonding == Bonding.Auto
             options.dryrun[:try_Input_bonds] = nothing
         end
     end
@@ -963,7 +963,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
     mat = Float64.(cell.mat)
     graph = PeriodicGraph3D(n, edges_from_bonds(bonds, mat, pos))
 
-    if options.bonding_mode != BondingMode.Input
+    if options.bonding != Bonding.Input
         do_permutation, vmap = sanitize_removeatoms!(graph, pos, types, mat, options)
         if do_permutation
             types = types[vmap]

@@ -27,8 +27,9 @@ export CrystalNet,
        guess_topologies,
        topologies_dataset,
        guess_dataset,
-       BondingMode,
-       StructureType
+       StructureType,
+       Bonding,
+       Clustering
 
 import LinearAlgebra: det, norm, rank
 using Base.Threads

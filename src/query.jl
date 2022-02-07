@@ -302,7 +302,7 @@ function guess_topology(path, defopts)
     #     @ifvalidgenomereturn Options(defopts; ignore_atoms=(:C,)) "ignoring C"
     # end
     # if haskey(dryrun, :try_Input_bonds)
-    #     @ifvalidgenomereturn Options(defopts; bonding_mode=BondingMode.Input) "using input bonds"
+    #     @ifvalidgenomereturn Options(defopts; bonding=Bonding.Input) "using input bonds"
     # end
     # @ifvalidgenomereturn Options(defopts; ignore_low_occupancy=true) "removing atoms with occupancy < 0.5"
     if :Al ∈ atoms && :P ∈ atoms # ALPO datastructure
@@ -330,7 +330,7 @@ function guess_topology(path, defopts)
         # end
     end
     # if haskey(dryrun, :try_no_Auto_bonds)
-    #     @ifvalidgenomereturn Options(defopts; bonding_mode=BondingMode.Guess) "discarding input bonds and guessing them"
+    #     @ifvalidgenomereturn Options(defopts; bonding=Bonding.Guess) "discarding input bonds and guessing them"
     # end
     # if haskey(dryrun, :collisions)
     #     @ifvalidgenomereturn Options(defopts; authorize_pruning=false) "retaining all colliding atoms"

@@ -1,7 +1,7 @@
 ## Computation options
 
 """
-    BondingMode
+    Bonding
 
 Selection mode for the detection of bonds. The choices are:
 - `Input`: use the input bonds. Fail if those are not specified.
@@ -9,16 +9,16 @@ Selection mode for the detection of bonds. The choices are:
 - `Auto`: if the input specifies bonds, use them unless they look suspicious (too small or
   or too large according to a heuristic). Otherwise, fall back to `Guess`.
 """
-module BondingMode
-    @enum _BondingMode begin
+module Bonding
+    @enum _Bonding begin
         Input
         Guess
         Auto
     end
-    """See help for [`BondingMode`](@ref)"""
+    """See help for [`Bonding`](@ref)"""
     Input, Guess, Auto
 end
-import .BondingMode
+import .Bonding
 
 
 """
@@ -213,7 +213,7 @@ Different options, passed as keyword arguments.
 
 ## Basic options
 - name: a name for the structure.
-- bonding_mode: one of the [`BondingMode`](@ref) options. Default is `Auto`
+- bonding: one of the [`Bonding`](@ref) options. Default is `Auto`
 - structure: one of the [`StructureTypes`](@ref) options. Default is `Auto`
 - clustering: one of the [`Clustering`](@ref) options. Default is `Auto`
 
@@ -244,7 +244,7 @@ string is equivalent to `false`.
   if X is an atom whose type is in `ignore_homoatomic_bonds`.
 
 ## Miscellaneous options
-These boolean options have a default value determined by [`BondingMode`](@ref),
+These boolean options have a default value determined by [`Bonding`](@ref),
 [`StructureType`](@ref) and [`Clustering`](@ref). They can be directly overriden here.
 - bond_adjacent_sbus: bond together SBUs which are only separated by a single C atom.
 - authorize_pruning: remove colliding atoms in the input. Default is true.
@@ -267,7 +267,7 @@ struct Options
     name::String # used for exports
 
     # Input options
-    bonding_mode::BondingMode._BondingMode
+    bonding::Bonding._Bonding
     cutoff_coeff::Float64
     structure::StructureType._StructureType
     authorize_pruning::Bool
@@ -300,7 +300,7 @@ struct Options
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
 
     function Options(; name="unnamed",
-                       bonding_mode=BondingMode.Auto,
+                       bonding=Bonding.Auto,
                        structure=StructureType.Auto,
                        cutoff_coeff=0.75,
                        wider_metallic_bonds=nothing,
@@ -346,7 +346,7 @@ struct Options
 
         new(
             name,
-            bonding_mode,
+            bonding,
             cutoff_coeff,
             structure,
             _wider_metallic_bonds,

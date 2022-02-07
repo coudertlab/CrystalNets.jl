@@ -36,7 +36,7 @@ function parse_commandline(args)
                          \ua0\ua0\ua0* guess: discard the input residues and try structure mode "cluster". If it fails, fall back to "auto".\n\n
                          \ua0\ua0\ua0* auto: no specific structure. Default option.\n\n
                          \n\n
-                         BONDING_MODE options:\n\n
+                         BONDING options:\n\n
                          \ua0\ua0\ua0* input: use the bonds explicitly given by the input file. Fail if bonds are not provided by the input.\n\n
                          \ua0\ua0\ua0* guess: guess bonds using a variant of chemfiles / VMD algorithm.\n\n
                          \ua0\ua0\ua0* auto: if the input possesses explicit bonds, use them unless they are suspicious. Otherwise, fall back to "guess". Default option.\n\n
@@ -60,10 +60,10 @@ function parse_commandline(args)
                          add_help = false,
                          usage = """
                    usage: CrystalNets [-a ARCHIVE_PATH [-u NAME [-f] | -r [-f]]]
-                                      [[-s STRUCTURE] [-b BONDING_MODE] [-c CLUSTERING] | -k]
-                                      [--no-export | -e DIR_PATH] CRYSTAL_FILE                (Form A)
-                          CrystalNets -a ARCHIVE_PATH -n [CREATE_MODE] [-f]                   (Form B)
-                          CrystalNets -a ARCHIVE_PATH -d [-f]                                 (Form C)
+                                      [[-s STRUCTURE] [-b BONDING] [-c CLUSTERING] | -k]
+                                      [--no-export | -e DIR_PATH] CRYSTAL_FILE           (Form A)
+                          CrystalNets -a ARCHIVE_PATH -n [CREATE_MODE] [-f]              (Form B)
+                          CrystalNets -a ARCHIVE_PATH -d [-f]                            (Form C)
                    """)
 
     add_arg_group!(s, "Options common to all forms")
@@ -115,7 +115,7 @@ function parse_commandline(args)
             help = """Bond detection mode, to be chosen between input, guess and auto.
             See bottom for more details.
             """
-            metavar = "BONDING_MODE"
+            metavar = "BONDING"
 
         "--no-export"
             help = "Do not automatically export the parsed input."
@@ -347,16 +347,16 @@ function main(args)
         end
 
         @parse_to_str_or_nothing bond_detect
-        bonding_mode::BondingMode._BondingMode = begin
+        bonding::Bonding._Bonding = begin
             if bond_detect isa Nothing
-                BondingMode.Auto
+                Bonding.Auto
             else
                 if bond_detect == "input"
-                    BondingMode.Input
+                    Bonding.Input
                 elseif bond_detect == "guess"
-                    BondingMode.Guess
+                    Bonding.Guess
                 elseif bond_detect == "auto"
-                    BondingMode.Auto
+                    Bonding.Auto
                 else
                     return parse_error("""Unknown bond detection mode: $bond_detect. Choose between "input", "guess" and "auto".""")
                 end
@@ -415,7 +415,7 @@ function main(args)
                 parse_chemfile(input_file, Options(; export_input=export_path,
                                                      export_net=export_path,
                                                      structure,
-                                                     bonding_mode,
+                                                     bonding,
                                                      clustering,
                                                   ))
             catch e
