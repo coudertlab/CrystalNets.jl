@@ -537,7 +537,7 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, passO, passCN, mat,
     # First pass over H, since those are likely bonded to their closest neighbor
     for i in passO
         t = :O
-        if options.clustering_mode == ClusteringMode.Zeolite
+        if options.structure == StructureType.Zeolite
             @reduce_valence dofix 0 2
         else
             @reduce_valence dofix 0 2 2
@@ -952,7 +952,7 @@ function parse_as_chemfile(frame, options, name)
     m = Int(Chemfiles.count_residues(topology))
     residues = [Chemfiles.Residue(topology, i) for i in 0:(m-1)]
 
-    attributions = attribute_residues(residues, n, options.clustering_mode == ClusteringMode.Input)
+    attributions = attribute_residues(residues, n, options.structure == StructureType.Input)
     return finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
 end
 

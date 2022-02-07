@@ -22,7 +22,7 @@ import .BondingMode
 
 
 """
-    ClusteringMode
+    StructureType
 
 Selection mode for the clustering of vertices. The choices are:
 - `Input`: use the input residues as clusters. Fail if some atom does not belong to a
@@ -37,8 +37,8 @@ Selection mode for the clustering of vertices. The choices are:
   neighbours and that they are not O atoms.
 - `Guess`: try to identify the clusters as in `Cluster`. If it fails, fall back to `Auto`.
 """
-module ClusteringMode
-    @enum _ClusteringMode begin
+module StructureType
+    @enum _StructureType begin
         Input
         EachVertex
         MOF
@@ -49,13 +49,13 @@ module ClusteringMode
         Guess
         Auto
     end
-    """See help for [`ClusteringMode`](@ref)"""
+    """See help for [`StructureType`](@ref)"""
     Input, EachVertex, MOF, Cluster, Zeolite, Guess, Auto
     """Internal clustering modes, similar to MOF but with different heuristics"""
     MOFWiderOrganicSBUs, MOFMetalloidIsMetal
 end
-import .ClusteringMode
-import .ClusteringMode: _ClusteringMode
+import .StructureType
+import .StructureType: _StructureType
 
 
 """
@@ -204,7 +204,7 @@ struct Options
     # Input options
     bonding_mode::BondingMode._BondingMode
     cutoff_coeff::Float64
-    clustering_mode::ClusteringMode._ClusteringMode
+    structure::StructureType._StructureType
     authorize_pruning::Bool
     wider_metallic_bonds::Bool
     ignore_atoms::Set{Symbol}
@@ -236,7 +236,7 @@ struct Options
 
     function Options(; name="unnamed",
                        bonding_mode=BondingMode.Auto,
-                       clustering_mode=ClusteringMode.Auto,
+                       structure=StructureType.Auto,
                        cutoff_coeff=0.75,
                        wider_metallic_bonds=nothing,
                        authorize_pruning=true,
@@ -267,15 +267,15 @@ struct Options
         _export_net = ifbooltempdirorempty(export_net)
 
         _ignore_homometallic_bonds = if ignore_homometallic_bonds === nothing
-            clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal,
-                               ClusteringMode.MOFWiderOrganicSBUs)
+            structure ∈ (StructureType.MOF, StructureType.MOFMetalloidIsMetal,
+                               StructureType.MOFWiderOrganicSBUs)
         else
             ignore_homometallic_bonds
         end
 
         _wider_metallic_bonds = if wider_metallic_bonds === nothing
-            clustering_mode ∈ (ClusteringMode.MOF, ClusteringMode.MOFMetalloidIsMetal,
-                               ClusteringMode.MOFWiderOrganicSBUs, ClusteringMode.Zeolite)
+            structure ∈ (StructureType.MOF, StructureType.MOFMetalloidIsMetal,
+                               StructureType.MOFWiderOrganicSBUs, StructureType.Zeolite)
         else
             wider_metallic_bonds
         end
@@ -284,7 +284,7 @@ struct Options
             name,
             bonding_mode,
             cutoff_coeff,
-            clustering_mode,
+            structure,
             _wider_metallic_bonds,
             authorize_pruning,
             Set{Symbol}(ignore_atoms),

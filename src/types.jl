@@ -1120,53 +1120,53 @@ function CrystalNetGroup(crystal::Crystal)
 end
 
 
-find_clusters(c::Crystal) = find_clusters(c, c.options.clustering_mode)
-function find_clusters(c::Crystal{T}, mode::_ClusteringMode)::Tuple{Clusters, _ClusteringMode} where T
-    if mode == ClusteringMode.EachVertex || mode == ClusteringMode.Zeolite
+find_clusters(c::Crystal) = find_clusters(c, c.options.structure)
+function find_clusters(c::Crystal{T}, mode::_StructureType)::Tuple{Clusters, _StructureType} where T
+    if mode == StructureType.EachVertex || mode == StructureType.Zeolite
         return Clusters(length(c.types)), mode
-    elseif mode == ClusteringMode.Auto
+    elseif mode == StructureType.Auto
         if T === Clusters
-            return c.clusters, ClusteringMode.Auto
+            return c.clusters, StructureType.Auto
         else
-            return find_clusters(c, ClusteringMode.EachVertex)
+            return find_clusters(c, StructureType.EachVertex)
         end
-    elseif mode == ClusteringMode.Input
+    elseif mode == StructureType.Input
         if T === Nothing
             throw(ArgumentError("Cannot use input residues as clusters: the input does not have residues."))
         else
-            return c.clusters, ClusteringMode.Input
+            return c.clusters, StructureType.Input
         end
-    elseif mode == ClusteringMode.MOF || mode == ClusteringMode.Cluster
+    elseif mode == StructureType.MOF || mode == StructureType.Cluster
         clusters = find_sbus(c, c.options.cluster_kinds)
         if length(clusters.sbus) <= 1 && c.options.cluster_kinds == default_sbus
-            return find_clusters(c, ClusteringMode.MOFWiderOrganicSBUs)
+            return find_clusters(c, StructureType.MOFWiderOrganicSBUs)
         end
-        return clusters, ClusteringMode.MOF
-    elseif mode == ClusteringMode.MOFWiderOrganicSBUs
+        return clusters, StructureType.MOF
+    elseif mode == StructureType.MOFWiderOrganicSBUs
         sbus2 = ClusterKinds([
             [:metal, :actinide, :lanthanide, :metalloid], [:C, :halogen, :nonmetal],
         ])
         clusters = find_sbus(c, sbus2)
         if length(clusters.sbus) <= 1
-            return find_clusters(c, ClusteringMode.MOFMetalloidIsMetal)
+            return find_clusters(c, StructureType.MOFMetalloidIsMetal)
         end
-        return clusters, ClusteringMode.MOF
-    elseif mode == ClusteringMode.MOFMetalloidIsMetal
+        return clusters, StructureType.MOF
+    elseif mode == StructureType.MOFMetalloidIsMetal
         sbus3 = ClusterKinds([
             [:metal, :actinide, :lanthanide, :metalloid], [:C, :halogen], [:nonmetal]
         ], Int[3])
         clusters = find_sbus(c, sbus3)
-        return clusters, ClusteringMode.MOF
-    elseif mode == ClusteringMode.Guess
+        return clusters, StructureType.MOF
+    elseif mode == StructureType.Guess
         crystal = Crystal{Nothing}(c)
         try
-            return find_clusters(crystal, ClusteringMode.Cluster)
+            return find_clusters(crystal, StructureType.Cluster)
         catch e
             if !(e isa ClusteringError)
                 rethrow()
             end
         end
-        return find_clusters(c, ClusteringMode.Auto)
+        return find_clusters(c, StructureType.Auto)
     end
 end
 

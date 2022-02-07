@@ -1141,10 +1141,10 @@ end
 Return the new crystal corresponding to the input where each cluster has been
 transformed into a new vertex.
 """
-function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mode, ::Val{_attempt}=Val(1)) where _attempt
+function coalesce_sbus(c::Crystal, mode::_StructureType=c.options.structure, ::Val{_attempt}=Val(1)) where _attempt
     crystal = trim_monovalent(c)
     clusters, clustering = find_clusters(crystal, mode)
-    if clustering == ClusteringMode.EachVertex || clustering == ClusteringMode.Zeolite
+    if clustering == StructureType.EachVertex || clustering == StructureType.Zeolite
         if crystal.options.split_O_vertex
             return split_O_vertices(crystal)
         end
@@ -1182,19 +1182,19 @@ function coalesce_sbus(c::Crystal, mode::_ClusteringMode=c.options.clustering_mo
         end
     end
     # if isempty(edgs)
-    #     if _attempt == 1 && clustering == ClusteringMode.MOF
-    #         return coalesce_sbus(crystal, ClusteringMode.MOFWiderOrganicSBUs, Val(2))
+    #     if _attempt == 1 && clustering == StructureType.MOF
+    #         return coalesce_sbus(crystal, StructureType.MOFWiderOrganicSBUs, Val(2))
     #     end
     #     if _attempt == 2
-    #        return coalesce_sbus(crystal, ClusteringMode.MOFMetalloidIsMetal, Val(3))
+    #        return coalesce_sbus(crystal, StructureType.MOFMetalloidIsMetal, Val(3))
     #     end
     # end
     export_default(crystal, "trimmed", crystal.options.name,
                    crystal.options.export_input)
     n = length(clusters.sbus)
     graph = PeriodicGraph3D(n, edgs)
-    if mode == ClusteringMode.Guess && nv(graph) == 1
-        return coalesce_sbus(crystal, ClusteringMode.Auto)
+    if mode == StructureType.Guess && nv(graph) == 1
+        return coalesce_sbus(crystal, StructureType.Auto)
     end
     if ne(graph) == 0
         return Crystal{Nothing}(crystal.cell, Symbol[], SVector{3,Float64}[], graph, Options(crystal.options; _pos=SVector{3,Float64}[]))

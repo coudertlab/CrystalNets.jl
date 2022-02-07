@@ -270,17 +270,17 @@ function guess_topology(path, defopts)
         defopts = Options(defopts; name=splitext(splitdir(path)[2])[1])
     end
 
-    @ifvalidgenomereturn defopts "using clustering_mode=ClusteringMode.Guess" false
+    @ifvalidgenomereturn defopts "using structure=StructureType.Guess" false
 
     # dryrun = Dict{Symbol,Union{Nothing,Set{Symbol}}}()
     # crystal = parse_chemfile(path, Options(defopts; dryrun))
     atoms = Set{Symbol}(crystal.types)
 
     if any(x -> (at = atomic_numbers[x]; (ismetal[at] | ismetalloid[at])), atoms)
-        @ifvalidgenomereturn Options(defopts; clustering_mode=ClusteringMode.MOF) "using MOF clusters"
+        @ifvalidgenomereturn Options(defopts; structure=StructureType.MOF) "using MOF clusters"
     end
 
-    defopts = Options(; clustering_mode=ClusteringMode.Auto)
+    defopts = Options(; structure=StructureType.Auto)
     # if defopts.cutoff_coeff == 0.75 # if default cutoff was used, try larger
     #     @ifvalidgenomereturn Options(defopts; cutoff_coeff=0.85) "using longer cutoff"
     # end
@@ -350,7 +350,7 @@ function guess_topology(path, defopts)
                 "FAILED (perhaps because no net with suitable dimension in $(defopts.dimensions) was found)"
             end : most_plausible_genome
 end
-guess_topology(path; kwargs...) = guess_topology(path, Options(clustering_mode=ClusteringMode.Guess; kwargs...))
+guess_topology(path; kwargs...) = guess_topology(path, Options(structure=StructureType.Guess; kwargs...))
 
 
 """
@@ -392,7 +392,7 @@ function guess_topologies(path, options)
     newgens = sort!(collect(skipmissing(newgenomes)))
     return Dict(ret), unique!(newgens), Dict(skipmissing(failed))
 end
-guess_topologies(path; kwargs...) = guess_topologies(path, db_options(; clustering_mode=ClusteringMode.Guess, kwargs...))
+guess_topologies(path; kwargs...) = guess_topologies(path, db_options(; structure=StructureType.Guess, kwargs...))
 
 
 """
@@ -636,5 +636,5 @@ function guess_dataset(path, save, autoclean, options::Options)
     return result
 end
 function guess_dataset(path, save=true, autoclean=true; kwargs...)
-    guess_dataset(path, save, autoclean, db_options(; clustering_mode=ClusteringMode.Guess, kwargs...))
+    guess_dataset(path, save, autoclean, db_options(; structure=StructureType.Guess, kwargs...))
 end

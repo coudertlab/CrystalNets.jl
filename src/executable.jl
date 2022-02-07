@@ -29,7 +29,7 @@ end
 function parse_commandline(args)
     s = ArgParseSettings(prog = "CrystalNets" * (Sys.iswindows() ? ".exe" : ""),
                          description = "Automatic recognition of crystal net topologies.",
-                         epilog = """\n\n\n\nCLUSTERING_MODE options:\n\n
+                         epilog = """\n\n\n\nSTRUCTURE options:\n\n
                          \ua0\ua0\ua0* input: use the input residues as clusters. Fail if some atom does not belong to a residue.\n\n
                          \ua0\ua0\ua0* atom: each atom is its own cluster.\n\n
                          \ua0\ua0\ua0* mof: discard the input residues and consider the input as a MOF. Identify organic and inorganic clusters using a simple heuristic based on the atom types.\n\n
@@ -52,7 +52,7 @@ function parse_commandline(args)
                          add_help = false,
                          usage = """
                    usage: CrystalNets [-a ARCHIVE_PATH [-u NAME [-f] | -r [-f]]]
-                                      [[-c CLUSTERING_MODE] [-b BONDING_MODE] | -g]
+                                      [[-c STRUCTURE] [-b BONDING_MODE] | -g]
                                       [--no-export | -e DIR_PATH] CRYSTAL_FILE   (Form A)
                           CrystalNets -a ARCHIVE_PATH -n [CREATE_MODE] [-f]      (Form B)
                           CrystalNets -a ARCHIVE_PATH -d [-f]                    (Form C)
@@ -94,7 +94,7 @@ function parse_commandline(args)
             help = """Clustering mode, to be chosen between input, atom, mof, guess and auto.
             See bottom for more details.
             """
-            metavar = "CLUSTERING_MODE"
+            metavar = "STRUCTURE"
 
         "--bond-detect", "-b"
             help = """Bond detection mode, to be chosen between input, guess and auto.
@@ -288,24 +288,24 @@ function main(args)
         end
 
         @parse_to_str_or_nothing clustering cluster_mode
-        clustering::ClusteringMode._ClusteringMode = begin
+        clustering::StructureType._StructureType = begin
             if cluster_mode isa Nothing
-                ClusteringMode.Auto
+                StructureType.Auto
             else
                 if cluster_mode == "input"
-                    ClusteringMode.Input
+                    StructureType.Input
                 elseif cluster_mode == "atom"
-                    ClusteringMode.EachVertex
+                    StructureType.EachVertex
                 elseif cluster_mode == "mof"
-                    ClusteringMode.MOF
+                    StructureType.MOF
                 elseif cluster_mode == "zeolite"
-                    ClusteringMode.Zeolite
+                    StructureType.Zeolite
                 elseif cluster_mode == "cluster"
-                    ClusteringMode.Cluster
+                    StructureType.Cluster
                 elseif cluster_mode == "guess"
-                    ClusteringMode.Guess
+                    StructureType.Guess
                 elseif cluster_mode == "auto"
-                    ClusteringMode.Auto
+                    StructureType.Auto
                 else
                     return parse_error("""Unknown clustering mode: $cluster_mode. Choose between "input", "atom", "mof", "guess" and "auto".""")
                 end
