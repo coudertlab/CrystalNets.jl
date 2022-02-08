@@ -60,12 +60,16 @@ function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNo
     return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), collisions)
 end
 
-topological_genome((x, _)::Tuple{CrystalNet,Nothing}) = topological_genome(x)
-function topological_genome((x1, x2)::NTuple{2,CrystalNet})::String
-    if x1 == x2
-        return topological_genome(x1)
+function topological_genome(x::Vector{CrystalNet{T}}) where {T}
+    init = topological_genome(popfirst!(x))
+    derived = String[]
+    while !isempty(x)
+        net = popfirst!(x)
+        if !isempty(net.types)
+            push!(derived, topological_genome(popfirst!(x)))
+        end
     end
-    topological_genome(x1) * "\tderived from\t" * topological_genome(x2)
+    return string(init, "\tderived from\t", join(derived, "\t,\t", "\tand\t"))
 end
 
 """

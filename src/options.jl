@@ -67,14 +67,19 @@ The choices are:
   residue.
 - `EachVertex`: each atom is its own vertex. Vertices with degree 2 or lower are
   iteratively collapsed into edges until all vertices have degree 3 or more.
-- `SingleNodes`: each already-defined cluster (such as organic and inorganic clusters
-  defined by the `MOF` structure) is mapped to a vertex.
-  If a cluster is infinite (such as the inorganic clusters in rod MOFs), it is split into
-  finite sub-clusters using heuristics, and each of those is mapped to a new vertex.
-- `AllNodes`: collapse aromatic cycles into separate vertices. The rest of the already-defined
-  clusters are handled like for `SingleNodes`.
-- `Standard`: make each metallic atom its own vertex. The rest of the already-defined
-  clusters are handled like for `SingleNodes`.
+
+The next clustering options are designed for MOFs but may target other kinds of frameworks.
+In all cases, the clusters are refinements on top of already-defined clusters, such as the
+organic and inorganic SBUs defined by the `MOF` structure.
+Except for `AllNodes`, infinite clusters (such as the inorganic clusters in a rod MOF) are 
+split into new finite clusters using heuristics.
+- `SingleNodes`: each already-defined cluster is mapped to a vertex.
+- `AllNodes`: keep points of extension for organic clusters. Remove infinite metallic ones.
+- `Standard`: make each metallic atom its own vertex.
+- `PEM`: stands for Points of Extension and Metals. Keep points of extension for organic
+  clusters and each metal centre as a separate vertex.
+- `Intermediate`: keep points of extension for organic clusters. This is not a usual
+  clustering algorithm, but it is used internally to derive the other ones.
 """
 module Clustering
     @enum _Clustering begin
@@ -84,9 +89,11 @@ module Clustering
         SingleNodes
         AllNodes
         Standard
+        PEM
+        Intermediate
     end
     """See help for [`Clustering`](@ref)"""
-    Auto, Input, EachVertex, SingleNodes, AllNodes, Standard
+    Auto, Input, EachVertex, SingleNodes, AllNodes, Standard, PEM, Intermediate
 end
 import .Clustering
 import .Clustering: _Clustering
@@ -213,9 +220,9 @@ Different options, passed as keyword arguments.
 
 ## Basic options
 - name: a name for the structure.
-- bonding: one of the [`Bonding`](@ref) options. Default is `Auto`
-- structure: one of the [`StructureTypes`](@ref) options. Default is `Auto`
-- clustering: one of the [`Clustering`](@ref) options. Default is `Auto`
+- bonding: one of the [`Bonding`](@ref) options. Default is `Bonding.Auto`
+- structure: one of the [`StructureTypes`](@ref) options. Default is `StructureTypes.Auto`
+- clustering: one of the [`Clustering`](@ref) options. Default is `Clustering.Auto`
 
 ## Exports
 For each export option, the accepted values are either a string, indicating the path to

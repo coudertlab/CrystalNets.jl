@@ -16,12 +16,6 @@ of contiguous vertices belonging to the same class.
 """
 function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer},
                       keeptogether=Vector{PeriodicVertex3D}[])
-    n = length(classes)
-    sbus = Vector{PeriodicVertex3D}[]
-    sbu_classes = Int[]
-    attributions = zeros(Int, n)
-    offsets = zeros(SVector{3,Int}, n)
-    periodicsbus = Int[0]
     graph = isempty(keeptogether) ? graph : deepcopy(graph)
     for group in keeptogether
         for i in 1:length(group)
@@ -32,9 +26,16 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
             end
         end
     end
+    n = length(classes)
+    sbus = Vector{PeriodicVertex3D}[]
+    sbu_classes = Int[]
+    attributions = zeros(Int, n)
+    offsets = zeros(SVector{3,Int}, n)
+    periodicsbus = Int[0]
     for i in 1:n
         iszero(attributions[i]) || continue
         class = classes[i]
+        push!(types, classtypes[class])
         push!(sbus, [PeriodicVertex3D(i)])
         push!(sbu_classes, class)
         attr = length(sbus)
@@ -65,7 +66,9 @@ function regroup_sbus(graph::PeriodicGraph3D, classes::AbstractVector{<:Integer}
     end
 
     popfirst!(periodicsbus)
-    return Clusters(sbus, sbu_classes, attributions, offsets), Set(periodicsbus)
+    periodic = falses(length(sbus))
+    periodic[periodicsbus] .= true
+    return Clusters(sbus, sbu_classes, attributions, offsets, periodic), Set(periodicsbus)
 end
 
 
@@ -821,12 +824,12 @@ end
 
 
 """
-    find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clustering)
+    find_sbus(crystal, kinds=default_sbus)
 
-This is an automatic clustering function for MOFs.
-Recognize SBUs using a heuristic based on the atom types.
+Recognize SBUs using heuristics based on the atom types corresponding to the `Intermediate`
+clustering algorithm.
 """
-function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clustering)
+function find_sbus(crystal, kinds=default_sbus)
     n = nv(crystal.graph)
     classes = Vector{Int}(undef, n)
     for i in 1:n
@@ -1149,7 +1152,7 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
         if crystal.options.split_O_vertex
             return split_O_vertices(crystal), structure, clustering
         end
-        return Crystal{Nothing}(crystal; _pos=crystal.pos), structure, clustering
+        return Crystal{Clusters}(crystal, clusters; _pos=crystal.pos), structure, clustering
     end
     edgs = PeriodicEdge3D[]
     for s in vertices(crystal.graph)
@@ -1190,7 +1193,7 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
         return collapse_clusters(crystal, StructureType.Auto)
     end
     if ne(graph) == 0
-        return (Crystal{Nothing}(crystal.cell, Symbol[], SVector{3,Float64}[], graph,
+        return (Crystal{Clusters}(crystal.cell, Symbol[], clusters, SVector{3,Float64}[], graph,
                                 Options(crystal.options; _pos=SVector{3,Float64}[])),
                 structure, clustering)
     end
@@ -1223,55 +1226,13 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
         sort!(newname; by=first, rev=true)
         types[i] = length(sbu) == 1 ? crystal.types[first(sbu).v] : Symbol(join(last.(newname)))
     end
-    ret = Crystal{Nothing}(crystal.cell, types, pos, graph, Options(crystal.options; _pos=pos))
+    ret = Crystal{Clusters}(crystal.cell, types, clusters, pos, graph, Options(crystal.options; _pos=pos))
     export_default(ret, "clusters", crystal.options.name, crystal.options.export_clusters)
     return ret, structure, clustering
 end
 
 
-function allnodes_to_singlenodes(cryst::Crystal{Nothing})
-    n = length(cryst.types)
-    organics = falses(n)
-    for (i,t) in enumerate(cryst.types)
-        if t === :C || (s = string(t); length(s) ≥ 2 && s[1] == 'C' && !islowercase(s[2]))
-            organics[i] = true
-        end
-    end
-    vmap = zeros(Int, n)
-    counter = 0
-    for i in 1:n
-        vmap[i] == 0 || continue
-        counter += 1
-        if !organics[i]
-            vmap[i] = counter
-            continue
-        end
-        encountered = Dict{Int,SVector{3,Int}}(i => zero(SVector{3,Int}))
-        Q = [PeriodicVertex3D(i)]
-        periodic = false
-        for u in Q
-            for x in neighbors(cryst.graph, u.v)
-                if organics[x.v]
-                    @toggleassert vmap[x.v] == 0
-                    ofs = u.ofs .+ x.ofs
-                    if haskey(encountered, x.v)
-                        if !periodic && encountered[x.v] != ofs
-                            periodic = true
-                        end
-                    else
-                        encountered[x.v] = ofs
-                        push!(Q, PeriodicVertex3D(x.v, ofs))
-                    end
-                end
-            end
-        end
-        for (j, u) in enumerate(Q)
-            # if the organic SBU is periodic, do not coalesce its vertices
-            vmap[u.v] = ifelse(periodic, counter, counter+j-1)
-        end
-        counter += length(Q)*periodic
-    end
-
+function regroup_vmap(cryst, vmap, msg)
     clusters, periodicsbus = regroup_sbus(cryst.graph, vmap)
     @toggleassert isempty(periodicsbus)
     edgs = PeriodicEdge3D[]
@@ -1342,6 +1303,135 @@ function allnodes_to_singlenodes(cryst::Crystal{Nothing})
         types[i] = Symbol(join(last.(newname)))
     end
     ret = Crystal{Nothing}(cryst.cell, types, pos, graph, Options(cryst.options; _pos=pos))
-    export_default(ret, "clusters (single nodes)", cryst.options.name, cryst.options.export_clusters)
+    export_default(ret, "clusters ($msg)", cryst.options.name, cryst.options.export_clusters)
     return ret
+end
+
+function regroup_toremove(cryst, toremove_list, msg)
+    graph = PeriodicGraph(cryst.graph)
+    vmap = rem_vertices!(graph, toremove_list)
+    rev_vmap = zeros(nv(crystal.graph))
+    for (i,j) in enumerate(vmap)
+        rev_vmap[j] = i
+    end
+    @toggleassert all(x -> !(x[1] ⊻ (x[2] == 0)), zip(toremove, rev_vmap))
+
+    n = length(cryst.types)
+    toremove = falses(n)
+    toremove[toremove_list] .= true
+
+    new_edgs = PeriodicEdge3D[]
+    for u in toremove_list
+        neighs = neighbors(cryst.graph, u)
+        for (i, x) in enumerate(neighs)
+            toremove[x.v] && continue
+            for j in (i+1):length(neighs)
+                y = neighs[j]
+                toremove[y.v] && continue
+                push!(new_edgs, PeriodicEdge3D(rev_vmap[x.v], rev_vmap[y.v], y.ofs .- x.ofs))
+            end
+        end
+    end
+    for e in new_edgs
+        add_edge!(graph, e)
+    end
+
+    tokeep = trues(n)
+    tokeep[toremove_list] .= false
+    types = cryst.types[tokeep]
+    pos = cryst.pos[tokeep]
+
+    ret = Crystal{Nothing}(cryst.cell, types, pos, graph, Options(cryst.options; _pos=pos))
+    export_default(ret, "clusters ($msg)", cryst.options.name, cryst.options.export_clusters)
+    return ret
+end
+
+"""
+    intermediate_to_allnodes(cryst::Crystal{Clusters})
+
+Convert `Intermediate` result to `AllNodes` by removing all periodic metallic sbus.
+"""
+function intermediate_to_allnodes(cryst::Crystal{Clusters})
+    n = length(cryst.types)
+    @toggleassert n == length(cryst.clusters.periodic)
+    toremove_list = Int[]
+    for (i,t) in enumerate(cryst.types)
+        if cryst.clusters.periodic[i] && !(t === :C ||
+                (s = string(t); length(s) ≥ 2 && s[1] == 'C' && !islowercase(s[2])))
+            push!(toremove_list, i)
+        end
+    end
+
+    return regroup_toremove(cryst, toremove_list, "all nodes")
+end
+
+"""
+    intermediate_to_singlenodes(cryst::Crystal)
+
+Convert `Intermediate` result to `SingleNodes` by collapsing all points of extension
+clusters bonded together into a new organic cluster.
+"""
+function intermediate_to_singlenodes(cryst::Crystal)
+    n = length(cryst.types)
+    organics = falses(n)
+    for (i,t) in enumerate(cryst.types)
+        organics[i] = t === :C || (s = string(t); length(s) ≥ 2 && s[1] == 'C' && !islowercase(s[2]))
+    end
+    vmap = zeros(Int, n)
+    counter = 0
+    for i in 1:n
+        vmap[i] == 0 || continue
+        counter += 1
+        if !organics[i]
+            vmap[i] = counter
+            continue
+        end
+        encountered = Dict{Int,SVector{3,Int}}(i => zero(SVector{3,Int}))
+        Q = [PeriodicVertex3D(i)]
+        periodic = false
+        for u in Q
+            for x in neighbors(cryst.graph, u.v)
+                if organics[x.v]
+                    @toggleassert vmap[x.v] == 0
+                    ofs = u.ofs .+ x.ofs
+                    if haskey(encountered, x.v)
+                        if !periodic && encountered[x.v] != ofs
+                            periodic = true
+                        end
+                    else
+                        encountered[x.v] = ofs
+                        push!(Q, PeriodicVertex3D(x.v, ofs))
+                    end
+                end
+            end
+        end
+        for (j, u) in enumerate(Q)
+            # if the organic SBU is periodic, do not coalesce its vertices
+            vmap[u.v] = ifelse(periodic, counter, counter+j-1)
+        end
+        counter += length(Q)*periodic
+    end
+
+    regroup_vmap(cryst, vmap, "single nodes")
+end
+
+"""
+    intermediate_to_pem(cryst::Crystal)
+
+Convert `Intermediate` result to `PEM` by making one vertex per metal atom.
+"""
+function intermediate_to_pem(cryst::Crystal)
+    
+end
+
+"""
+    intermediate_to_standard(cryst::Crystal)
+
+Convert `Intermediate` result to `Standard` by converting it to `PEM` first and converting
+the result to `SingleNodes`.
+This collapses all points of extension bonded together into new organic SBUs, and separates
+each metal atom into its own new vertex.
+"""
+function intermediate_to_standard(cryst::Crystal)
+    return intermediate_to_singlenodes(intermediate_to_pem(cryst))
 end

@@ -663,6 +663,7 @@ struct Clusters
     classes::Vector{Int}
     attributions::Vector{Int}
     offsets::Vector{SVector{3,Int}}
+    periodic::BitVector
 end
 
 function Clusters(n)
@@ -670,7 +671,7 @@ function Clusters(n)
     classes = collect(1:n)
     attributions = collect(1:n)
     offsets = [zero(SVector{3,Int}) for _ in 1:n]
-    return Clusters(sbus, classes, attributions, offsets)
+    return Clusters(sbus, classes, attributions, offsets, falses(n))
 end
 
 Base.isempty(c::Clusters) = c.attributions == 1:length(c.attributions)
@@ -697,7 +698,8 @@ function Base.getindex(c::Clusters, vmap::AbstractVector{<:Integer})
     offsets = [c.offsets[i] for i in vmap]
     attributions = sbu_vmap[c.attributions[vmap]]
     classes = c.classes[sbu_vmap]
-    return Clusters(sbus, classes, attributions, offsets)
+    periodic = c.periodic[sbu_vmap]
+    return Clusters(sbus, classes, attributions, offsets, periodic)
 end
 
 ## Crystal
@@ -758,8 +760,14 @@ function Crystal{Clusters}(c::Crystal, clusters::Clusters; kwargs...)
     if isempty(kwargs)
         return Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph, c.options)
     end
-    return Crystal{Nothing}(c.cell, c.types, clusters, c.pos, c.graph,
+    return Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph,
                             Options(c.options; kwargs...))
+end
+function Crystal{Clusters}(c::Crystal{T}; kwargs...) where T
+    if T === Clusters
+        return Crystal{Clusters}(c, c.clusters; kwargs...)
+    end
+    Crystal{Clusters}(c, Clusters(length(c.types)); kwargs...)
 end
 
 trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(collapse_clusters(c, c.clusters))
@@ -943,13 +951,14 @@ function trim_crystalnet!(graph, types, tohandle, keep)
 end
 
 struct UnderlyingNets
-    D1::Vector{Tuple{Vector{Int},Tuple{CrystalNet1D,Union{Nothing,CrystalNet1D}}}}
-    D2::Vector{Tuple{Vector{Int},Tuple{CrystalNet2D,Union{Nothing,CrystalNet2D}}}}
-    D3::Vector{Tuple{Vector{Int},Tuple{CrystalNet3D,Union{Nothing,CrystalNet3D}}}}
+    D1::Vector{Tuple{Vector{Int},Vector{CrystalNet1D}}}
+    D2::Vector{Tuple{Vector{Int},Vector{CrystalNet2D}}}
+    D3::Vector{Tuple{Vector{Int},Vector{CrystalNet3D}}}
 end
-UnderlyingNets() = UnderlyingNets(Tuple{Vector{Int},Tuple{CrystalNet1D,Union{Nothing,CrystalNet1D}}}[],
-                                  Tuple{Vector{Int},Tuple{CrystalNet1D,Union{Nothing,CrystalNet2D}}}[],
-                                  Tuple{Vector{Int},Tuple{CrystalNet1D,Union{Nothing,CrystalNet3D}}}[])
+UnderlyingNets() = UnderlyingNets(Tuple{Vector{Int},Vector{CrystalNet1D}}[],
+                                  Tuple{Vector{Int},Vector{CrystalNet2D}}[],
+                                  Tuple{Vector{Int},Vector{CrystalNet1D}}[],
+                                 )
 
 function _separategroups!(ex, groups, i)
     for j in 1:length(ex.args)
@@ -988,7 +997,7 @@ macro separategroups(D, groups, ex)
 end
 
 
-function UnderlyingNets(c::Crystal, flag)
+function UnderlyingNets(c::Crystal, clustering)
     cell = c.cell
     opts = c.options
     initialvmap, graph = trim_topology(PeriodicGraphs.change_dimension(PeriodicGraph3D, c.graph))
@@ -1048,15 +1057,38 @@ function UnderlyingNets(c::Crystal, flag)
                 t = typesD[vmap]
                 vmap = vmapD[vmap]
             end
-            if !(flag isa Nothing) # add singlenodes alternative
-                cryst = allnodes_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
-                if cryst.graph != g
-                    @separategroups D groups push!(groups, (vmap, (CrystalNet(cell, t, g, opts),
-                        CrystalNet(cell, cryst.types, cryst.graph, opts))))
-                    continue
+            if clustering isa Nothing
+                @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, t, g, opts)]))
+            else
+                clustering::Clustering._Clustering
+                if clustering == Clustering.Auto
+                    __pos = c.pos[vmap]
+                    alln = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, __pos, g, c.options))
+                    singlen = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, __pos, g, c.options))
+                    if alln.graph == singlen
+                        @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, alln.types, alln.graph, opts)]))
+                    else
+                        @separategroups D groups push!(groups, (vmap, [
+                            CrystalNet(cell, alln.types, alln.graph, opts),
+                            CrystalNet(cell, singlen.types, singlen.graph, opts),
+                        ]))
+                    end
+                elseif clustering == Clustering.AllNodes
+                    x = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
+                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
+                elseif clustering == Clustering.SingleNodes
+                    x = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
+                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
+                elseif clustering == Clustering.Standard
+                    x = intermediate_to_standard(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
+                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
+                elseif clustering == Clustering.PEM
+                    x = intermediate_to_pem(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
+                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
+                else
+                    error("Internal error: clustering $clustering should not appear here.")
                 end
             end
-            @separategroups D groups push!(groups, (vmap, (CrystalNet(cell, t, g, opts), nothing)))
         end
     end
 
@@ -1155,8 +1187,8 @@ end
 
 function UnderlyingNets(crystal::Crystal)
     c, structure, clustering = collapse_clusters(crystal)
-    if clustering == Clustering.AllNodes && crystal.options.clustering != Clustering.AllNodes
-        return UnderlyingNets(c, structure)
+    if clustering == Clustering.Intermediate && crystal.options.clustering != Clustering.Intermediate
+        return UnderlyingNets(c, crystal.options.clustering)
     end
     UnderlyingNets(c, nothing)
 end
@@ -1184,7 +1216,7 @@ function find_clusters(c::Crystal{T}, structure::_StructureType, clustering::_Cl
             end
             return find_clusters(c, StructureType.Auto, clustering)
         elseif structure == StructureType.MOF || structure == StructureType.Cluster
-            return find_clusters(c, structure, Clustering.AllNodes)
+            return find_clusters(c, structure, Clustering.Intermediate)
         end
     elseif clustering == Clustering.EachVertex
         return Clusters(length(c.types)), structure, clustering
@@ -1197,8 +1229,10 @@ function find_clusters(c::Crystal{T}, structure::_StructureType, clustering::_Cl
     else
         @toggleassert clustering == Clustering.SingleNodes ||
                       clustering == Clustering.AllNodes    ||
-                      clustering == Clustering.Standard
-        clusters = find_sbus(c, c.options.cluster_kinds, clustering)
+                      clustering == Clustering.Standard    ||
+                      clustering == Clustering.PEM         ||
+                      clustering == Clustering.Intermediate
+        clusters = find_sbus(c, c.options.cluster_kinds)
         return clusters, structure, clustering
     end
 end
