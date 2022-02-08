@@ -120,6 +120,7 @@ function _trim_monovalent!(graph)
     end
     return vmap
 end
+
 """
     trim_monovalent(crystal)
 
@@ -830,6 +831,8 @@ Recognize SBUs using heuristics based on the atom types corresponding to the `In
 clustering algorithm.
 """
 function find_sbus(crystal, kinds=default_sbus)
+    separate_metals = crystal.options.separate_metals isa Bool ? _crystal.options.separate_metals :
+        ((crystal.options.clustering == Clustering.Standard) | (crystal.options.clustering == Clustering.PEM))
     n = nv(crystal.graph)
     classes = Vector{Int}(undef, n)
     for i in 1:n
@@ -1138,6 +1141,51 @@ struct InvalidSBU <: ClusteringError
     msg::String
 end
 
+
+find_clusters(c::Crystal, structure=c.options.structure) = find_clusters(c, structure, c.options.clustering)
+function find_clusters(c::Crystal{T}, structure::_StructureType, clustering::_Clustering)::Tuple{Clusters,_StructureType,_Clustering} where T
+    if clustering == Clustering.Auto
+        if structure == StructureType.Auto
+            if T === Clusters
+                return c.clusters, structure, clustering
+            else
+                return find_clusters(c, structure, Clustering.EachVertex)
+            end
+        elseif structure == StructureType.Zeolite
+            return find_clusters(c, structure, Clustering.EachVertex)
+        elseif structure == StructureType.Guess
+            crystal = Crystal{Nothing}(c)
+            try
+                return find_clusters(crystal, StructureType.Cluster, clustering)
+            catch e
+                if !(e isa ClusteringError)
+                    rethrow()
+                end
+            end
+            return find_clusters(c, StructureType.Auto, clustering)
+        elseif structure == StructureType.MOF || structure == StructureType.Cluster
+            return find_clusters(c, structure, Clustering.Intermediate)
+        end
+    elseif clustering == Clustering.EachVertex
+        return Clusters(length(c.types)), structure, clustering
+    elseif clustering == Clustering.Input
+        if T === Nothing
+            throw(ArgumentError("Cannot use input residues as clusters: the input does not have residues."))
+        else
+            return c.clusters, structure, clustering
+        end
+    else
+        @toggleassert clustering == Clustering.Intermediate ||
+                      clustering == Clustering.AllNodes     ||
+                      clustering == Clustering.SingleNodes  ||
+                      clustering == Clustering.Standard     ||
+                      clustering == Clustering.PEM
+        clusters = find_sbus(c, c.options.cluster_kinds)
+        return clusters, structure, clustering
+    end
+end
+
+
 """
     collapse_clusters(crystal::Crystal)
 
@@ -1346,6 +1394,7 @@ function regroup_toremove(cryst, toremove_list, msg)
     return ret
 end
 
+
 """
     intermediate_to_allnodes(cryst::Crystal{Clusters})
 
@@ -1416,18 +1465,9 @@ function intermediate_to_singlenodes(cryst::Crystal)
 end
 
 """
-    intermediate_to_pem(cryst::Crystal)
+    pem_to_standard(cryst::Crystal)
 
-Convert `Intermediate` result to `PEM` by making one vertex per metal atom.
-"""
-function intermediate_to_pem(cryst::Crystal)
-    
-end
-
-"""
-    intermediate_to_standard(cryst::Crystal)
-
-Convert `Intermediate` result to `Standard` by converting it to `PEM` first and converting
+Convert `PEM` result to `Standard` by converting it to `PEM` first and converting
 the result to `SingleNodes`.
 This collapses all points of extension bonded together into new organic SBUs, and separates
 each metal atom into its own new vertex.

@@ -1079,14 +1079,11 @@ function UnderlyingNets(c::Crystal, clustering)
                 elseif clustering == Clustering.SingleNodes
                     x = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
                     @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
-                elseif clustering == Clustering.Standard
-                    x = intermediate_to_standard(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
-                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
-                elseif clustering == Clustering.PEM
-                    x = intermediate_to_pem(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
+                elseif clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
+                    x = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
                     @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
                 else
-                    error("Internal error: clustering $clustering should not appear here.")
+                    @toggleassert clustering == Clustering.PEM
                 end
             end
         end
@@ -1193,49 +1190,6 @@ function UnderlyingNets(crystal::Crystal)
     UnderlyingNets(c, nothing)
 end
 
-
-find_clusters(c::Crystal, structure=c.options.structure) = find_clusters(c, structure, c.options.clustering)
-function find_clusters(c::Crystal{T}, structure::_StructureType, clustering::_Clustering)::Tuple{Clusters,_StructureType,_Clustering} where T
-    if clustering == Clustering.Auto
-        if structure == StructureType.Auto
-            if T === Clusters
-                return c.clusters, structure, clustering
-            else
-                return find_clusters(c, structure, Clustering.EachVertex)
-            end
-        elseif structure == StructureType.Zeolite
-            return find_clusters(c, structure, Clustering.EachVertex)
-        elseif structure == StructureType.Guess
-            crystal = Crystal{Nothing}(c)
-            try
-                return find_clusters(crystal, StructureType.Cluster, clustering)
-            catch e
-                if !(e isa ClusteringError)
-                    rethrow()
-                end
-            end
-            return find_clusters(c, StructureType.Auto, clustering)
-        elseif structure == StructureType.MOF || structure == StructureType.Cluster
-            return find_clusters(c, structure, Clustering.Intermediate)
-        end
-    elseif clustering == Clustering.EachVertex
-        return Clusters(length(c.types)), structure, clustering
-    elseif clustering == Clustering.Input
-        if T === Nothing
-            throw(ArgumentError("Cannot use input residues as clusters: the input does not have residues."))
-        else
-            return c.clusters, structure, clustering
-        end
-    else
-        @toggleassert clustering == Clustering.SingleNodes ||
-                      clustering == Clustering.AllNodes    ||
-                      clustering == Clustering.Standard    ||
-                      clustering == Clustering.PEM         ||
-                      clustering == Clustering.Intermediate
-        clusters = find_sbus(c, c.options.cluster_kinds)
-        return clusters, structure, clustering
-    end
-end
 
 const PseudoGraph = Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D}
 function UnderlyingNets(g::PseudoGraph, options::Options)

@@ -61,7 +61,7 @@ The clustering algorithm used to group atoms into vertices.
 This choice only affects the creation of a `UnderlyingNets` from a `Crystal`, not the
 `Crystal` itself, and in particular not the bond detection algorithm.
 
-The choices are:
+The basic choices are:
 - `Auto`: determined using the [`StructureType`](@ref).
 - `Input`: use the input residues as vertices. Fail if some atom does not belong to a
   residue.
@@ -293,6 +293,7 @@ struct Options
     detect_heterocycles::Bool
     split_O_vertex::Bool
     unify_sbu_decomposition::Bool
+    separate_metals::Union{Nothing,Bool}
     export_attributions::String
     export_clusters::String
 
@@ -324,6 +325,7 @@ struct Options
                        detect_heterocycles=true,
                        split_O_vertex=true,
                        unify_sbu_decomposition=false,
+                       separate_metals=nothing,
                        export_attributions="",
                        export_clusters="",
                        skip_minimize=false,
@@ -370,6 +372,7 @@ struct Options
             detect_heterocycles,
             split_O_vertex,
             unify_sbu_decomposition,
+            separate_metals,
             _export_attributions,
             _export_clusters,
             skip_minimize,
