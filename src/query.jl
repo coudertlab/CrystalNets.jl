@@ -63,13 +63,21 @@ end
 function topological_genome(x::Vector{CrystalNet{T}}) where {T}
     init = topological_genome(popfirst!(x))
     derived = String[]
+    last_derived = init
     while !isempty(x)
         net = popfirst!(x)
         if !isempty(net.types)
-            push!(derived, topological_genome(popfirst!(x)))
+            _derived = topological_genome(net)
+            if _derived != last_derived
+                push!(derived, _derived)
+                last_derived = _derived
+            end
         end
     end
-    return string(init, "\tderived from\t", join(derived, "\t,\t", "\tand\t"))
+    if isempty(derived)
+        return init
+    end
+    return string(init, " | ", join(derived, " | "))
 end
 
 """
@@ -152,7 +160,14 @@ The second form is used on the output of topological_genome(::UnderlyingNets).
 """
 function recognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
     genome == "non-periodic" && return genome
-    get(arc, genome, startswith(genome, "unstable") ? genome : "UNKNOWN "*genome)
+    splits = split(genome, " | ")
+    if length(splits) == 1
+        return get(arc, genome, startswith(genome, "unstable") ? genome : "UNKNOWN "*genome)
+    end
+    for (i, s) in enumerate(splits)
+        splits[i] = recognize_topology(s, arc)
+    end
+    return join(splits, " | ")
 end
 
 function recognize_topology(genomes::Vector{Tuple{Vector{Int},String}}, arc=CRYSTAL_NETS_ARCHIVE)

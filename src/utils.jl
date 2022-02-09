@@ -72,7 +72,7 @@ end
 export_default(g::PeriodicGraph, args...; kwargs...) = export_default(CrystalNet(g), args...; kwargs...)
 function export_default(c, obj=nothing, _name=nothing, path=tempdir(); _repeats=nothing)
     repeats = _repeats isa Integer ? _repeats : begin
-        if obj == "net" || obj == "clusters"
+        if obj == "net" || startswith(obj, "clusters")
             2
         else
             nv(c.graph) == 0 ? 1 : clamp(fld(600, nv(c.graph)), 2, 6)

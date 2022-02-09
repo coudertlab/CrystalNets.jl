@@ -683,6 +683,7 @@ function Base.getindex(c::Clusters, vmap::AbstractVector{<:Integer})
     end
     sbus = Vector{PeriodicVertex3D}[]
     sbu_vmap = Int[]
+    sbu_countermap = Vector{Int}(undef, length(c.sbus))
     for (i, sbu) in enumerate(c.sbus)
         newsbu = PeriodicVertex3D[]
         for x in sbu
@@ -690,13 +691,14 @@ function Base.getindex(c::Clusters, vmap::AbstractVector{<:Integer})
             y == 0 && continue
             push!(newsbu, PeriodicVertex3D(y, x.ofs))
         end
-        if !isempty(sbu)
+        if !isempty(newsbu)
             push!(sbu_vmap, i)
             push!(sbus, newsbu)
         end
+        sbu_countermap[i] = length(sbus)
     end
     offsets = [c.offsets[i] for i in vmap]
-    attributions = sbu_vmap[c.attributions[vmap]]
+    attributions = sbu_countermap[c.attributions][vmap]
     classes = c.classes[sbu_vmap]
     periodic = c.periodic[sbu_vmap]
     return Clusters(sbus, classes, attributions, offsets, periodic)
@@ -1065,7 +1067,7 @@ function UnderlyingNets(c::Crystal, clustering)
                     __pos = c.pos[vmap]
                     alln = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, __pos, g, c.options))
                     singlen = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, __pos, g, c.options))
-                    if alln.graph == singlen
+                    if alln.graph == singlen.graph
                         @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, alln.types, alln.graph, opts)]))
                     else
                         @separategroups D groups push!(groups, (vmap, [
@@ -1076,10 +1078,7 @@ function UnderlyingNets(c::Crystal, clustering)
                 elseif clustering == Clustering.AllNodes
                     x = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
                     @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
-                elseif clustering == Clustering.SingleNodes
-                    x = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
-                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
-                elseif clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
+                elseif clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
                     x = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
                     @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
                 else

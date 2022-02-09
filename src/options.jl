@@ -260,7 +260,10 @@ These boolean options have a default value determined by [`Bonding`](@ref),
 - ignore_homometallic_bonds: do not bond two metallic atoms of the same type.
 - ignore_low_occupancy: atoms with occupancy lower than 0.5 are ignored. Default is false.
 - detect_paddlewheels: detect paddle-wheel pattern and group them into an inorganic vertex.
-- detect_heterocycles: detect heterocycles and mark all belonging atoms as organic.
+- detect_organiccycles: detect organic cycles and collapse all belonging C atoms into a new
+  vertex. Default is true.
+- detect_points_of_extension: detect organic points-of-extension (organic atoms bonded to
+  another SBU) and transform them into vertices. Default is true.
 - split_O_vertex: if a vertex is composed of a single O, remove it and bond together all of
   its neighbors.
 - unify_sbu_decomposition: apply the same rule to decompose both periodic and finite SBUs.
@@ -290,7 +293,8 @@ struct Options
     bond_adjacent_sbus::Bool
     cluster_kinds::ClusterKinds
     detect_paddlewheels::Bool
-    detect_heterocycles::Bool
+    detect_organiccycles::Bool
+    detect_points_of_extension::Bool
     split_O_vertex::Bool
     unify_sbu_decomposition::Bool
     separate_metals::Union{Nothing,Bool}
@@ -322,7 +326,8 @@ struct Options
                        bond_adjacent_sbus=false,
                        cluster_kinds=default_sbus,
                        detect_paddlewheels=true,
-                       detect_heterocycles=true,
+                       detect_organiccycles=true,
+                       detect_points_of_extension=true,
                        split_O_vertex=true,
                        unify_sbu_decomposition=false,
                        separate_metals=nothing,
@@ -369,7 +374,8 @@ struct Options
             bond_adjacent_sbus,
             cluster_kinds,
             detect_paddlewheels,
-            detect_heterocycles,
+            detect_organiccycles,
+            detect_points_of_extension,
             split_O_vertex,
             unify_sbu_decomposition,
             separate_metals,
