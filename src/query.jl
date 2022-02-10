@@ -247,8 +247,11 @@ function determine_topologies(path, options::Options)
     return Dict(Iterators.flatten(ret)), unique!(newgens),
            Dict(skipmissing(failed))
 end
-determine_topologies(path; kwargs...) = determine_topologies(path, db_options(; kwargs...))
-
+function determine_topologies(path; kwargs...)
+    opts, restore_warns = db_options(; kwargs...)
+    determine_topologies(path, opts)
+    restore_warns && (DOWARN[] = true)
+end
 
 
 macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
@@ -422,8 +425,11 @@ function guess_topologies(path, options)
     newgens = sort!(collect(skipmissing(newgenomes)))
     return Dict(ret), unique!(newgens), Dict(skipmissing(failed))
 end
-guess_topologies(path; kwargs...) = guess_topologies(path, db_options(; structure=StructureType.Guess, kwargs...))
-
+function guess_topologies(path; kwargs...)
+    opts, restore_warns = db_options(; structure=StructureType.Guess, kwargs...)
+    guess_topologies(path, opts)
+    restore_warns && (DOWARN[] = true)
+end
 
 """
     topologies_dataset(path, save, autoclean, options::Options)
@@ -550,7 +556,9 @@ function topologies_dataset(path, save, autoclean, options::Options)
     return result
 end
 function topologies_dataset(path, save=true, autoclean=true; kwargs...)
-    topologies_dataset(path, save, autoclean, db_options(; kwargs...))
+    opts, restore_warns = db_options(; kwargs...)
+    topologies_dataset(path, save, autoclean, opts)
+    restore_warns && (DOWARN[] = true)
 end
 
 
@@ -666,5 +674,7 @@ function guess_dataset(path, save, autoclean, options::Options)
     return result
 end
 function guess_dataset(path, save=true, autoclean=true; kwargs...)
-    guess_dataset(path, save, autoclean, db_options(; structure=StructureType.Guess, kwargs...))
+    opts, restore_warns = db_options(; structure=StructureType.Guess, kwargs...)
+    guess_dataset(path, save, autoclean, opts)
+    restore_warns && (DOWARN[] = true)
 end

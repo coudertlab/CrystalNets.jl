@@ -72,7 +72,7 @@ end
 export_default(g::PeriodicGraph, args...; kwargs...) = export_default(CrystalNet(g), args...; kwargs...)
 function export_default(c, obj=nothing, _name=nothing, path=tempdir(); _repeats=nothing)
     repeats = _repeats isa Integer ? _repeats : begin
-        if obj == "net" || startswith(obj, "clusters")
+        if obj == "net" || startswith(obj, "clusters") || startswith(obj, "subnet")
             2
         else
             nv(c.graph) == 0 ? 1 : clamp(fld(600, nv(c.graph)), 2, 6)
@@ -100,13 +100,18 @@ function export_default(c, obj=nothing, _name=nothing, path=tempdir(); _repeats=
 end
 
 function db_options(; kwargs...)
-    if DOWARN[]
-        @error "Warnings may critically alter performance."
-        @info "Use CrystalNets.toggle_warning(false) or the --no-warn option to remove them"
+    restore_warns = false
+    if DOWARN[] && !get(kwargs, :force_warn, false)
+        restore_warns = true
+        @warn "Warnings may critically alter performance for this operation and were turned off."
+        @info "Use CrystalNets.toggle_warning(false) or the --no-warn option to remove this warning"
+        @info "Use the force_warn option to force printing warnings"
+        DOWARN[] = false
     end
     # if kwargs explicitly set one of the two, it will take precedence
     return Options(; export_input="", export_attributions="", export_clusters="", 
-                     export_net="", kwargs...)
+                     export_net="", export_subnets="", kwargs...),
+           restore_warns
 end
 
 

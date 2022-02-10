@@ -233,7 +233,9 @@ string is equivalent to `false`.
 - export_attributions: the attribution of vertices into SBUs, as a .pdb. Only relevant for
   the `MOF` [`StructureType`](@ref).
 - export_clusters: the clustering of vertices, as a .vtf
-- export_net: the extracted net on which the topology is computed, as a .vtf
+- export_net: the overall extracted net on which the topology is computed, as a .vtf.
+- export_subnets: each connected component of the overall net as a separate .vtf file.
+  These subnets are defined after grouping vertices according to their [`Clustering`](@ref).
 
 ## Other options
 - ignore_atoms: set of atom symbols to ignore (for instance `[:C,:H]` will
@@ -267,6 +269,8 @@ These boolean options have a default value determined by [`Bonding`](@ref),
 - split_O_vertex: if a vertex is composed of a single O, remove it and bond together all of
   its neighbors.
 - unify_sbu_decomposition: apply the same rule to decompose both periodic and finite SBUs.
+- force_warn: force printing warning and information even during `..._dataset` and
+  `..._topologies` function calls.
 
 ## Internal fields
 These fields are for internal use and should probably not be modified by the user:
@@ -287,6 +291,7 @@ struct Options
     ignore_homometallic_bonds::Bool
     ignore_low_occupancy::Bool
     export_input::String
+    force_warn::Bool
 
     # Clustering options
     clustering::Clustering._Clustering
@@ -306,6 +311,7 @@ struct Options
     dimensions::Set{Int}
     ignore_types::Bool
     export_net::String
+    export_subnets::String
 
     # Internal
     _pos::Vector{SVector{3,Float64}}
@@ -322,6 +328,7 @@ struct Options
                        ignore_homometallic_bonds=nothing,
                        ignore_low_occupancy=false,
                        export_input=DOEXPORT[],
+                       force_warn=false,
                        clustering=Clustering.Auto,
                        bond_adjacent_sbus=false,
                        cluster_kinds=default_sbus,
@@ -336,7 +343,8 @@ struct Options
                        skip_minimize=false,
                        dimensions=Set{Int}([1,2,3]),
                        ignore_types=true,
-                       export_net=DOEXPORT[],
+                       export_net=false,
+                       export_subnets=DOEXPORT[],
                        _pos=SVector{3,Float64}[],
                        dryrun=nothing,
                     )
@@ -345,6 +353,7 @@ struct Options
         _export_attributions = ifbooltempdirorempty(export_attributions)
         _export_clusters = ifbooltempdirorempty(export_clusters)
         _export_net = ifbooltempdirorempty(export_net)
+        _export_subnets = ifbooltempdirorempty(export_subnets)
 
         _ignore_homometallic_bonds = if ignore_homometallic_bonds === nothing
             structure == StructureType.MOF
@@ -370,6 +379,7 @@ struct Options
             _ignore_homometallic_bonds,
             ignore_low_occupancy,
             _export_input,
+            force_warn,
             clustering,
             bond_adjacent_sbus,
             cluster_kinds,
@@ -385,6 +395,7 @@ struct Options
             Set{Int}(dimensions),
             ignore_types,
             _export_net,
+            _export_subnets,
             _pos,
             dryrun,
         )

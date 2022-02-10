@@ -775,7 +775,9 @@ end
 trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(collapse_clusters(c, c.clusters))
 function trimmed_crystal(c::Crystal{Nothing})
     vmap, graph = trim_topology(c.graph)
-    return Crystal{Nothing}(c.cell, c.types[vmap], c.pos[vmap], graph, c.options)
+    pos = c.pos[vmap]
+    opts = isempty(c.options._pos) ? c.options : Options(c.options; _pos=pos)
+    return Crystal{Nothing}(c.cell, c.types[vmap], pos, graph, opts)
 end
 
 ## CrystalNet
@@ -1002,11 +1004,27 @@ end
 function UnderlyingNets(c::Crystal, clustering)
     cell = c.cell
     opts = c.options
-    initialvmap, graph = trim_topology(PeriodicGraphs.change_dimension(PeriodicGraph3D, c.graph))
-    types = c.types[initialvmap]
+    early_trim = clustering isa Nothing || clustering ∉ (Clustering.Auto, Clustering.AllNodes, Clustering.SingleNodes, Clustering.Standard)
+    _graph = PeriodicGraphs.change_dimension(PeriodicGraph3D, c.graph)
+    initialvmap::Union{Nothing,Vector{Int}} = if early_trim
+        _initialvmap, graph = trim_topology(_graph)
+        types = c.types[_initialvmap]
+        _initialvmap
+    else
+        types = c.types
+        graph = _graph
+        nothing
+    end
+
     remove_homoatomic_bonds!(graph, types, opts.ignore_homoatomic_bonds)
     if !isempty(opts.export_net) && !isempty(opts._pos)
-        pos = opts._pos[initialvmap]
+        if initialvmap isa Vector{Int}
+            pos = opts._pos[initialvmap]
+        else
+            @ifwarn @info "The following net is exported before trimming because clustering $clustering was chosen. Use the export_subnets option to see the nets after clustering and trimming."
+            pos = opts._pos
+        end
+
         export_default(Crystal{Nothing}(cell, types, pos, graph, opts), 
                        "net", opts.name, opts.export_net)
     end
@@ -1020,7 +1038,7 @@ function UnderlyingNets(c::Crystal, clustering)
         vmap0 = trim_crystalnet!(graph, types, dim0, false)
         types = types[vmap0]
         dimensions = PeriodicGraphs.dimensionality(graph)
-        initialvmap = initialvmap[vmap0]
+        initialvmap = initialvmap isa Vector{Int} ? initialvmap[vmap0] : vmap0
     end
 
     groups = UnderlyingNets()
@@ -1030,7 +1048,7 @@ function UnderlyingNets(c::Crystal, clustering)
         if length(dimensions) == 1
             graphD = graph
             typesD = types
-            vmapD = initialvmap
+            vmapD = initialvmap isa Vector{Int} ? initialvmap : collect(1:nv(graph))
         else
             graphD = deepcopy(graph)
             catdimD::Vector{Int} = reduce(vcat, dimD; init=Int[])
@@ -1045,7 +1063,9 @@ function UnderlyingNets(c::Crystal, clustering)
                 end
             end
             typesD = types[vmapD]
-            vmapD = initialvmap[vmapD]
+            if initialvmap isa Vector{Int}
+                vmapD = initialvmap[vmapD]
+            end
         end
         for l in dimD # l is a connex component of dimensionality D
             if length(dimD) == 1
@@ -1059,30 +1079,37 @@ function UnderlyingNets(c::Crystal, clustering)
                 t = typesD[vmap]
                 vmap = vmapD[vmap]
             end
-            if clustering isa Nothing
+            if early_trim
+                clustname = lowercase(string(opts.clustering))
+                export_default(Crystal{Nothing}(cell, t, c.pos[vmap], g, opts),
+                            "subnet", opts.name, opts.export_subnets)
                 @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, t, g, opts)]))
             else
                 clustering::Clustering._Clustering
                 if clustering == Clustering.Auto
                     __pos = c.pos[vmap]
-                    alln = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, __pos, g, c.options))
-                    singlen = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, __pos, g, c.options))
+                    alln = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, __pos, g, opts))
+                    singlen = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, __pos, g, opts))
+                    export_default(alln, "subnet_allnodes", opts.name, opts.export_subnets)
                     if alln.graph == singlen.graph
-                        @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, alln.types, alln.graph, opts)]))
+                        @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, alln.types, alln.graph, alln.options)]))
                     else
+                        export_default(singlen, "subnet_singlenodes", opts.name, opts.export_subnets)
                         @separategroups D groups push!(groups, (vmap, [
-                            CrystalNet(cell, alln.types, alln.graph, opts),
-                            CrystalNet(cell, singlen.types, singlen.graph, opts),
+                            CrystalNet(cell, alln.types, alln.graph, alln.options),
+                            CrystalNet(cell, singlen.types, singlen.graph, singlen.options),
                         ]))
                     end
                 elseif clustering == Clustering.AllNodes
-                    x = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
-                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
-                elseif clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
-                    x = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, c.options))
-                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, opts)]))
+                    x = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
+                    export_default(x, "subnet", opts.name, opts.export_subnets)
+                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, x.options)]))
                 else
-                    @toggleassert clustering == Clustering.PEM
+                    @toggleassert clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
+                    clustname = clustering == Clustering.SingleNodes ? "singlenodes" : "standard"
+                    x = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
+                    export_default(x, "subnet", opts.name, opts.export_subnets)
+                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, x.options)]))
                 end
             end
         end
@@ -1183,7 +1210,9 @@ end
 
 function UnderlyingNets(crystal::Crystal)
     c, structure, clustering = collapse_clusters(crystal)
-    if clustering == Clustering.Intermediate && crystal.options.clustering != Clustering.Intermediate
+    if crystal.options.clustering != Clustering.Intermediate &&
+            (clustering == Clustering.Intermediate ||
+             crystal.options.clustering == Clustering.Standard)
         return UnderlyingNets(c, crystal.options.clustering)
     end
     UnderlyingNets(c, nothing)
