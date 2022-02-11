@@ -122,15 +122,15 @@ atoms waiting to be merged to a neighboring SBU. The neighboring SBU is chosen
 by order in the `sbus` list.
 
 The cluster kinds used by default are
-`CrystalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C, :halogen],
-                           [:P], [:nonmetal, :metalloid], [:noble]], [3, 4])`.
+`CrystalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C,], [:P],
+                           [:nonmetal, :metalloid, :halogen], [:noble]], [3, 4])`.
 This means that all atoms that are either metals, actinides or lanthanides are assigned to
-class 1 and all halogens and C atoms in SBUs of class 2.
+class 1 and all C atoms in SBUs of class 2.
 Afterwards, each group of adjacent P atoms is assigned either class 1 if any of its
 neighbor is of class 1, or class 2 otherwise if any of its neighbor is of class 2.
 If no such neighbor exist, it is assigned to class 1.
-Finally, each group of adjacent nonmetals and metalloids is assigned class 1 or 2 following
-the same rule as for P atoms.
+Finally, each group of adjacent nonmetals, metalloids and halogens is assigned class 1 or 2
+following the same rule as for P atoms.
 
 At the end of the procedure, all atoms are thus given a class between `1` and `length(sbus)`
 which is not in `toclassify`. See also [`find_sbus`](@ref) for the implementation of this
@@ -196,11 +196,25 @@ function Base.getindex(sbus::ClusterKinds, x::Symbol)
     num == 0 && throw(MissingAtomInformation("unknown atom name: $x."))
     return sbus[num]
 end
+function getmetal(sbus::ClusterKinds)
+    ret = get(sbus.dict, :metal, nothing)
+    ret isa Int && return ret
+    ret = get(sbus.dict, :Fe, nothing)
+    ret isa Int && return ret
+    ret = get(sbus.dict, :Cu, nothing)
+    ret isa Int && return ret
+    for (sym, at) in atomic_numbers
+        ismetal[at] || continue
+        ret = get(sbus.dict, sym, nothing)
+        ret isa Int && return ret
+    end
+    return 0
+end
 
 Base.length(sbus::ClusterKinds) = sbus.len
 
 const default_sbus = ClusterKinds([
-    [:metal, :actinide, :lanthanide], [:C, :halogen], [:P], [:nonmetal, :metalloid], [:noble]
+    [:metal, :actinide, :lanthanide], [:C], [:P], [:nonmetal, :metalloid, :halogen], [:noble]
 ], [3, 4])
 
 

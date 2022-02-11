@@ -773,23 +773,23 @@ function detect_organiccycles(classes, graph, pos, mat, Cclass, modifiables)
 end
 
 """
-    group_cycle_C(organiccycle, types, graph)
+    group_cycle(organiccycle, types, graph)
 
-Return a list of Vector{PeriodicVertex3D} where each sublist consists in C atoms belonging
+Return a list of Vector{PeriodicVertex3D} where each sublist consists in atoms belonging
 to the same cycle, and which should thus belong to the same vertex eventually.
 """
-function group_cycle_C(organiccycle, types, graph)
-    _same_SBU_C = Dict{Int,Vector{Int}}() # For each atom, the list of cycles it belongs to
+function group_cycle(organiccycle, types, graph)
+    _same_SBU = Dict{Int,Vector{Int}}() # For each atom, the list of cycles it belongs to
     for (i, cycle) in enumerate(organiccycle)
         for x in cycle
-            types[x] === :C || continue
-            push!(get!(_same_SBU_C, x, Int[]), i)
+            # types[x] === :C || continue
+            push!(get!(_same_SBU, x, Int[]), i)
         end
     end
     m = length(organiccycle)
     union_find_cycles = [i for i in 1:m]
     rev_union_find_cycles = [Int[i] for i in 1:m]
-    for v in values(_same_SBU_C)
+    for v in values(_same_SBU)
         length(v) == 1 && continue
         sort!(v)
         minsbu = minimum([union_find_cycles[vj] for vj in v])
@@ -816,9 +816,9 @@ function group_cycle_C(organiccycle, types, graph)
         group = PeriodicVertex3D[]
         while !isempty(Q)
             u = pop!(Q)
-            if types[u.v] === :C
+            # if types[u.v] === :C
                 push!(group, u)
-            end
+            # end
             for x in neighbors(graph, u.v)
                 x.v ∈ group_v || continue
                 delete!(group_v, x.v)
@@ -869,20 +869,21 @@ function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clust
     last_class = nclasses
     graph = crystal.graph
     organickind = kinds[:C]
+
     if crystal.options.detect_organiccycles
         organiccycle = detect_organiccycles(classes, graph, crystal.pos,
                                     crystal.cell.mat, organickind, temporary_classes_set)
-        same_SBU_C = group_cycle_C(organiccycle, crystal.types, graph)
-        if !isempty(same_SBU_C)
+        same_SBU = group_cycle(organiccycle, crystal.types, graph)
+        if !isempty(same_SBU)
             graph = PeriodicGraph(crystal.graph) # make a modificable copy
-            for C_cycle in same_SBU_C
-                # Each carbon in an aromatic cycle is bonded to the other carbons of the
+            for cycle in same_SBU
+                # Each atom in an aromatic cycle is bonded to the other atoms of the
                 # same cycle. The newly-formed clique is assigned a new class.
                 last_class += 1
-                for (i, x) in enumerate(C_cycle)
+                for (i, x) in enumerate(cycle)
                     classes[x.v] = last_class
-                    for j in (i+1):length(C_cycle)
-                        y = C_cycle[j]
+                    for j in (i+1):length(cycle)
+                        y = cycle[j]
                         add_edge!(graph, x.v, PeriodicVertex3D(y.v, y.ofs .- x.ofs))
                     end
                 end
@@ -958,10 +959,11 @@ function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clust
         end
     end
 
+    metalkind = getmetal(kinds)
     isolate = Int[]
     if separate_metals
         for (i, t) in enumerate(crystal.types)
-            if ismetal[atomic_numbers[t]]
+            if ismetal[atomic_numbers[t]] || (t === :P && classes[i] == metalkind)
                 push!(isolate, i)
             end
         end
@@ -1040,6 +1042,7 @@ function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clust
                     else
                         Set{Symbol}(metallics)
                     end
+                    #=
                     max_degree = 0
                     max_degree_types = Set{Symbol}()
                     min_degree = 16
@@ -1079,7 +1082,8 @@ function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clust
                             end)
                         end
                         Dict{Symbol,Int}(__classof)
-                    end
+                    end=#
+                    _classof::Dict{Symbol,Int} = Dict{Symbol,Int}([(t => 0) for t in _singulars])
                     if crystal.options.unify_sbu_decomposition
                         toadd = Int[]
                         for (i, compo) in enumerate(unique_compositions)
@@ -1238,6 +1242,17 @@ function find_clusters(c::Crystal{T}, structure::_StructureType, clustering::_Cl
 end
 
 
+function order_atomtype(sym)
+    sym === :C && return 119 # C is put first to identify organic clusters
+    sym === :P && return 1 # Put P before the other non-metals, but after everything else
+    anum = atomic_numbers[sym]
+    elcat = element_categories[anum]
+    if elcat === :nonmetal || elcat === :noble || elcat === :halogen
+        return -anum # Put non-metals at last
+    end
+    return anum
+end
+
 """
     collapse_clusters(crystal::Crystal)
 
@@ -1319,11 +1334,7 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
             else
                 sym = name[j-1]
                 str_sym = counter == 1 ? string(sym) : string(sym, counter)
-                anum = sym === :C ? 119 : atomic_numbers[sym] # C is put first to identify organic clusters
-                elcat = element_categories[anum]
-                if elcat === :nonmetal || elcat === :noble || elcat === :halogen
-                    anum = -anum # Put non-metals at last
-                end
+                anum = order_atomtype(sym)
                 push!(newname, (anum, str_sym))
                 counter = 1
             end
@@ -1372,14 +1383,32 @@ function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
         add_edge!(graph, e)
     end
 
-    types = cryst.types[vmap]
     pos = cryst.pos[vmap]
+    remove_triangles!(graph, pos, nothing, Float64.(cryst.cell.mat), new_edgs)
+
+    types = cryst.types[vmap]
+    
 
     ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, types, pos, graph, Options(cryst.options; _pos=pos)))
     export_default(ret, "clusters_$msg", cryst.options.name, cryst.options.export_clusters)
     return ret
 end
 
+
+function identify_metallic_type(t, kinds, metalkind=getmetal(kinds))
+    at = get(atomic_numbers, t, 0)
+    if at == 0
+        styp = string(t)
+        @toggleassert length(styp) ≥ 2
+        t = islowercase(styp[2]) ? Symbol(styp[1:2]) : Symbol(styp[1])
+        at = atomic_numbers[t]
+    end
+    ismetal[at] && return true
+    k = kinds[t]
+    k == metalkind && return true
+    k ∈ kinds.tomerge && return missing
+    return false
+end
 
 """
     intermediate_to_allnodes(cryst::Crystal{Nothing})
@@ -1388,16 +1417,39 @@ Convert `Intermediate` result to `AllNodes` by removing all periodic metallic sb
 """
 function intermediate_to_allnodes(cryst::Crystal{Nothing})
     n = length(cryst.types)
+    visited = falses(n)
     metallic = falses(n)
     metallic_list = Int[]
+    kinds = cryst.options.cluster_kinds
+    metalkind = getmetal(kinds)
     for (i,t) in enumerate(cryst.types)
-        at = get(atomic_numbers, t, 0)
-        if at == 0
-            styp = string(t)
-            @toggleassert length(styp) ≥ 2
-            at = atomic_numbers[islowercase(styp[2]) ? Symbol(styp[1:2]) : Symbol(styp[1])]
+        visited[i] && continue
+        visited[i] = true
+        _metal_identified = identify_metallic_type(t, kinds, metalkind)
+        metal_identified = _metal_identified isa Bool ? _metal_identified : begin
+            # in this case, it depends on whether there exists a metallic neighbor
+            flag = false
+            for x in neighbors(cryst.graph, i)
+                if metallic[x.v]
+                    flag = true
+                    break
+                end
+                if !visited[x.v]
+                    _met = identify_metallic_type(cryst.types[x.v], kinds, metalkind)
+                    if _met isa Bool
+                        visited[x.v] = true
+                        metallic[x.v] = _met
+                        if _met
+                            flag = true
+                            push!(metallic_list, x.v)
+                            break
+                        end
+                    end
+                end
+            end
+            flag
         end
-        if ismetal[at]
+        if metal_identified
             push!(metallic_list, i)
             metallic[i] = true
         end
@@ -1539,11 +1591,7 @@ function regroup_vmap(cryst, vmap, isolate, msg)
             else
                 sym = name[j-1][1]
                 str_sym = counter == 1 ? string(sym) : string(sym, counter)
-                anum = sym === :C ? 119 : atomic_numbers[sym] # C is put first to identify organic clusters
-                elcat = element_categories[anum]
-                if elcat === :nonmetal || elcat === :noble || elcat === :halogen
-                    anum = -anum # Put non-metals at last
-                end
+                anum = order_atomtype(sym)
                 push!(newname, (anum, str_sym))
                 counter = name[j][2]
             end
@@ -1569,7 +1617,7 @@ function intermediate_to_singlenodes(cryst::Crystal)
         if t !== :C
             s = string(t)
             el = length(s) ≥ 2 && islowercase(s[2]) ? Symbol(s[1:2]) : Symbol(s[1])
-            if ismetal[atomic_numbers[el]]
+            if ismetal[atomic_numbers[el]] || el === :P
                 organics[i] = false
             end
         end

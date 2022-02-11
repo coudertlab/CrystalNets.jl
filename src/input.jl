@@ -624,27 +624,33 @@ end
 In a configuration where atoms A, B and C are pairwise bonded, remove the longest of the
 three bonds if it is suspicious (too large and too close to the third atom).
 """
-function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, options) where N
+function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, toinvestigate=collect(edges(graph))) where N
     preprocessed = Dict{PeriodicEdge{N},Tuple{Float64,Bool}}()
     removeedges = Dict{PeriodicEdge{N},Tuple{PeriodicEdge{N},PeriodicEdge{N}}}()
     rev_removeedges = Dict{PeriodicEdge{N},Set{PeriodicEdge{N}}}()
-    toinvestigate = collect(edges(graph))
     while !isempty(toinvestigate)
         new_toinvestigate = Set{PeriodicEdge{N}}()
         for e in toinvestigate
             s, d = e.src, e.dst.v
             bondlength, supcutoff = get!(preprocessed, e) do
-                ats = atomic_numbers[types[s]]
-                atd = atomic_numbers[types[d]]
-                cutoff = ismetal[ats] || ismetal[atd] ? 2.4 : 2.9
                 _bondlength = norm(mat * (pos[d] .+ e.dst.ofs .- pos[s]))
-                _bondlength, _bondlength > cutoff
+                _bondlength, if types isa Nothing
+                    true
+                else
+                    ats = atomic_numbers[types[s]]
+                    atd = atomic_numbers[types[d]]
+                    cutoff = ismetal[ats] || ismetal[atd] ? 2.4 : 2.9
+                    _bondlength > cutoff
+                end
             end
             if supcutoff
-                typs = types[s]; typd = types[d]
-                bypass = (typs === typd && ismetalloid[atomic_numbers[typs]]) ||
-                         (typs === :C && ismetal[atomic_numbers[typd]]) ||
-                         (typd === :C && ismetal[atomic_numbers[typs]])
+                bypass = types isa Nothing ? true : begin
+                    typs = types[s]
+                    typd = types[d]
+                    (typs === typd && ismetalloid[atomic_numbers[typs]]) ||
+                    (typs === :C && ismetal[atomic_numbers[typd]]) ||
+                    (typd === :C && ismetal[atomic_numbers[typs]])
+                end
                 neigh_s = neighbors(graph, s)
                 neigh_d = [PeriodicVertex{N}(x.v, x.ofs .+ e.dst.ofs) for x in neighbors(graph, d)]
                 for x in intersect(neigh_s, neigh_d) # triangle
@@ -652,7 +658,7 @@ function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, options) wh
                     l1 < bondlength || continue
                     l2 = norm(mat * (pos[x.v] .+ x.ofs .- pos[s]))
                     l2 < bondlength || continue
-                    if bypass | (bondlength*bondlength > min(9.0, l1*l1 + l2*l2))
+                    if bypass || (bondlength*bondlength > min(9.0, l1*l1 + l2*l2))
                         e1 = PeriodicEdge(s, x)
                         e1 = PeriodicGraphs.isindirectedge(e1) ? reverse(e1) : e1
                         if haskey(removeedges, e1)
@@ -770,7 +776,7 @@ function sanity_checks!(graph, pos, types, mat, options)
     smallbondsflag = false
     removeedges = PeriodicEdge3D[]
     alreadywarned = Set{Tuple{Symbol,Symbol,Float16}}()
-    preprocessed = remove_triangles!(graph, pos, types, mat, options)
+    preprocessed = remove_triangles!(graph, pos, types, mat)
     for e in edges(graph)
         s, d = e.src, e.dst.v
         bondlength, supcutoff = preprocessed[e]
