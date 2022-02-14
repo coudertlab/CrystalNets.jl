@@ -791,12 +791,11 @@ function group_cycle(organiccycle, types, graph)
     rev_union_find_cycles = [Int[i] for i in 1:m]
     for v in values(_same_SBU)
         length(v) == 1 && continue
-        sort!(v)
-        minsbu = minimum([union_find_cycles[vj] for vj in v])
-        for j in 1:length(v)
-            k = union_find_cycles[j]
-            (k == minsbu || isempty(rev_union_find_cycles[k])) && continue
-            union_find_cycles[j] = k
+        minsbu = minimum(union_find_cycles[vj] for vj in v)
+        for w in v
+            k = union_find_cycles[w]
+            k == minsbu && continue
+            union_find_cycles[w] = minsbu
             for j2 in rev_union_find_cycles[k]
                 union_find_cycles[j2] = minsbu
             end
