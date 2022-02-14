@@ -838,7 +838,7 @@ Recognize SBUs using heuristics based on the atom types corresponding to the `In
 clustering algorithm.
 """
 function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clustering)
-    separate_metals = crystal.options.separate_metals isa Bool ? _crystal.options.separate_metals :
+    separate_metals = crystal.options.separate_metals isa Bool ? crystal.options.separate_metals :
         ((clustering == Clustering.Standard) | (clustering == Clustering.PEM))
     n = nv(crystal.graph)
     classes = Vector{Int}(undef, n)
@@ -1250,7 +1250,7 @@ function order_atomtype(sym)
     anum = atomic_numbers[sym]
     elcat = element_categories[anum]
     if elcat === :nonmetal || elcat === :noble || elcat === :halogen
-        return -anum # Put non-metals at last
+        return anum - 120 # Put non-metals at last
     end
     return anum
 end
@@ -1439,8 +1439,19 @@ function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
     for (u, b) in zip(toremove_list, bond_neighbors)
         b || continue
         @toggleassert rev_vmap[u] == 0
-        neighs = neighbors(cryst.graph, u)
-        append!(new_edgs, convex_hull(neighs, cryst.pos, toremove, rev_vmap))
+        neighs = Set{PeriodicVertex3D}()
+        for x in neighbors(cryst.graph, u)
+            if !toremove[x.v]
+                push!(neighs, x)
+                continue
+            end
+            for y in neighbors(cryst.graph, x.v)
+                y == PeriodicVertex3D(u) && continue
+                push!(neighs, PeriodicVertex3D(y.v, y.ofs .+ x.ofs))
+            end
+        end
+
+        append!(new_edgs, convex_hull(collect(neighs), cryst.pos, toremove, rev_vmap))
     end
     for e in new_edgs
         add_edge!(graph, e)

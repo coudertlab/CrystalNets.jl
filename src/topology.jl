@@ -5,7 +5,7 @@
     check_dimensionality(c::CrystalNet)
 
 Check that the dimensionality of the net (i.e. the number of independent axes along which
-it is periodic) is equal to `D`, or throw an ArgumentError otherwise.
+it is periodic) is equal to `D`, or throw a DimensionMismatch otherwise.
 """
 function check_dimensionality(c::CrystalNet{D}) where {D}
     edgs = [c.pos[dst(e)] .+ PeriodicGraphs.ofs(e) .- c.pos[src(e)] for e in edges(c.graph)]
@@ -13,11 +13,11 @@ function check_dimensionality(c::CrystalNet{D}) where {D}
     unique!(edgs)
     mat = reduce(hcat, edgs)
     if D == 3
-        isrank3(mat) || throw(ArgumentError("the input net does not have dimensionality 3, so it cannot be analyzed."))
+        isrank3(mat) || throw(DimensionMismatch("Internal error: the input net does not have expected dimensionality 3."))
     elseif D == 2
-        isrank2(mat) || throw(ArgumentError("the input net does not have dimensionality 2, so it cannot be analyzed."))
+        isrank2(mat) || throw(DimensionMismatch("Internal error: the input net does not have expected dimensionality 2."))
     elseif D == 1
-        isrank1(mat) || throw(ArgumentError("the input net does not have dimensionality 1, so it cannot be analyzed."))
+        isrank1(mat) || throw(DimensionMismatch("Internal error: the input net does not have expected dimensionality 1."))
     else
         throw(AssertionError("1 ≤ D ≤ 3"))
     end
