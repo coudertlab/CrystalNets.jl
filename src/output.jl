@@ -35,7 +35,7 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
 
         for i in 1:n
             ty = c.types[i]
-            sty = ty === Symbol("") ? string(i) : string(ty)
+            sty = ty === Symbol("") ? string(i) : string_atomtype(ty)
             if length(sty) > 16
                 sty = sty[1:13]*"etc" # otherwise VMD fails to load the .vtf
             end
@@ -43,9 +43,7 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
                 string(" name ", numencounteredtypes+=1,)
             end : n ≥ 32768 ? "" : string(" name ", i)
             str_ty = string(ty)
-            atomnum = isempty(str_ty) ? i :
-                      get(atomic_numbers, length(str_ty) ≥ 2 && str_ty[2] > 'Z' ? 
-                            Symbol(str_ty[1:2]) : Symbol(str_ty[1]), i)
+            atomnum = isempty(str_ty) ? i : representative_atom(ty, i)
             push!(atomnums, atomnum)
             resid = colorname ? i : 0
             println(f, "atom $(i-1) type $sty$name resid $resid atomicnumber $atomnum")
@@ -68,7 +66,7 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
             v = invcorres[i].v
             ofs = invcorres[i].ofs
             ty = c.types[v]
-            sty = ty === Symbol("") ? string(i) : string(ty)
+            sty = ty === Symbol("") ? string(i) : string_atomtype(ty)
             if length(sty) > 16
                 sty = sty[1:13]*"etc"
             end
@@ -167,9 +165,9 @@ function export_cif(file, c::Union{Crystal, CIF})
         append!(loops[n][1],
                 ["atom_site_label", "atom_site_type_symbol",
                  "atom_site_fract_x", "atom_site_fract_y", "atom_site_fract_z"])
-        labels = String[string(c.types[c isa CIF ? c.ids[i] : i])*string(i) for i in 1:n]
+        labels = String[string_atomtype(c.types[c isa CIF ? c.ids[i] : i])*string(i) for i in 1:n]
         pos = string.(round.(c isa Crystal ? reduce(hcat, c.pos) : c.pos; sigdigits=6))
-        append!(loops[n][2], [labels, string.(c.types[x] for x in (c isa CIF ? c.ids : collect(1:n))),
+        append!(loops[n][2], [labels, string_atomtype.(c.types[x] for x in (c isa CIF ? c.ids : collect(1:n))),
                 pos[1,:], pos[2,:], pos[3,:]])
 
         if c isa Crystal
@@ -183,8 +181,8 @@ function export_cif(file, c::Union{Crystal, CIF})
                 if (e.src, e.dst.v) == last_bond
                     mult[end] += 1
                 else
-                    push!(src, string(labels[e.src]))
-                    push!(dst, string(labels[e.dst.v]))
+                    push!(src, labels[e.src])
+                    push!(dst, labels[e.dst.v])
                     push!(mult, 1)
                     last_bond = (e.src, e.dst.v)
                     n += 1
@@ -285,7 +283,7 @@ function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir()
     for i in 1:length(crystal.types)
         # resid = crystal.clusters.attributions[i]
         atom = Chemfiles.Atom(string(crystal.clusters.classes[crystal.clusters.attributions[i]]))
-        Chemfiles.set_type!(atom, string(crystal.types[i]))
+        Chemfiles.set_type!(atom, string_atomtype(crystal.types[i]))
         Chemfiles.add_atom!(frame, atom, collect(Float64.(crystal.cell.mat * (crystal.pos[i] .- recenter))))
         # Chemfiles.add_atom!(residues[resid], i)
     end

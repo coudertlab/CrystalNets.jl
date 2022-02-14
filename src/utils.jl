@@ -132,6 +132,7 @@ const atomic_numbers = IdDict{Symbol, Int}(
     :Al => 13,
     :Si => 14,
     :P => 15,
+    :Pc => 15, # fictitious atom representing an organic P
     :S => 16,
     :Cl => 17,
     :Ar => 18,
@@ -256,6 +257,19 @@ const element_categories = Symbol[ # populated using PeriodicTable.jl
     :metal, :metal, :metal, :metal, :metal, :metal, :metal, :metal, :metal,
     :metal, :metal, :metal, :metal, :halogen, :noble, :metal]
 
+
+function string_atomtype(t)
+    replace(string(t), ("Pc" => 'P'))
+end
+
+function representative_atom(t, default=0)
+    at = get(atomic_numbers, t, 0)
+    at == 0 || return at
+    styp = string(t)
+    @toggleassert length(styp) ≥ 2
+    t = islowercase(styp[2]) ? Symbol(styp[1:2]) : Symbol(styp[1])
+    return get(atomic_numbers, t, default)
+end
 
 """
     soft_widen(::Type)

@@ -338,7 +338,7 @@ function guess_topology(path, defopts)
     #     @ifvalidgenomereturn Options(defopts; bonding=Bonding.Input) "using input bonds"
     # end
     # @ifvalidgenomereturn Options(defopts; ignore_low_occupancy=true) "removing atoms with occupancy < 0.5"
-    if :Al ∈ atoms && :P ∈ atoms # ALPO datastructure
+    if :Al ∈ atoms && (:P ∈ atoms || :Pc ∈ atoms) # ALPO datastructure
         # flag = false
         # for i in vertices(crystal.graph)
         #     crystal.types[i] === :O || continue

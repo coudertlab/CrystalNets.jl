@@ -214,9 +214,9 @@ end
 Base.length(sbus::ClusterKinds) = sbus.len
 
 const default_sbus = ClusterKinds([
-    [:metal, :actinide, :lanthanide], [:C], [:P], [:nonmetal, :metalloid, :halogen], [:noble]
+    [:metal, :actinide, :lanthanide], [:C, :Pc], [:P], [:nonmetal, :metalloid, :halogen], [:noble]
 ], [3, 4])
-
+# Note: Pc is the internal designation of an organic P atom
 
 
 function ifbooltempdirorempty(x)::String
@@ -280,6 +280,9 @@ These boolean options have a default value determined by [`Bonding`](@ref),
   vertex. Default is true.
 - detect_points_of_extension: detect organic points-of-extension (organic atoms bonded to
   another SBU) and transform them into vertices. Default is true.
+- separate_metals: separate each metal atom into its own vertex (instead of grouping them
+  to form metallic clusters if they are adjacent or bonded by an oxygen). Default depends
+  on the [`Clustering`](@ref) (true for Standard and PEM, false otherwise).
 - split_O_vertex: if a vertex is composed of a single O, remove it and bond together all of
   its neighbors.
 - unify_sbu_decomposition: apply the same rule to decompose both periodic and finite SBUs.

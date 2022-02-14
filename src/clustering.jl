@@ -942,6 +942,9 @@ function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clust
             current_class == last_class + 1 && (current_class = 1) # no classified neighbour
             for u in visited
                 classes[u] = current_class
+                if crystal.types[u] === :P && current_class == organickind
+                    crystal.types[u] = :Pc # mark an organic P
+                end
             end
         end
     end
@@ -1351,7 +1354,75 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
     return ret, structure, clustering
 end
 
+function _convex_hull(neighs, keep_edges, toremove, rev_vmap)
+    new_edgs = PeriodicEdge3D[]
+    for (i, x) in enumerate(neighs)
+        toremove[x.v] && continue
+        for j in (i+1):length(neighs)
+            keep_edges[i,j] || continue
+            y = neighs[j]
+            toremove[y.v] && continue
+            push!(new_edgs, PeriodicEdge3D(rev_vmap[x.v], rev_vmap[y.v], y.ofs .- x.ofs))
+        end
+    end
+    return new_edgs
+end
 
+function convex_hull(neighs, pos, toremove, rev_vmap)
+    n = length(neighs)
+    keep_edges = trues(n, n)
+    n ≤ 3 && return _convex_hull(neighs, keep_edges, toremove, rev_vmap)
+    poss = [pos[x.v] .+ x.ofs for x in neighs]
+    visited_coplanar4 = Set{SVector{4,Int}}()
+    convex_check_3D = n ≥ 5
+    circ_noref = collect(2:n)
+    for (i, x) in enumerate(neighs)
+        circ_noref[ifelse(i == 1, 1, i-1)] = i-1
+        i == n || (circ_noref[i] = i+1)
+        ref = poss[i]
+        circ_noj1 = circ_noref[2:end]
+        for (_j1, j1) in enumerate(circ_noref)
+            _j1 == 1 || (circ_noj1[_j1-1] = circ_noref[_j1-1])
+            _j1 == n-1 || (circ_noj1[_j1] = circ_noref[_j1+1])
+            vec1 = poss[j1] .- ref
+            circ_noj2 = circ_noj1[2:end]
+            for (_j2, j2) in enumerate(circ_noj1)
+                _j2 == 1 || (circ_noj2[_j2-1] = circ_noj1[_j2-1])
+                _j2 == n-2 || (circ_noj2[_j2] = circ_noj1[_j2+1])
+                vec2 = poss[j2] .- ref
+                for j3 in circ_noj2
+                    ordered4 = sort(SVector{4,Int}((i, j1, j2, j3)))
+                    ordered4 ∈ visited_coplanar4 && continue
+                    vec3 = poss[j3] .- ref
+                    β = dihedral(vec1, vec2, vec3)
+                    if β < 10 || β > 170
+                        push!(visited_coplanar4, ordered4)
+                        couples = [(i,j1), (i,j2), (i,j3), (j1,j2), (j1,j3), (j2,j3)]
+                        lens = [norm(vec1), norm(vec2), norm(vec3), norm(poss[j2] .- poss[j1]),
+                                norm(poss[j3] .- poss[j1]), norm(poss[j3] .- poss[j2])]
+                        I = sortperm(lens)
+                        k1, k2 = couples[pop!(I)]
+                        k1, k2 = minmax(k1, k2)
+                        keep_edges[k1, k2] = false
+                        k3, k4 = couples[pop!(I)]
+                        k3, k4 = minmax(k3, k4)
+                        keep_edges[k3, k4] = false
+                        n == 4 && return _convex_hull(neighs, keep_edges, toremove, rev_vmap)
+                    elseif convex_check_3D
+                        otherneighs = [k for k in circ_noj2 if k > i && k != j3 && keep_edges[i,k]]
+                        isempty(otherneighs) && continue
+                        mat = inv(hcat(vec1, vec2, vec3))
+                        for k in otherneighs
+                            coeffs = mat * (poss[k] .- ref)
+                            keep_edges[i,k] = !all(≥(-3e-16), coeffs)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return _convex_hull(neighs, keep_edges, toremove, rev_vmap)
+end
 
 function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
     graph = PeriodicGraph(cryst.graph)
@@ -1370,22 +1441,14 @@ function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
         b || continue
         @toggleassert rev_vmap[u] == 0
         neighs = neighbors(cryst.graph, u)
-        for (i, x) in enumerate(neighs)
-            toremove[x.v] && continue
-            for j in (i+1):length(neighs)
-                y = neighs[j]
-                toremove[y.v] && continue
-                push!(new_edgs, PeriodicEdge3D(rev_vmap[x.v], rev_vmap[y.v], y.ofs .- x.ofs))
-            end
-        end
+        append!(new_edgs, convex_hull(neighs, cryst.pos, toremove, rev_vmap))
     end
     for e in new_edgs
         add_edge!(graph, e)
     end
 
     pos = cryst.pos[vmap]
-    remove_triangles!(graph, pos, nothing, Float64.(cryst.cell.mat), new_edgs)
-
+    #remove_triangles!(graph, pos, nothing, Float64.(cryst.cell.mat), new_edgs)
     types = cryst.types[vmap]
     
 
@@ -1396,15 +1459,9 @@ end
 
 
 function identify_metallic_type(t, kinds, metalkind=getmetal(kinds))
-    at = get(atomic_numbers, t, 0)
-    if at == 0
-        styp = string(t)
-        @toggleassert length(styp) ≥ 2
-        t = islowercase(styp[2]) ? Symbol(styp[1:2]) : Symbol(styp[1])
-        at = atomic_numbers[t]
-    end
+    at = representative_atom(t)
     ismetal[at] && return true
-    k = kinds[t]
+    k = kinds[at]
     k == metalkind && return true
     k ∈ kinds.tomerge && return missing
     return false

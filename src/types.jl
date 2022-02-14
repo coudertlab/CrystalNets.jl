@@ -1140,6 +1140,7 @@ end
 
 function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
                        graph::PeriodicGraph, options::Options) where D
+    ne(graph) == 0 && return CrystalNet{D}(cell, types, PeriodicGraph{D}(nv(graph)), options)
     g = change_dimension(PeriodicGraph{D}, graph)
     return CrystalNet{D}(cell, types, g, options)
 end
