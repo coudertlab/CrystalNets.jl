@@ -264,11 +264,11 @@ end
 
 function representative_atom(t, default=0)
     at = get(atomic_numbers, t, 0)
-    at == 0 || return at
+    at == 0 || return t, at
     styp = string(t)
     @toggleassert length(styp) ≥ 2
     t = islowercase(styp[2]) ? Symbol(styp[1:2]) : Symbol(styp[1])
-    return get(atomic_numbers, t, default)
+    return t, get(atomic_numbers, t, default)
 end
 
 """

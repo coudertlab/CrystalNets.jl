@@ -1459,9 +1459,9 @@ end
 
 
 function identify_metallic_type(t, kinds, metalkind=getmetal(kinds))
-    at = representative_atom(t)
+    t, at = representative_atom(t)
     ismetal[at] && return true
-    k = kinds[at]
+    k = kinds[t]
     k == metalkind && return true
     k ∈ kinds.tomerge && return missing
     return false
