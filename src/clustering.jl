@@ -1353,43 +1353,56 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
     return ret, structure, clustering
 end
 
-function _convex_hull(neighs, keep_edges, toremove, rev_vmap)
-    new_edgs = PeriodicEdge3D[]
-    for (i, x) in enumerate(neighs)
+
+
+function update_new_edgs!(new_edgs, atoms, keep_edges, toremove, rev_vmap, num_targets=0)
+    n = length(atoms)
+    for i in 1:n
+        x = atoms[i]
         toremove[x.v] && continue
-        for j in (i+1):length(neighs)
-            keep_edges[i,j] || continue
-            y = neighs[j]
+        for j in (i+1):n
+            y = atoms[j]
             toremove[y.v] && continue
-            push!(new_edgs, PeriodicEdge3D(rev_vmap[x.v], rev_vmap[y.v], y.ofs .- x.ofs))
+            e = PeriodicEdge3D(rev_vmap[x.v], rev_vmap[y.v], y.ofs .- x.ofs)
+            val = keep_edges[i,j]
+            if get!(new_edgs, e, val) && !val
+                new_edgs[e] = false
+            end
         end
     end
-    return new_edgs
+    nothing
 end
 
-function convex_hull(neighs, pos, toremove, rev_vmap)
-    n = length(neighs)
+function edges_of_convex_hull(atoms, num_targets, pos, previous_keep_edges=trues(0,0))
+    n = length(atoms)
+    _m = size(previous_keep_edges)[1]
+    m = min(num_targets, _m)
+    m == n && return previous_keep_edges
     keep_edges = trues(n, n)
-    n ≤ 3 && return _convex_hull(neighs, keep_edges, toremove, rev_vmap)
-    poss = [pos[x.v] .+ x.ofs for x in neighs]
+    if m == _m
+        keep_edges[1:m,1:m] .= previous_keep_edges
+    else
+        keep_edges[1:m,1:m] .= (@view previous_keep_edges[1:m,1:m])
+    end
+    for i in (m+1):n
+        keep_edges[i,i] = false
+    end
+    n ≤ 3 && return keep_edges
+    poss = [pos[x.v] .+ x.ofs for x in atoms]
     visited_coplanar4 = Set{SVector{4,Int}}()
     convex_check_3D = n ≥ 5
-    circ_noref = collect(2:n)
-    for (i, x) in enumerate(neighs)
-        circ_noref[ifelse(i == 1, 1, i-1)] = i-1
-        i == n || (circ_noref[i] = i+1)
+    for i in 1:num_targets
         ref = poss[i]
-        circ_noj1 = circ_noref[2:end]
-        for (_j1, j1) in enumerate(circ_noref)
-            _j1 == 1 || (circ_noj1[_j1-1] = circ_noref[_j1-1])
-            _j1 == n-1 || (circ_noj1[_j1] = circ_noref[_j1+1])
+        for j1 in 1:n
+            keep_edges[i,j1] || continue
             vec1 = poss[j1] .- ref
-            circ_noj2 = circ_noj1[2:end]
-            for (_j2, j2) in enumerate(circ_noj1)
-                _j2 == 1 || (circ_noj2[_j2-1] = circ_noj1[_j2-1])
-                _j2 == n-2 || (circ_noj2[_j2] = circ_noj1[_j2+1])
+            j2array = [j for j in 1:n if keep_edges[i,j] && j != j1]
+            for j2 in j2array
+                keep_edges[i,j2] || continue
                 vec2 = poss[j2] .- ref
-                for j3 in circ_noj2
+                j3array = [j for j in j2array if keep_edges[i,j] && j != j2]
+                for j3 in j3array
+                    keep_edges[i,j3] || continue
                     ordered4 = sort(SVector{4,Int}((i, j1, j2, j3)))
                     ordered4 ∈ visited_coplanar4 && continue
                     vec3 = poss[j3] .- ref
@@ -1406,9 +1419,9 @@ function convex_hull(neighs, pos, toremove, rev_vmap)
                         k3, k4 = couples[pop!(I)]
                         k3, k4 = minmax(k3, k4)
                         keep_edges[k3, k4] = false
-                        n == 4 && return _convex_hull(neighs, keep_edges, toremove, rev_vmap)
+                        n == 4 && return keep_edges
                     elseif convex_check_3D
-                        otherneighs = [k for k in circ_noj2 if k > i && k != j3 && keep_edges[i,k]]
+                        otherneighs = [k for k in j3array if k > i && keep_edges[i,k] && k != j3]
                         isempty(otherneighs) && continue
                         mat = inv(hcat(vec1, vec2, vec3))
                         for k in otherneighs
@@ -1420,12 +1433,19 @@ function convex_hull(neighs, pos, toremove, rev_vmap)
             end
         end
     end
-    return _convex_hull(neighs, keep_edges, toremove, rev_vmap)
+    return keep_edges
 end
 
+
 function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
+    if isempty(toremove_list)
+        ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, cryst.types, cryst.pos, cryst.graph, Options(cryst.options; _pos=cryst.pos)))
+        export_default(ret, "clusters_$msg", cryst.options.name, cryst.options.export_clusters)
+        return ret
+    end
+    toremove_all = reduce(vcat, toremove_list)
     graph = PeriodicGraph(cryst.graph)
-    vmap = rem_vertices!(graph, toremove_list)
+    vmap = rem_vertices!(graph, toremove_all)
     rev_vmap = zeros(Int, nv(cryst.graph))
     for (i,j) in enumerate(vmap)
         rev_vmap[j] = i
@@ -1433,28 +1453,66 @@ function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
 
     n = length(cryst.types)
     toremove = falses(n)
-    toremove[toremove_list] .= true
+    toremove[toremove_all] .= true
 
-    new_edgs = PeriodicEdge3D[]
-    for (u, b) in zip(toremove_list, bond_neighbors)
+    new_edgs = Dict{PeriodicEdge3D,Bool}()
+    for (Q, b) in zip(toremove_list, bond_neighbors)
         b || continue
-        @toggleassert rev_vmap[u] == 0
-        neighs = Set{PeriodicVertex3D}()
-        for x in neighbors(cryst.graph, u)
-            if !toremove[x.v]
-                push!(neighs, x)
-                continue
+        @toggleassert all(x -> rev_vmap[x] == 0, Q)
+        handled = Set{PeriodicEdge3D}()
+        for u in Q
+            neighs = PeriodicVertex3D[]
+            metalneighs = PeriodicVertex3D[]
+            for x in neighbors(cryst.graph, u)
+                if toremove[x.v]
+                    push!(metalneighs, x)
+                else
+                    push!(neighs, x)
+                end
             end
-            for y in neighbors(cryst.graph, x.v)
-                y == PeriodicVertex3D(u) && continue
-                push!(neighs, PeriodicVertex3D(y.v, y.ofs .+ x.ofs))
+            isempty(neighs) && continue
+            num_targets = length(neighs)
+            keep_edges = edges_of_convex_hull(neighs, num_targets, cryst.pos)
+            update_new_edgs!(new_edgs, neighs, keep_edges, toremove, rev_vmap)
+            for metal in metalneighs
+                e = PeriodicEdge3D(u, metal)
+                reverse(e) ∈ handled && continue
+                push!(handled, e)
+                Q2 = [(PeriodicVertex(u, .- metal.ofs), metal)]
+                encountered = Set{PeriodicVertex3D}(neighs)
+                copyneighs = copy(neighs)
+                for (parent, x) in Q2
+                    neighs2 = PeriodicVertex3D[]
+                    metalneighs2 = PeriodicVertex3D[]
+                    for y in neighbors(cryst.graph, x.v)
+                        y == parent && continue
+                        newvertex = PeriodicVertex3D(y.v, y.ofs .+ x.ofs)
+                        newvertex ∈ encountered && continue
+                        push!(encountered, newvertex)
+                        if toremove[y.v]
+                            push!(metalneighs2, newvertex)
+                        else
+                            push!(neighs2, newvertex)
+                        end
+                    end
+                    if !isempty(neighs2)
+                        append!(copyneighs, neighs2, metalneighs2)
+                    else
+                        for metal2 in metalneighs2
+                            e = PeriodicEdge3D(u, metal2)
+                            reverse(e) ∈ handled && continue
+                            push!(handled, e)
+                            push!(Q2, (PeriodicVertex(metal.v, metal.ofs .- metal2.ofs), metal2))
+                        end
+                    end
+                end
+                keep_edges = edges_of_convex_hull(copyneighs, num_targets, cryst.pos, keep_edges)
+                update_new_edgs!(new_edgs, copyneighs, keep_edges, toremove, rev_vmap, num_targets)
             end
         end
-
-        append!(new_edgs, convex_hull(collect(neighs), cryst.pos, toremove, rev_vmap))
     end
-    for e in new_edgs
-        add_edge!(graph, e)
+    for (e, _b) in new_edgs
+        _b && add_edge!(graph, e)
     end
 
     pos = cryst.pos[vmap]
@@ -1480,7 +1538,7 @@ end
 """
     intermediate_to_allnodes(cryst::Crystal{Nothing})
 
-Convert `Intermediate` result to `AllNodes` by removing all periodic metallic sbus.
+Convert `Intermediate` result to `AllNodes` by removing all 1 and 2-periodic metallic sbus.
 """
 function intermediate_to_allnodes(cryst::Crystal{Nothing})
     n = length(cryst.types)
@@ -1526,16 +1584,16 @@ function intermediate_to_allnodes(cryst::Crystal{Nothing})
         return cryst
     end
 
-    toremove_list = Int[]
+    toremove_list = Vector{Int}[]
     bond_neighbors = Bool[]
     handled = falses(n)
     for i in metallic_list
         handled[i] && continue
         handled[i] = true
-        remove_flag = false
         bond_neighbor_flag = true
         seen = Dict{Int,SVector{3,Int}}(i => zero(SVector{3,Int}))
         neighs = Set{PeriodicVertex3D}()
+        seenofs = SVector{3,Int}[]
         Q = [PeriodicVertex3D(i)]
         for u in Q
             for x in neighbors(cryst.graph, u.v)
@@ -1545,8 +1603,8 @@ function intermediate_to_allnodes(cryst::Crystal{Nothing})
                     continue
                 end
                 if handled[x.v]
-                    if !remove_flag && ofs != seen[x.v]
-                        remove_flag = true
+                    if ofs != seen[x.v]
+                        push!(seenofs, ofs .- seen[x.v])
                     end
                 else
                     handled[x.v] = true
@@ -1555,25 +1613,32 @@ function intermediate_to_allnodes(cryst::Crystal{Nothing})
                 end
             end
         end
-        if !remove_flag && !isempty(neighs)
-            a = first(neighs)
-            P = [a]
-            seenneighs = Set{PeriodicVertex3D}(P)
-            for u in P
-                for x in neighbors(cryst.graph, u.v)
-                    y = PeriodicVertex(x.v, u.ofs .+ x.ofs)
-                    y ∈ seenneighs && continue
-                    if y ∈ neighs
-                        push!(seenneighs, y)
-                        push!(P, y)
+        remove_flag = if isempty(seenofs)
+            if isempty(neighs)
+                false
+            else
+                a = first(neighs)
+                P = [a]
+                seenneighs = Set{PeriodicVertex3D}(P)
+                for u in P
+                    for x in neighbors(cryst.graph, u.v)
+                        y = PeriodicVertex(x.v, u.ofs .+ x.ofs)
+                        y ∈ seenneighs && continue
+                        if y ∈ neighs
+                            push!(seenneighs, y)
+                            push!(P, y)
+                        end
                     end
                 end
+                bond_neighbor_flag = length(neighs) == length(seenneighs)
+                bond_neighbor_flag
             end
-            bond_neighbor_flag = remove_flag = length(neighs) == length(seenneighs)
+        else
+            rank(reduce(hcat, seenofs)) ≤ 2
         end
         if remove_flag && !isempty(neighs)
-            append!(toremove_list, u.v for u in Q)
-            append!(bond_neighbors, bond_neighbor_flag for _ in Q)
+            push!(toremove_list, getfield.(Q, :v))
+            push!(bond_neighbors, bond_neighbor_flag)
         end
     end
 
