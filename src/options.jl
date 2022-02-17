@@ -71,11 +71,12 @@ The basic choices are:
 The next clustering options are designed for MOFs but may target other kinds of frameworks.
 In all cases, the clusters are refinements on top of already-defined clusters, such as the
 organic and inorganic SBUs defined by the `MOF` structure.
-Except for `AllNodes`, infinite clusters (such as the inorganic clusters in a rod MOF) are 
+Except for `AllNodes`, infinite clusters (such as the inorganic clusters in a rod MOF) are
 split into new finite clusters using heuristics.
 - `SingleNodes`: each already-defined cluster is mapped to a vertex.
 - `AllNodes`: keep points of extension for organic clusters. Remove infinite metallic ones.
-- `Standard`: make each metallic atom its own vertex.
+- `Standard`: make each metallic atom its own vertex and do not bond those together if they
+  share a common non-metallic neighbour.
 - `PEM`: stands for Points of Extension and Metals. Keep points of extension for organic
   clusters and each metal centre as a separate vertex.
 - `Intermediate`: keep points of extension for organic clusters. This is not a usual
@@ -122,15 +123,15 @@ atoms waiting to be merged to a neighboring SBU. The neighboring SBU is chosen
 by order in the `sbus` list.
 
 The cluster kinds used by default are
-`CrystalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C,], [:P],
+`CrystalNets.ClusterKinds([[:metal, :actinide, :lanthanide], [:C,], [:P, :S],
                            [:nonmetal, :metalloid, :halogen], [:noble]], [3, 4])`.
 This means that all atoms that are either metals, actinides or lanthanides are assigned to
 class 1 and all C atoms in SBUs of class 2.
-Afterwards, each group of adjacent P atoms is assigned either class 1 if any of its
+Afterwards, each group of adjacent P or S atoms is assigned either class 1 if any of its
 neighbor is of class 1, or class 2 otherwise if any of its neighbor is of class 2.
 If no such neighbor exist, it is assigned to class 1.
 Finally, each group of adjacent nonmetals, metalloids and halogens is assigned class 1 or 2
-following the same rule as for P atoms.
+following the same rule as for P and S atoms.
 
 At the end of the procedure, all atoms are thus given a class between `1` and `length(sbus)`
 which is not in `toclassify`. See also [`find_sbus`](@ref) for the implementation of this
@@ -214,9 +215,10 @@ end
 Base.length(sbus::ClusterKinds) = sbus.len
 
 const default_sbus = ClusterKinds([
-    [:metal, :actinide, :lanthanide], [:C, :Pc], [:P], [:nonmetal, :metalloid, :halogen], [:noble]
+    [:metal, :actinide, :lanthanide], [:C, :Pc, :Ss], [:P, :S],
+    [:nonmetal, :metalloid, :halogen], [:noble]
 ], [3, 4])
-# Note: Pc is the internal designation of an organic P atom
+# Note: Pc (respectively Ss) is the internal designation of an organic P (resp. S) atom
 
 
 function ifbooltempdirorempty(x)::String
@@ -267,15 +269,20 @@ string is equivalent to `false`.
   if X is an atom whose type is in `ignore_homoatomic_bonds`.
 
 ## Miscellaneous options
-These boolean options have a default value determined by [`Bonding`](@ref),
+These boolean options have a default value that may be determined by [`Bonding`](@ref),
 [`StructureType`](@ref) and [`Clustering`](@ref). They can be directly overriden here.
 - bond_adjacent_sbus: bond together SBUs which are only separated by a single C atom.
 - authorize_pruning: remove colliding atoms in the input. Default is true.
 - wider_metallic_bonds: for bond detections, metals have a radius equal to 1.5× their Van
-  der Waals radius.
-- ignore_homometallic_bonds: do not bond two metallic atoms of the same type.
+  der Waals radius. Default is false, unless [`StructureType`](@ref) is `MOF` or `Zeolite`.
+- ignore_homometallic_bonds: do not bond two metallic atoms of the same type. Default is
+  false, unless [`StructureType`](@ref) is `MOF`.
+- ignore_metal_cluster_bonds: do not bond two metallic clusters together if they share at
+  least one non-metallic neighbour.
+  Default is false, unless [`Clustering`](@ref) is `Standard`.
 - ignore_low_occupancy: atoms with occupancy lower than 0.5 are ignored. Default is false.
 - detect_paddlewheels: detect paddle-wheel pattern and group them into an inorganic vertex.
+  Default is true.
 - detect_organiccycles: detect organic cycles and collapse all belonging C atoms into a new
   vertex. Default is true.
 - detect_pe: detect organic points-of-extension (organic atoms bonded to another SBU) and
@@ -283,16 +290,17 @@ These boolean options have a default value determined by [`Bonding`](@ref),
 - cluster_simple_pe: cluster adjacent points-of-extension if they are not part of a cycle.
   Default is true.
 - separate_metals: separate each metal atom into its own vertex (instead of grouping them
-  to form metallic clusters if they are adjacent or bonded by an oxygen). Default depends
-  on the [`Clustering`](@ref) (true for Standard and PEM, false otherwise).
+  to form metallic clusters if they are adjacent or bonded by an oxygen). Default is false,
+  unless [`Clustering`](@ref) is `Standard` or `PEM`.
 - split_O_vertex: if a vertex is composed of a single O, remove it and bond together all of
-  its neighbors.
+  its neighbors. Default is true.
 - unify_sbu_decomposition: apply the same rule to decompose both periodic and finite SBUs.
+  Default is false.
 - force_warn: force printing warning and information even during `..._dataset` and
-  `..._topologies` function calls.
+  `..._topologies` function calls. Default is false.
 
 ## Internal fields
-These fields are for internal use and should probably not be modified by the user:
+These fields are for internal use and should not be modified by the user:
 - dryrun: store information on possible options to try (for `guess_topology`).
 - _pos: the positions of the centre of the clusters collapsed into vertices.
 """
@@ -315,6 +323,7 @@ struct Options
     # Clustering options
     clustering::Clustering._Clustering
     bond_adjacent_sbus::Bool
+    ignore_metal_cluster_bonds::Union{Nothing,Bool}
     cluster_kinds::ClusterKinds
     detect_paddlewheels::Bool
     detect_organiccycles::Bool
@@ -351,6 +360,7 @@ struct Options
                        force_warn=false,
                        clustering=Clustering.Auto,
                        bond_adjacent_sbus=false,
+                       ignore_metal_cluster_bonds=nothing,
                        cluster_kinds=default_sbus,
                        detect_paddlewheels=true,
                        detect_organiccycles=true,
@@ -403,6 +413,7 @@ struct Options
             force_warn,
             clustering,
             bond_adjacent_sbus,
+            ignore_metal_cluster_bonds,
             cluster_kinds,
             detect_paddlewheels,
             detect_organiccycles,

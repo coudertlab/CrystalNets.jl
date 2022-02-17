@@ -344,7 +344,7 @@ function regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
             opposite_sbus[opposite_sbu] = 0
             sbu = clusters.sbus[i]
             for u in clusters.sbus[opposite_sbu]
-                newofs = u.ofs .+ ofs_diff 
+                newofs = u.ofs .+ ofs_diff
                 push!(sbu, PeriodicVertex(u.v, newofs))
                 clusters.offsets[u.v] = newofs
                 clusters.attributions[u.v] = i
@@ -606,7 +606,7 @@ function add_to_newclass!(classes, graph, sbus, new_class, v, types, noneighboro
                 end
                 if x.v == v
                     push!(global_encountered, u.v)
-                    #if types isa Vector{Symbol} && 
+                    #if types isa Vector{Symbol} &&
                     #push!(authorized, u.v)
                 else
                     condition = x.v ∉ encountered
@@ -830,6 +830,55 @@ function group_cycle(organiccycle, types, graph)
 end
 
 
+function remove_metal_cluster_bonds!(graph, types, opts)
+    if opts.ignore_metal_cluster_bonds === nothing
+        opts.clustering == Clustering.Standard || return false
+    end
+    opts.ignore_metal_cluster_bonds == false && return false
+    n = length(types)
+    metallic = falses(n)
+    metallic_list = Int[]
+    kinds = opts.cluster_kinds
+    metalkind = getmetal(kinds)
+    for (i, t) in enumerate(types)
+        _metal_identified = identify_metallic_type(t, kinds, metalkind)
+        metal_identified = _metal_identified isa Bool ? _metal_identified::Bool : false
+        if metal_identified
+            metallic[i] = true
+            push!(metallic_list, i)
+        end
+    end
+    nonmetallic_neighbours = Vector{Dict{Int,SVector{3,Int}}}(undef, n)
+    for j in metallic_list
+        any(x -> metallic[x.v], neighbors(graph, j)) || continue
+        nonmetallic_neighs = Dict{Int,SVector{3,Int}}()
+        for x in neighbors(graph, j)
+            metallic[x.v] || (nonmetallic_neighs[x.v] = x.ofs)
+        end
+        nonmetallic_neighbours[j] = nonmetallic_neighs
+    end
+    edges_toremove = PeriodicEdge3D[]
+    for e in edges(graph)
+        s = src(e)
+        d = dst(e)
+        o = PeriodicGraphs.ofs(e)
+        if metallic[s] && metallic[d]
+            for k in intersect(keys(nonmetallic_neighbours[s]), keys(nonmetallic_neighbours[d]))
+                if nonmetallic_neighbours[s][k] == nonmetallic_neighbours[d][k] .+ o
+                    push!(edges_toremove, e)
+                    break
+                end
+            end
+        end
+    end
+    for e in edges_toremove
+        rem_edge!(graph, e)
+    end
+    return !isempty(edges_toremove)
+end
+
+
+
 
 """
     find_sbus(crystal, kinds=default_sbus)
@@ -942,7 +991,9 @@ function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clust
             for u in visited
                 classes[u] = current_class
                 if crystal.types[u] === :P && current_class == organickind
-                    crystal.types[u] = :Pc # mark an organic P
+                    crystal.types[u] = :Pc # marks an organic P
+                elseif crystal.types[u] == :S && current_class == organickind
+                    crystal.types[u] = :Ss # marks an organic S
                 end
             end
         end
@@ -1032,7 +1083,7 @@ function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clust
                     @inbounds elements_for_composition[i_sbu]
                 else
                     _ats = [atomic_numbers[k] for k in uniquecompo]
-                    metallics = [k for (at, k) in zip(_ats, uniquecompo) if ismetal[at] || k === :P]
+                    metallics = [k for (at, k) in zip(_ats, uniquecompo) if ismetal[at] || k === :P || k === :S]
                     if isempty(metallics)
                         metallics = [k for (at, k) in zip(_ats, uniquecompo) if ismetalloid[at]]
                     end
@@ -1249,7 +1300,8 @@ end
 
 function order_atomtype(sym)
     sym === :C && return 119 # C is put first to identify organic clusters
-    sym === :P && return 1 # Put P before the other non-metals, but after everything else
+    sym === :P && return 1   # Put S and O before the other non-metals, but after
+    sym === :S && return 0   # everything else
     anum = atomic_numbers[sym]
     elcat = element_categories[anum]
     if elcat === :nonmetal || elcat === :noble || elcat === :halogen
@@ -1349,7 +1401,7 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
     end
     ret = Crystal{Clusters}(crystal.cell, types, clusters, pos, graph, Options(crystal.options; _pos=pos))
     if crystal.options.clustering == Clustering.Intermediate ||
-            (clustering != Clustering.Intermediate && 
+            (clustering != Clustering.Intermediate &&
             crystal.options.clustering != Clustering.Standard)
         export_default(ret, "clusters", crystal.options.name, crystal.options.export_clusters)
     end
@@ -1663,7 +1715,7 @@ function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
     pos = cryst.pos[vmap]
     #remove_triangles!(graph, pos, nothing, Float64.(cryst.cell.mat), new_edgs)
     types = cryst.types[vmap]
-    
+
 
     ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, types, pos, graph, Options(cryst.options; _pos=pos)))
     export_default(ret, "clusters_$msg", cryst.options.name, cryst.options.export_clusters)
@@ -1795,8 +1847,9 @@ function regroup_vmap(cryst, vmap, isolate, msg)
     clusters, periodicsbus = regroup_sbus(cryst.graph, vmap, isolate)
     if !isempty(periodicsbus)
         # Abandon. This can happen for example if a single-C SBU has been split previously
-        export_default(cryst, "clusters_$msg", cryst.options.name, cryst.options.export_clusters)
-        return cryst
+        c = trimmed_crystal(cryst)
+        export_default(c, "clusters_$msg", c.options.name, c.options.export_clusters)
+        return c
     end
     edgs = PeriodicEdge3D[]
     for s in vertices(cryst.graph)
@@ -1846,7 +1899,7 @@ function regroup_vmap(cryst, vmap, isolate, msg)
             end
             if insymb
                 push!(thiscompo, (Symbol(styp[last_j:end]), 1))
-            else 
+            else
                 @toggleassert isnumeric(last(styp))
                 push!(thiscompo, (currsymb, parse(Int, styp[last_j:end])))
             end
@@ -1894,14 +1947,16 @@ function intermediate_to_singlenodes(cryst::Crystal)
         if t !== :C
             s = string(t)
             el = length(s) ≥ 2 && islowercase(s[2]) ? Symbol(s[1:2]) : Symbol(s[1])
-            if ismetal[atomic_numbers[el]] || el === :P
+            if ismetal[atomic_numbers[el]] || el === :P || el === :S
                 organics[i] = false
             end
         end
     end
+    clustername = cryst.options.clustering == Clustering.Standard ? "standard" : "singlenodes"
     if !any(organics)
-        export_default(cryst, "clusters_singlenodes", cryst.options.name, cryst.options.export_clusters)
-        return cryst
+        c = trimmed_crystal(cryst)
+        export_default(c, "clusters_$clustername", c.options.name, c.options.export_clusters)
+        return c
     end
     vmap = zeros(Int, n)
     counter = 0
@@ -1940,5 +1995,19 @@ function intermediate_to_singlenodes(cryst::Crystal)
         counter += length(Q)*periodic
     end
 
-    regroup_vmap(cryst, vmap, inorganic, cryst.options.clustering == Clustering.Standard ? "standard" : "singlenodes")
+    regroup_vmap(cryst, vmap, inorganic, clustername)
+end
+
+
+"""
+    intermediate_to_standard(cryst::Crystal)
+
+Convert `Intermediate` result to `Standard` by collapsing all points of extension clusters
+bonded together into a new organic cluster, and removing bonds between metallic clusters.
+
+To correspond to the actual `Standard` representation, the `separate_metals` option must
+have been set when computing the `Intermediate` representation.
+"""
+function intermediate_to_standard(cryst::Crystal)
+    return intermediate_to_singlenodes(cryst)
 end

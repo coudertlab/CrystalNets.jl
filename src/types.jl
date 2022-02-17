@@ -777,7 +777,9 @@ function trimmed_crystal(c::Crystal{Nothing})
     vmap, graph = trim_topology(c.graph)
     pos = c.pos[vmap]
     opts = isempty(c.options._pos) ? c.options : Options(c.options; _pos=pos)
-    return Crystal{Nothing}(c.cell, c.types[vmap], pos, graph, opts)
+    types = c.types[vmap]
+    remove_metal_cluster_bonds!(graph, types, opts)
+    return Crystal{Nothing}(c.cell, types, pos, graph, opts)
 end
 
 ## CrystalNet
@@ -1017,6 +1019,7 @@ function UnderlyingNets(c::Crystal, clustering)
     end
 
     remove_homoatomic_bonds!(graph, types, opts.ignore_homoatomic_bonds)
+    remove_metal_cluster_bonds!(graph, types, opts)
     if !isempty(opts.export_net) && !isempty(opts._pos)
         if initialvmap isa Vector{Int}
             pos = opts._pos[initialvmap]
@@ -1107,7 +1110,7 @@ function UnderlyingNets(c::Crystal, clustering)
                 else
                     @toggleassert clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
                     clustname = clustering == Clustering.SingleNodes ? "singlenodes" : "standard"
-                    x = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
+                    x = intermediate_to_standard(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
                     export_default(x, "subnet", opts.name, opts.export_subnets)
                     @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, x.options)]))
                 end

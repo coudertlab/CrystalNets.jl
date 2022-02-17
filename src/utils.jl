@@ -134,6 +134,7 @@ const atomic_numbers = IdDict{Symbol, Int}(
     :P => 15,
     :Pc => 15, # fictitious atom representing an organic P
     :S => 16,
+    :Ss => 16, # fictitious atom representing an organic S
     :Cl => 17,
     :Ar => 18,
     :K => 19,
@@ -259,7 +260,7 @@ const element_categories = Symbol[ # populated using PeriodicTable.jl
 
 
 function string_atomtype(t)
-    replace(string(t), ("Pc" => 'P'))
+    replace(string(t), "Pc" => 'P', "Ss" => 'S')
 end
 
 function representative_atom(t, default=0)
