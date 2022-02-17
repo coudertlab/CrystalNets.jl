@@ -704,7 +704,7 @@ function small_cycles_around(graph, pos, mat, i, u_init, classes, acceptedclasse
             classes[x.v] ∈ acceptedclasses || continue
             new_vec = mat * (pos[x.v] .+ x.ofs .- last_posu)
             α = angle(last_vec, .-new_vec)
-            100 < α < 145 || continue
+            90 < α < 145 || continue
             #β = dihedral(last_prev_vec, last_vec, new_vec)
             #β < 20 || β > 160 || continue
             ofs = last_offset .+ x.ofs
@@ -746,7 +746,7 @@ function in_small_cycles_around(graph, pos, mat, i, classes, acceptedclasses)
     end
     return incycle
 end
- 
+
 
 function detect_organiccycles(classes, graph, pos, mat, Cclass, modifiables)
     handled = Set{Int}()
@@ -948,12 +948,15 @@ function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clust
         end
     end
 
-    if crystal.options.detect_points_of_extension
+    if crystal.options.detect_pe
+        separate_simple_pe = !crystal.options.cluster_simple_pe
+        first_pe = true
         for (i, class) in enumerate(classes)
             class == organickind || continue
             for x in neighbors(graph, i)
                 if classes[x.v] != organickind
-                    last_class += 1
+                    last_class += first_pe + separate_simple_pe
+                    first_pe = false
                     classes[i] = last_class
                     break
                 end
@@ -1355,7 +1358,7 @@ end
 
 
 
-function update_new_edgs!(new_edgs, atoms, keep_edges, toremove, rev_vmap, num_targets=0)
+function update_new_edgs!(new_edgs, atoms, keep_edges, toremove, rev_vmap)
     n = length(atoms)
     for i in 1:n
         x = atoms[i]
@@ -1363,8 +1366,12 @@ function update_new_edgs!(new_edgs, atoms, keep_edges, toremove, rev_vmap, num_t
         for j in (i+1):n
             y = atoms[j]
             toremove[y.v] && continue
-            e = PeriodicEdge3D(rev_vmap[x.v], rev_vmap[y.v], y.ofs .- x.ofs)
             val = keep_edges[i,j]
+            x.v == y.v && y.ofs == x.ofs && !val && continue
+            e = PeriodicEdge3D(rev_vmap[x.v], rev_vmap[y.v], y.ofs .- x.ofs)
+            if PeriodicGraphs.isindirectedge(e)
+                e = reverse(e)
+            end
             if get!(new_edgs, e, val) && !val
                 new_edgs[e] = false
             end
@@ -1373,7 +1380,8 @@ function update_new_edgs!(new_edgs, atoms, keep_edges, toremove, rev_vmap, num_t
     nothing
 end
 
-function edges_of_convex_hull(atoms, num_targets, pos, previous_keep_edges=trues(0,0))
+function edges_of_convex_hull(atoms, num_targets, ref_mat, pos, toremove, visited_coplanar4,
+                              previous_keep_edges=trues(0,0))
     n = length(atoms)
     _m = size(previous_keep_edges)[1]
     m = min(num_targets, _m)
@@ -1389,8 +1397,7 @@ function edges_of_convex_hull(atoms, num_targets, pos, previous_keep_edges=trues
     end
     n ≤ 3 && return keep_edges
     poss = [pos[x.v] .+ x.ofs for x in atoms]
-    visited_coplanar4 = Set{SVector{4,Int}}()
-    convex_check_3D = n ≥ 5
+
     for i in 1:num_targets
         ref = poss[i]
         for j1 in 1:n
@@ -1398,38 +1405,151 @@ function edges_of_convex_hull(atoms, num_targets, pos, previous_keep_edges=trues
             vec1 = poss[j1] .- ref
             j2array = [j for j in 1:n if keep_edges[i,j] && j != j1]
             for j2 in j2array
-                keep_edges[i,j2] || continue
                 vec2 = poss[j2] .- ref
                 j3array = [j for j in j2array if keep_edges[i,j] && j != j2]
                 for j3 in j3array
-                    keep_edges[i,j3] || continue
                     ordered4 = sort(SVector{4,Int}((i, j1, j2, j3)))
                     ordered4 ∈ visited_coplanar4 && continue
                     vec3 = poss[j3] .- ref
                     β = dihedral(vec1, vec2, vec3)
-                    if β < 10 || β > 170
-                        push!(visited_coplanar4, ordered4)
-                        couples = [(i,j1), (i,j2), (i,j3), (j1,j2), (j1,j3), (j2,j3)]
-                        lens = [norm(vec1), norm(vec2), norm(vec3), norm(poss[j2] .- poss[j1]),
-                                norm(poss[j3] .- poss[j1]), norm(poss[j3] .- poss[j2])]
-                        I = sortperm(lens)
-                        k1, k2 = couples[pop!(I)]
-                        k1, k2 = minmax(k1, k2)
-                        keep_edges[k1, k2] = false
-                        k3, k4 = couples[pop!(I)]
-                        k3, k4 = minmax(k3, k4)
-                        keep_edges[k3, k4] = false
-                        n == 4 && return keep_edges
-                    elseif convex_check_3D
-                        otherneighs = [k for k in j3array if k > i && keep_edges[i,k] && k != j3]
-                        isempty(otherneighs) && continue
-                        mat = inv(hcat(vec1, vec2, vec3))
-                        for k in otherneighs
-                            coeffs = mat * (poss[k] .- ref)
-                            keep_edges[i,k] = !all(≥(-3e-16), coeffs)
+                    β < 7 || β > 173 || continue
+                    push!(visited_coplanar4, ordered4)
+                    any(x -> toremove[atoms[x].v], (i, j1, j2, j3)) && continue
+                    a, b, c, d = [i,j1,j2,j3][sortperm(poss[[i,j1,j2,j3]])]
+                    if poss[d][1] ≤ 0.9*poss[a][1] + 0.1*poss[b][1]
+                        a, b, c, d = [i,j1,j2,j3][sortperm(poss[[i,j1,j2,j3]]; by=x->x[2])]
+                    end
+                    flagloop = 1
+                    keepac = false
+                    keepbd = false
+                    keepsmallest = false
+                    while flagloop > 0
+                        flagloop = - flagloop
+                        ba = poss[a] .- poss[b]
+                        bc = poss[c] .- poss[b]
+                        bd = poss[d] .- poss[b]
+                        αc = angle(ba, bc)
+                        αd = angle(ba, bd)
+                        if αd > αc
+                            c, d = d, c
+                            bc, bd = bd, bc
+                        end
+                        cd = poss[d] .- poss[c]
+                        cb = .- bc
+                        γmid = angle(cb, cd)
+                        ca = poss[a] .- poss[c]
+                        γ1 = angle(cb, ca)
+                        γ2 = angle(ca, cd)
+                        keepsmallest |= ((γmid < γ1) | (γmid < γ2))
+                        if γmid < γ1 - 30 || γmid < γ2 - 30
+                            if αd > αc
+                                c, d = d, c
+                            end
+                            if flagloop == -6
+                                a, b, c, d = d, a, b, c
+                                flagloop = 0
+                            elseif flagloop == -4
+                                b, c, d = b, d, c
+                            elseif mod(-flagloop, 2) == 1
+                                b, c, d = d, c, b
+                            else
+                                b, c, d = d, b, c
+                            end
+                            flagloop = -flagloop + 1
+                            continue
+                        end
+                        Δac = norm(ref_mat * ca)
+                        Δbd = norm(ref_mat * bd)
+                        Δab = norm(ref_mat * ba)
+                        Δbc = norm(ref_mat * bc)
+                        Δcd = norm(ref_mat * cd)
+                        Δda = norm(ref_mat * (poss[d] .- poss[a]))
+                        minΔ = min(Δab, Δbc, Δcd, Δda)*1.01
+                        # if keepsmallest
+                            if Δac < 0.9Δbd
+                                keepac = true
+                            elseif Δbd < 0.9Δac
+                                keepbd = true
+                            end
+                        # else
+                    end
+                    keepac || (keep_edges[a, c] = keep_edges[c, a] = false)
+                    keepbd || (keep_edges[b, d] = keep_edges[d, b] = false)
+                    n == 4 && return keep_edges
+                end
+            end
+        end
+    end
+
+    #=
+    n ≥ 5 || return keep_edges
+    for i in 1:num_targets
+        ref = poss[i]
+        for j1 in 1:n
+            keep_edges[i,j1] || continue
+            vec1 = poss[j1] .- ref
+            j2array = [j for j in 1:n if keep_edges[i,j] && j != j1]
+            for j2 in j2array
+                vec2 = poss[j2] .- ref
+                j3array = [j for j in j2array if keep_edges[i,j] && j != j2]
+                for j3 in j3array
+                    ordered4 = sort(SVector{4,Int}((i, j1, j2, j3)))
+                    ordered4 ∈ visited_coplanar4 && continue
+                    vec3 = poss[j3] .- ref
+                    otherneighs = [k for k in j3array if k > i && keep_edges[i,k] && k != j3]
+                    isempty(otherneighs) && continue
+                    mat = inv(hcat(vec1, vec2, vec3))
+                    for k in otherneighs
+                        coeffs = mat * (poss[k] .- ref)
+                        keep_edges[i,k] = keep_edges[k,i] = !all(≥(-3e-16), coeffs)
+                        if atoms == PeriodicVertex3D[(7, (0,0,0)), (7, (1,0,0)), (9, (0,-1,0)), (9, (1,-1,0)), (13, (0,0,-1)), (14, (0,-1,-1)), (13, (1,0,-1)), (14, (1,-1,-1)), (15, (1,0,0))]
+                            minmax(i, k) == (4, 6) && all(≥(-3e-16), coeffs) && @show i, j1, j2, j3
                         end
                     end
                 end
+            end
+        end
+    end
+    =#
+
+
+    n ≥ 5 || return keep_edges
+    for i in 1:num_targets
+        ref = poss[i]
+        for k in (i+1):n
+            keep_edges[i,k] || continue
+            toremove[atoms[k].v] && continue
+            vec = poss[k] .- ref
+            j1array = [j for j in 1:n if keep_edges[i,j] && j != k]
+            breakflag = false
+            for j1 in j1array
+                oneremovedflag1 = toremove[atoms[j1].v]
+                vec1 = poss[j1] .- ref
+                j2array = [j for j in j1array if keep_edges[i,j] && j != j1 &&
+                            sort(SVector{4,Int}(i, j1, j, k)) ∉ visited_coplanar4]
+                for j2 in j2array
+                    oneremovedflag = oneremovedflag1
+                    if toremove[atoms[j2].v]
+                        oneremovedflag && continue
+                        oneremovedflag = true
+                    end
+                    vec2 = poss[j2] .- ref
+                    for j3 in j2array
+                        j3 == j2 && continue
+                        keep_edges[i,j3] || continue
+                        oneremovedflag && toremove[atoms[j3].v] && continue
+                        sort(SVector{4,Int}((i, j1, j2, j3))) ∈ visited_coplanar4 && continue
+                        sort(SVector{4,Int}((i, j1, j3, k))) ∈ visited_coplanar4 && continue
+                        sort(SVector{4,Int}((i, j2, j3, k))) ∈ visited_coplanar4 && continue
+                        mat = inv(hcat(vec1, vec2, poss[j3] .- ref))
+                        coeffs = mat * vec
+                        breakflag = all(≥(-3e-16), coeffs)
+                        keep_edges[i,k] = keep_edges[k,i] = !breakflag
+                        breakflag && break
+                    end
+                    breakflag && break
+                end
+                breakflag && break
             end
         end
     end
@@ -1454,6 +1574,7 @@ function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
     n = length(cryst.types)
     toremove = falses(n)
     toremove[toremove_all] .= true
+    mat = Float64.(cryst.cell.mat)
 
     new_edgs = Dict{PeriodicEdge3D,Bool}()
     for (Q, b) in zip(toremove_list, bond_neighbors)
@@ -1472,25 +1593,31 @@ function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
             end
             isempty(neighs) && continue
             num_targets = length(neighs)
-            keep_edges = edges_of_convex_hull(neighs, num_targets, cryst.pos)
+            # @show neighs
+            visited_coplanar4 = Set{SVector{4,Int}}()
+            keep_edges = edges_of_convex_hull(neighs, num_targets, mat, cryst.pos, toremove, visited_coplanar4)
             update_new_edgs!(new_edgs, neighs, keep_edges, toremove, rev_vmap)
             for metal in metalneighs
                 e = PeriodicEdge3D(u, metal)
                 reverse(e) ∈ handled && continue
                 push!(handled, e)
                 Q2 = [(PeriodicVertex(u, .- metal.ofs), metal)]
+                encounteredofss = Dict{Int,SVector{3,Int}}((x.v => x.ofs) for x in neighs)
                 encountered = Set{PeriodicVertex3D}(neighs)
                 copyneighs = copy(neighs)
                 for (parent, x) in Q2
                     neighs2 = PeriodicVertex3D[]
                     metalneighs2 = PeriodicVertex3D[]
+                    encounteredflags = Union{Nothing,SVector{3,Int}}[]
                     for y in neighbors(cryst.graph, x.v)
                         y == parent && continue
                         newvertex = PeriodicVertex3D(y.v, y.ofs .+ x.ofs)
                         newvertex ∈ encountered && continue
                         push!(encountered, newvertex)
                         if toremove[y.v]
+                            push!(encounteredflags, get(encounteredofss, newvertex.v, nothing))
                             push!(metalneighs2, newvertex)
+                            encounteredofss[newvertex.v] = newvertex.ofs
                         else
                             push!(neighs2, newvertex)
                         end
@@ -1498,16 +1625,34 @@ function regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
                     if !isempty(neighs2)
                         append!(copyneighs, neighs2, metalneighs2)
                     else
-                        for metal2 in metalneighs2
+                        for (metal2, flag) in zip(metalneighs2, encounteredflags)
+                            if !(flag isa Nothing) # to not lose the dimension
+                                # idx = findfirst(==(metal2.v), Q)
+                                # popat!(Q, idx)
+                                # return regroup_toremove(cryst, toremove_list, bond_neighbors, msg)
+                                ofs = metal2.ofs .- flag
+                                for _n in neighs
+                                    _v = rev_vmap[_n.v]
+                                    e = PeriodicEdge3D(_v, _v, ofs)
+                                    if PeriodicGraphs.isindirectedge(e)
+                                        e = reverse(e)
+                                    end
+                                    new_edgs[e] = true
+                                end
+                                continue
+                            end
+                            metal2 == PeriodicVertex3D(u) && continue
                             e = PeriodicEdge3D(u, metal2)
-                            reverse(e) ∈ handled && continue
+                            #reverse(e) ∈ handled && continue
                             push!(handled, e)
                             push!(Q2, (PeriodicVertex(metal.v, metal.ofs .- metal2.ofs), metal2))
                         end
                     end
                 end
-                keep_edges = edges_of_convex_hull(copyneighs, num_targets, cryst.pos, keep_edges)
-                update_new_edgs!(new_edgs, copyneighs, keep_edges, toremove, rev_vmap, num_targets)
+                # u == 1 && @show metal, copyneighs
+                keep_edges = edges_of_convex_hull(copyneighs, num_targets, mat, cryst.pos, toremove,
+                                                  copy(visited_coplanar4), keep_edges)
+                update_new_edgs!(new_edgs, copyneighs, keep_edges, toremove, rev_vmap)
             end
         end
     end

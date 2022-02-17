@@ -278,8 +278,10 @@ These boolean options have a default value determined by [`Bonding`](@ref),
 - detect_paddlewheels: detect paddle-wheel pattern and group them into an inorganic vertex.
 - detect_organiccycles: detect organic cycles and collapse all belonging C atoms into a new
   vertex. Default is true.
-- detect_points_of_extension: detect organic points-of-extension (organic atoms bonded to
-  another SBU) and transform them into vertices. Default is true.
+- detect_pe: detect organic points-of-extension (organic atoms bonded to another SBU) and
+  transform them into vertices. Default is true.
+- cluster_simple_pe: cluster adjacent points-of-extension if they are not part of a cycle.
+  Default is true.
 - separate_metals: separate each metal atom into its own vertex (instead of grouping them
   to form metallic clusters if they are adjacent or bonded by an oxygen). Default depends
   on the [`Clustering`](@ref) (true for Standard and PEM, false otherwise).
@@ -316,7 +318,8 @@ struct Options
     cluster_kinds::ClusterKinds
     detect_paddlewheels::Bool
     detect_organiccycles::Bool
-    detect_points_of_extension::Bool
+    detect_pe::Bool
+    cluster_simple_pe::Bool
     split_O_vertex::Bool
     unify_sbu_decomposition::Bool
     separate_metals::Union{Nothing,Bool}
@@ -351,7 +354,8 @@ struct Options
                        cluster_kinds=default_sbus,
                        detect_paddlewheels=true,
                        detect_organiccycles=true,
-                       detect_points_of_extension=true,
+                       detect_pe=true,
+                       cluster_simple_pe=true,
                        split_O_vertex=true,
                        unify_sbu_decomposition=false,
                        separate_metals=nothing,
@@ -402,7 +406,8 @@ struct Options
             cluster_kinds,
             detect_paddlewheels,
             detect_organiccycles,
-            detect_points_of_extension,
+            detect_pe,
+            cluster_simple_pe,
             split_O_vertex,
             unify_sbu_decomposition,
             separate_metals,

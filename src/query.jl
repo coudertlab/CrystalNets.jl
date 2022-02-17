@@ -500,6 +500,7 @@ function topologies_dataset(path, save, autoclean, options::Options)
 
     @threads for file in files
         f = joinpath(path, file)
+        # threadid() == 1 && @show f # to find infinite loops: the last one printed is probably running
 
         genomes::Vector{Tuple{Vector{Int},String}} = try
             topological_genome(UnderlyingNets(parse_chemfile(f, options)))
