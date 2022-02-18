@@ -848,12 +848,14 @@ function remove_metal_cluster_bonds!(graph, types, opts)
             push!(metallic_list, i)
         end
     end
-    nonmetallic_neighbours = Vector{Dict{Int,SVector{3,Int}}}(undef, n)
+    nonmetallic_neighbours = Vector{Dict{Int,Set{SVector{3,Int}}}}(undef, n)
     for j in metallic_list
         any(x -> metallic[x.v], neighbors(graph, j)) || continue
-        nonmetallic_neighs = Dict{Int,SVector{3,Int}}()
+        nonmetallic_neighs = Dict{Int,Set{SVector{3,Int}}}()
         for x in neighbors(graph, j)
-            metallic[x.v] || (nonmetallic_neighs[x.v] = x.ofs)
+            if !metallic[x.v]
+                push!(get!(nonmetallic_neighs, x.v, Set{SVector{3,Int}}()), x.ofs)
+            end
         end
         nonmetallic_neighbours[j] = nonmetallic_neighs
     end
@@ -864,7 +866,8 @@ function remove_metal_cluster_bonds!(graph, types, opts)
         o = PeriodicGraphs.ofs(e)
         if metallic[s] && metallic[d]
             for k in intersect(keys(nonmetallic_neighbours[s]), keys(nonmetallic_neighbours[d]))
-                if nonmetallic_neighbours[s][k] == nonmetallic_neighbours[d][k] .+ o
+                if !isempty(intersect(nonmetallic_neighbours[s][k],
+                                      nonmetallic_neighbours[d][k] .+ Ref(o)))
                     push!(edges_toremove, e)
                     break
                 end

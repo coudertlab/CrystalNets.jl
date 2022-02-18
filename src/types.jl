@@ -438,7 +438,7 @@ function remove_partial_occupancy(cif::CIF)
         return CIF(cif.cifinfo, cif.cell, cif.ids, cif.types, cif.pos, cif.bonds)
     end
     @ifwarn @warn "This CIF file contains at least one site with multiple atoms. Only one atom will be kept per atom site."
-    occupancies = parsestrip.(Float64, get(cif.cifinfo, "atom_site_occupancy", 
+    occupancies = parsestrip.(Float64, get(cif.cifinfo, "atom_site_occupancy",
                                       ["1.0" for _ in 1:length(cif.types)])::Vector{String})
     toremove = Int[]
     bonds = [copy(b) for b in cif.bonds]
@@ -774,11 +774,12 @@ end
 
 trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(collapse_clusters(c, c.clusters))
 function trimmed_crystal(c::Crystal{Nothing})
-    vmap, graph = trim_topology(c.graph)
+    g = deepcopy(c.graph)
+    remove_metal_cluster_bonds!(g, c.types, c.options)
+    vmap, graph = trim_topology(g)
+    types = c.types[vmap]
     pos = c.pos[vmap]
     opts = isempty(c.options._pos) ? c.options : Options(c.options; _pos=pos)
-    types = c.types[vmap]
-    remove_metal_cluster_bonds!(graph, types, opts)
     return Crystal{Nothing}(c.cell, types, pos, graph, opts)
 end
 
@@ -1011,6 +1012,7 @@ function UnderlyingNets(c::Crystal, clustering)
     initialvmap::Union{Nothing,Vector{Int}} = if early_trim
         _initialvmap, graph = trim_topology(_graph)
         types = c.types[_initialvmap]
+        remove_metal_cluster_bonds!(graph, types, opts)
         _initialvmap
     else
         types = c.types
@@ -1019,7 +1021,6 @@ function UnderlyingNets(c::Crystal, clustering)
     end
 
     remove_homoatomic_bonds!(graph, types, opts.ignore_homoatomic_bonds)
-    remove_metal_cluster_bonds!(graph, types, opts)
     if !isempty(opts.export_net) && !isempty(opts._pos)
         if initialvmap isa Vector{Int}
             pos = opts._pos[initialvmap]
@@ -1028,7 +1029,7 @@ function UnderlyingNets(c::Crystal, clustering)
             pos = opts._pos
         end
 
-        export_default(Crystal{Nothing}(cell, types, pos, graph, opts), 
+        export_default(Crystal{Nothing}(cell, types, pos, graph, opts),
                        "net", opts.name, opts.export_net)
     end
     dimensions = PeriodicGraphs.dimensionality(graph)
