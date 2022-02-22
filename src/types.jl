@@ -1,8 +1,5 @@
 ## Type definitions for intermediate representations of crystals up to a net
 
-include("specialsolver.jl")
-include("options.jl")
-
 import Base: ==
 using Tokenize
 
@@ -1084,7 +1081,6 @@ function UnderlyingNets(c::Crystal, clustering)
                 vmap = vmapD[vmap]
             end
             if early_trim
-                clustname = lowercase(string(opts.clustering))
                 export_default(Crystal{Nothing}(cell, t, c.pos[vmap], g, opts),
                             "subnet", opts.name, opts.export_subnets)
                 @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, t, g, opts)]))
@@ -1092,26 +1088,26 @@ function UnderlyingNets(c::Crystal, clustering)
                 clustering::Clustering._Clustering
                 if clustering == Clustering.Auto
                     __pos = c.pos[vmap]
-                    alln = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, __pos, g, opts))
-                    singlen = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, __pos, g, opts))
-                    export_default(alln, "subnet_allnodes", opts.name, opts.export_subnets)
+                    alln = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, __pos, g, Options(opts; clustering=Clustering.AllNodes)))
+                    singlen = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, __pos, g, Options(opts; clustering=Clustering.SingleNodes)))
                     if alln.graph == singlen.graph
-                        @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, alln.types, alln.graph, alln.options)]))
+                        export_default(alln, "subnet", opts.name, opts.export_subnets)
                     else
+                        export_default(alln, "subnet_allnodes", opts.name, opts.export_subnets)
                         export_default(singlen, "subnet_singlenodes", opts.name, opts.export_subnets)
-                        @separategroups D groups push!(groups, (vmap, [
-                            CrystalNet(cell, alln.types, alln.graph, alln.options),
-                            CrystalNet(cell, singlen.types, singlen.graph, singlen.options),
-                        ]))
                     end
-                elseif clustering == Clustering.AllNodes
-                    x = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
-                    export_default(x, "subnet", opts.name, opts.export_subnets)
-                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, x.options)]))
+                    @separategroups D groups push!(groups, (vmap, [
+                        CrystalNet(cell, alln.types, alln.graph, alln.options),
+                        CrystalNet(cell, singlen.types, singlen.graph, singlen.options),
+                    ]))
                 else
-                    @toggleassert clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
-                    clustname = clustering == Clustering.SingleNodes ? "singlenodes" : "standard"
-                    x = intermediate_to_standard(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
+                    opts = Options(opts; clustering=clustering)
+                    x = if clustering == Clustering.AllNodes
+                        intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
+                    else
+                        @toggleassert clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
+                        intermediate_to_standard(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
+                    end
                     export_default(x, "subnet", opts.name, opts.export_subnets)
                     @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, x.options)]))
                 end
@@ -1239,3 +1235,183 @@ CrystalNet(g::PseudoGraph, options::Options) = CrystalNet(UnderlyingNets(g, opti
 CrystalNet(g::PseudoGraph; kwargs...) = CrystalNet(g, Options(; kwargs...))
 CrystalNet{D}(g::PseudoGraph, options::Options) where {D} = CrystalNet{D}(UnderlyingNets(g, options))
 CrystalNet{D}(g::PseudoGraph; kwargs...) where {D} = CrystalNet{D}(UnderlyingNets(g; kwargs...))
+
+
+const SmallDimPeriodicGraph = Union{PeriodicGraph{0}, PeriodicGraph1D, PeriodicGraph2D, PeriodicGraph3D}
+
+mutable struct SingleTopologyResult
+    genome::SmallDimPeriodicGraph
+    name::Union{Nothing,String}
+    unstable::Bool
+    error::String
+end
+
+SingleTopologyResult(g, name, unstable=false) = SingleTopologyResult(g, name, unstable, "")
+SingleTopologyResult(x::AbstractString) = SingleTopologyResult(PeriodicGraph{0}(), nothing, false, x)
+SingleTopologyResult() = SingleTopologyResult("")
+
+function ==(s1::SingleTopologyResult, s2::SingleTopologyResult)
+    s1.genome == s2.genome || return false
+    ndims(s1.genome) == 0 && return s1.error = s2.error
+    return true
+end
+function Base.hash(s::SingleTopologyResult, h::UInt)
+    isempty(s.error) ? hash(s.error, h) : s.name === nothing ? hash(s.genome, h) : hash(s.name, h)
+end
+
+function Base.show(io::IO, x::SingleTopologyResult)
+    if !isempty(x.error)
+        print(io, "FAILED with: ", x.error)
+    elseif ndims(x.genome) == 0
+        print(io, "non-periodic")
+    elseif x.unstable
+        print(io, "unstable ", x.genome)
+    elseif x.name isa String
+        print(io, x.name)
+    else
+        print(io, "UNKNOWN ", x.genome)
+    end
+end
+
+function Base.parse(::Type{SingleTopologyResult}, s::AbstractString)
+    if startswith(s, "UNKNOWN")
+        return SingleTopologyResult(PeriodicGraph(s[9:end]), nothing, false)
+    end
+    s == "non-periodic" && return SingleTopologyResult()
+    if startswith(s, "unstable")
+        return SingleTopologyResult(PeriodicGraph(s[10:end]), nothing, true)
+    end
+    if startswith(s, "FAILED")
+        return SingleTopologyResult(s[13:end])
+    end
+    return SingleTopologyResult(parse(PeriodicGraph, REVERSE_CRYSTAL_NETS_ARCHIVE[s]), s, false)
+end
+
+
+struct TopologyResult
+    results::SizedVector{8,SingleTopologyResult}
+    attributions::MVector{8,Int8}
+    uniques::Vector{Int8}
+end
+
+TopologyResult() = TopologyResult(SizedVector{8,SingleTopologyResult}(undef),
+                                  MVector{8,Int8}(0, 0, 0, 0, 0, 0, 0, 0), Int8[])
+
+function TopologyResult(x::Vector{Tuple{_Clustering,Union{_Clustering,SingleTopologyResult}}})
+    ret = TopologyResult()
+    results = ret.results
+    attributions = ret.attributions
+    uniques = ret.uniques
+
+    encountered = Dict{SingleTopologyResult,Int}()
+    for (i, result) in x
+        if result isa _Clustering
+            attributions[Int(i)] = Int(result)
+        else
+            j = get!(encountered, result, Int(i))
+            attributions[Int(i)] = j
+            if j == Int(i)
+                push!(uniques, j)
+                results[j] = result
+            end
+        end
+    end
+
+    return ret
+end
+
+function Base.getindex(x::TopologyResult, c::_Clustering)
+    if attributions[Int(c)] == 0
+        throw(ArgumentError("No stored topology result for clustering $c"))
+    end
+    return x.results[attributions[Int(c)]]
+end
+Base.getindex(x::TopologyResult, c::Symbol) = getindex(x, clustering_from_symb(c))
+
+function Base.setindex!(x::TopologyResult, a::Union{SingleTopologyResult,_Clustering}, c::_Clustering)
+    i = Int(c)
+    notuniqueflag = false
+    if a isa _Clustering
+        x.attributions[i] = Int(a)
+        notuniqueflag = true
+    else
+        for j in x.uniques
+            if x.results[j] == a
+                x.attributions[i] = j
+                notuniqueflag = true
+                break
+            end
+        end
+    end
+    k = findfirst(==(i), x.uniques)
+    if notuniqueflag
+        if k isa Int
+            deleteat!(x.uniques, k)
+        end
+    else
+        if k isa Nothing
+            push!(x.uniques, i)
+        end
+        x.attributions[i] = i
+        x.results[i] = a::SingleTopologyResult
+    end
+    x
+end
+
+function Base.setindex!(x::TopologyResult, ::Nothing, c::_Clustering)
+    i = Int(c)
+    if x.attributions[i] == i
+        j::Int = findfirst(==(i), x.uniques)
+        deleteat!(x.uniques, j)
+        for k in 1:8
+            if x.attributions[k] == i
+                x.attributions[k] = 0
+            end
+        end
+    else
+        x.attributions[i] = 0
+    end
+    x
+end
+
+
+function Base.show(io::IO, x::TopologyResult)
+    rev_vmap = zeros(Int, 8)
+    for (i, j) in enumerate(x.uniques)
+        rev_vmap[j] = i
+    end
+    samenet = [[k] for k in x.uniques]
+    for (i, j) in enumerate(x.attributions)
+        (j == 0 || j == i) && continue
+        push!(samenet[rev_vmap[j]], i)
+    end
+
+    compact = get(io, :compact, false)
+    for (k, l) in enumerate(samenet)
+        join(io, (string(clustering_from_num(k)) for k in l), compact ? ',' : ", ")
+        print(io, ": ")
+        show(io, x.results[l[1]])
+        k == length(samenet) || (compact ? print(io, " | ") : println(io))
+    end
+end
+
+function Base.parse(::Type{TopologyResult}, s::AbstractString)
+    splits = split(s, " | ")
+    if length(splits) == 1
+        splits = split(s, '\n')
+    end
+    ret = Tuple{_Clustering,Union{_Clustering,SingleTopologyResult}}[]
+    for sp in splits
+        _clusterings, result = split(sp, ": ")
+        clusterings = split(_clusterings, ',')
+        ref_cluster = parse(_Clustering, first(clusterings))
+        if length(clusterings) > 1
+            for j in 2:length(clusterings)
+                clust = clusterings[j]
+                push!(ret, (parse(_Clustering, clust[1] == ' ' ? clust[2:end] : clust), ref_cluster))
+            end
+        end
+        push!(ret, (ref_cluster, parse(SingleTopologyResult, result)))
+    end
+    return TopologyResult(ret)
+end

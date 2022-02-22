@@ -111,13 +111,13 @@ function rational_lu(A::SparseMatrixCSC, check::Bool=true, ::Type{Ti}=BigRationa
     #     indices = sortperm(J)
     #     I = I[indices]; J = J[indices]; V = V[indices]
     # end
-    isempty(J) && return LU{Tf,SparseMatrixCSC{Tf,Int}}(A, Int[], convert(BlasInt, 0))
+    isempty(J) && return LU{Tf,SparseMatrixCSC{Tf,Int}}(Tf.(A), Int[], convert(BlasInt, 0))
     m, n = size(A)
     minmn = min(m, n)
     if J[1] != 1 || I[1] != 1
         check && checknonsingular(1, Val(false)) # TODO update with Pivot
         # return LU{eltype(A), typeof(A)}(A, collect(1:minmn), convert(BlasInt, 1))
-        return LU{Tf,SparseMatrixCSC{Tf,Int}}(A, collect(1:minmn), convert(BlasInt, 1))
+        return LU{Tf,SparseMatrixCSC{Tf,Int}}(Tf.(A), collect(1:minmn), convert(BlasInt, 1))
     end
 
     col_offset = zeros(Int, minmn) # for each col, index of the pivot element

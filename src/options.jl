@@ -84,14 +84,14 @@ split into new finite clusters using heuristics.
 """
 module Clustering
     @enum _Clustering begin
-        Auto
-        Input
-        EachVertex
-        SingleNodes
-        AllNodes
-        Standard
-        PEM
-        Intermediate
+        Auto         = 1
+        Input        = 2
+        EachVertex   = 3
+        SingleNodes  = 4
+        AllNodes     = 5
+        Standard     = 6
+        PEM          = 7
+        Intermediate = 8
     end
     """See help for [`Clustering`](@ref)"""
     Auto, Input, EachVertex, SingleNodes, AllNodes, Standard, PEM, Intermediate
@@ -99,6 +99,68 @@ end
 import .Clustering
 import .Clustering: _Clustering
 
+function clustering_from_num(x::Integer)
+    if x == 1
+        return Clustering.Auto
+    elseif x == 2
+        return Clustering.Input
+    elseif x == 3
+        return Clustering.EachVertex
+    elseif x == 4
+        return Clustering.SingleNodes
+    elseif x == 5
+        return Clustering.AllNodes
+    elseif x == 6
+        return Clustering.Standard
+    elseif x == 7
+        return Clustering.PEM
+    elseif x == 8
+        return Clustering.Intermediate
+    end
+    throw(ArgumentError("No clustering from number $x"))
+end
+
+function clustering_from_symb(x::Symbol)
+    if x === :Auto
+        return Clustering.Auto
+    elseif x === :Input
+        return Clustering.Input
+    elseif x === :EachVertex
+        return Clustering.EachVertex
+    elseif x === :SingleNodes
+        return Clustering.SingleNodes
+    elseif x === :AllNodes
+        return Clustering.AllNodes
+    elseif x === :Standard
+        return Clustering.Standard
+    elseif x === :PEM
+        return Clustering.PEM
+    elseif x === :Intermediate
+        return Clustering.Intermediate
+    end
+    throw(ArgumentError("No clustering from symbol $x"))
+end
+
+function Base.parse(::Type{_Clustering}, s::AbstractString)
+    if s == "Auto"
+        return Clustering.Auto
+    elseif s == "Input"
+        return Clustering.Input
+    elseif s == "EachVertex"
+        return Clustering.EachVertex
+    elseif s == "SingleNodes"
+        return Clustering.SingleNodes
+    elseif s == "AllNodes"
+        return Clustering.AllNodes
+    elseif s == "Standard"
+        return Clustering.Standard
+    elseif s == "PEM"
+        return Clustering.PEM
+    elseif s == "Intermediate"
+        return Clustering.Intermediate
+    end
+    throw(ArgumentError("No clustering from string $x"))
+end
 
 """
     ClusterKinds(sbus, toclassify=Int[])

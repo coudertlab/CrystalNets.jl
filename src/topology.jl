@@ -1097,9 +1097,12 @@ Return a unique topological key for the net, which is a topological invariant of
 (i.e. it does not depend on its initial representation).
 """
 function topological_key(net::CrystalNet)
-    isempty(net.pos) && return "non-periodic"
+    isempty(net.pos) && return PeriodicGraph{0}()
     newnet, collisions = collision_nodes(net)
-    collisions isa Nothing && return string("unstable ", net.graph)
+    if collisions isa Nothing
+        net.graph.width[] = -2 # internal error code
+        return net.graph
+    end
     return topological_key(newnet, collisions::Vector{CollisionNode})
 end
 
@@ -1129,6 +1132,6 @@ function topological_key(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}
 
     # finalbasis = minimal_basis * newbasis
     # return Int.(finalbasis), minimal_vmap, graph
-    return string(graph)
+    return graph
 end
 

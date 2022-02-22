@@ -94,7 +94,8 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
         println(f, "ordered")
         for x in invcorres
             coord = c.cell.mat * (widen.(c.pos[x.v]) .+ x.ofs)
-            println(f, join(round.(Float64.(coord); digits=15), ' '))
+            join(f, round.(Float64.(coord); digits=15), ' ')
+            println(f)
         end
     end
 end
@@ -220,7 +221,9 @@ function export_cgd(file, c::Crystal)
         println(f, "\tNAME\t", last(splitdir(file)))
         #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
         _a, _b, _c, α, β, γ = Float64.(cell_parameters(c.cell))
-        println(f, "\tGROUP\t\"", join(split(c.cell.spacegroup, ' ')), "\"")
+        print(f, "\tGROUP\t\"")
+        join(f, split(c.cell.spacegroup, ' '))
+        println("\"")
         println(f, "\tCELL\t", _a, ' ', _b, ' ', _c, ' ', α, ' ', β, ' ', γ, ' ')
         println(f, "\tATOM")
         to_revisit = Int[]
@@ -259,7 +262,9 @@ function export_cgd(file, g::PeriodicGraph)
             for i in 1:n
                 ofs[i] = pop!(repr)
             end
-            println(f, '\t', src, ' ', dst, ' ', join(ofs, ' '))
+            print(f, '\t', src, ' ', dst, ' ')
+            join(f, ofs, ' ')
+            println(f)
         end
         println(f, "END\n")
     end

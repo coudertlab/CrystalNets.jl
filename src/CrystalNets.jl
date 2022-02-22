@@ -22,14 +22,14 @@ export CrystalNet,
        topological_genome,
        recognize_topology,
        determine_topology,
-       determine_topologies,
        guess_topology,
-       guess_topologies,
        topologies_dataset,
        guess_dataset,
        StructureType,
        Bonding,
-       Clustering
+       Clustering,
+       SingleTopologyResult,
+       TopologyResult
 
 import LinearAlgebra: det, norm, rank
 using Base.Threads
@@ -70,6 +70,8 @@ end
 
 include("utils.jl")
 __precompile__(true)
+include("specialsolver.jl") # Exact sparse symmetric integer matrix factorization
+include("options.jl") # Computation options
 include("types.jl") # Main internal type definitions used to represent topologies
 include("input.jl") # Crystal file parsing and conversion to an internal type
 include("archive.jl") # Manipulation of the topological archive
