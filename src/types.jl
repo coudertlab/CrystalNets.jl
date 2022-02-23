@@ -769,7 +769,6 @@ function Crystal{Clusters}(c::Crystal{T}; kwargs...) where T
     Crystal{Clusters}(c, Clusters(length(c.types)); kwargs...)
 end
 
-trimmed_crystal(c::Crystal{Clusters}) = trimmed_crystal(collapse_clusters(c, c.clusters))
 function trimmed_crystal(c::Crystal{Nothing})
     g = deepcopy(c.graph)
     remove_metal_cluster_bonds!(g, c.types, c.options)
@@ -778,6 +777,18 @@ function trimmed_crystal(c::Crystal{Nothing})
     pos = c.pos[vmap]
     opts = isempty(c.options._pos) ? c.options : Options(c.options; _pos=pos)
     return Crystal{Nothing}(c.cell, types, pos, graph, opts)
+end
+
+
+function Base.getindex(c::Crystal{T}, vmap::AbstractVector{<:Integer}) where T
+    types = c.types[vmap]
+    pos = c.pos[vmap]
+    graph = c.graph[vmap]
+    if T === Nothing
+        return Crystal{Nothing}(c.cell, types, pos, graph, c.options)
+    else
+        return Crystal{Clusters}(c.cell, types, c.clusters[vmap], pos, graph, c.options)
+    end
 end
 
 ## CrystalNet
@@ -947,12 +958,88 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
     return CrystalNet{D,T}(cell, types, pos, graph, options)
 end
 
+function Base.show(io::IO, x::CrystalNet)
+    print(io, typeof(x), " of ", x.options.name, " with ", length(x.types), " vertices and ",
+          ne(x.graph), " edges")
+    if length(x.options.clusterings) == 1
+        print(io, " (clustering: ", x.options.clusterings[1], ')')
+    end
+    nothing
+end
+
 function trim_crystalnet!(graph, types, tohandle, keep)
     sort!(tohandle)
     toremove = keep ? deleteat!(collect(1:length(types)), tohandle) : tohandle
     vmap = rem_vertices!(graph, toremove)
     return vmap
 end
+
+
+
+function separate_components(c::Crystal{T}) where T
+    graph = PeriodicGraphs.change_dimension(PeriodicGraph3D, c.graph)
+    dimensions = PeriodicGraphs.dimensionality(graph)
+    @ifwarn if haskey(dimensions, 0)
+        @warn "Detected structure of dimension 0, possibly solvent residues. It will be ignored for topology computation."
+    end
+    ret = (Tuple{Vector{Int},Crystal{T}}[], Tuple{Vector{Int},Crystal{T}}[], Tuple{Vector{Int},Crystal{T}}[])
+    for i in 1:3
+        reti = ret[i]
+        for vmap in get(dimensions, i, Vector{Int}[])
+            push!(reti, (vmap, c[vmap]))
+        end
+    end
+    return ret
+end
+
+
+function _collect_net!(ret, encountered, idx, c, clustering, ::Val{D}) where D
+    vmap, graph = trim_topology(c.graph)
+    types = c.types[vmap]
+    remove_metal_cluster_bonds!(graph, types, c.options)
+    remove_homoatomic_bonds!(graph, types, c.options.ignore_homoatomic_bonds)
+    j = get!(encountered, c.graph, idx)
+    if j == idx
+        export_default(Crystal{Nothing}(c.cell, types, c.pos[vmap], graph, c.options),
+            "subnet_$clustering", c.options.name, c.options.export_subnets)
+        ret[idx] = CrystalNet{D}(c.cell, types, graph, c.options)
+    else
+        ref = ret[j]
+        ret[idx] = typeof(ref)(ref.cell, ref.types, ref.pos, ref.graph, c.options)
+    end
+    nothing
+end
+
+function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
+    ret = Vector{CrystalNet{D}}(undef, length(crystals))
+    encountered = Dict{PeriodicGraph3D,Int}()
+    idx = 1
+    for c in crystals
+        clustering = only(c.options.clusterings)
+        if clustering ∉ (Clustering.Auto, Clustering.AllNodes, Clustering.SingleNodes, Clustering.Standard)
+            _collect_net!(ret, encountered, idx, c, clustering, Val(D))
+        else
+            if clustering == Clustering.Auto
+                alln = intermediate_to_allnodes(Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, Options(c.options; clusterings=[Clustering.AllNodes])))
+                singlen = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, Options(c.options; clusterings=[Clustering.SingleNodes])))
+                resize!(ret, length(ret)+1)
+                _collect_net!(ret, encountered, idx, alln, clustering, Val(D))
+                _collect_net!(ret, encountered, idx+1, singlen, clustering, Val(D))
+                idx += 1
+            else
+                if clustering == Clustering.AllNodes
+                    _collect_net!(ret, encountered, idx, intermediate_to_allnodes(c), clustering, Val(D))
+                else
+                    @toggleassert clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
+                    _collect_net!(ret, encountered, idx, intermediate_to_standard(c), clustering, Val(D))
+                end
+            end
+        end
+        idx += 1
+    end
+    return ret
+end
+
 
 struct UnderlyingNets
     D1::Vector{Tuple{Vector{Int},Vector{CrystalNet1D}}}
@@ -964,179 +1051,73 @@ UnderlyingNets() = UnderlyingNets(Tuple{Vector{Int},Vector{CrystalNet1D}}[],
                                   Tuple{Vector{Int},Vector{CrystalNet1D}}[],
                                  )
 
-function _separategroups!(ex, groups, i)
+function _repeatgroups!(ex, i)
     for j in 1:length(ex.args)
         arg = ex.args[j]
         if arg isa Symbol
-            if arg === :UnderlyingNets
-                ex.args[j] = groups
-            elseif arg === :CrystalNet
-                ex.args[j] = :(CrystalNet{$i})
-            elseif arg === groups
-                ex.args[j] = Expr(:., groups, QuoteNode(Symbol(:D, i)))
+            if arg === :groups
+                ex.args[j] = Expr(:., :groups, QuoteNode(Symbol(:D, i)))
+            elseif arg === :nets
+                ex.args[j] = Symbol(:nets, i)
+            elseif arg === :D
+                ex.args[j] = i
+            # elseif arg === :CrystalNet
+            #     ex.args[j] = :(CrystalNet{$i})
+            # elseif arg === :UnderlyingNets
+            #     ex.args[j] = :groups
             end
         elseif arg isa Expr
-            _separategroups!(arg, groups, i)
+            _repeatgroups!(arg, i)
         end
     end
     nothing
 end
 
-macro separategroups(D, groups, ex)
+macro repeatgroups(ex)
     exs = [deepcopy(ex) for _ in 1:3]
     for i in 1:3
-        _separategroups!(exs[i], groups, i)
+        _repeatgroups!(exs[i], i)
     end
     return quote
-        if $(esc(D)) == 1
-            $(esc(exs[1]))
-        elseif $(esc(D)) == 2
-            $(esc(exs[2]))
-        elseif $(esc(D)) == 3
-            $(esc(exs[3]))
-        else
-            throw(AssertionError("1 ≤ D ≤ 3"))
-        end
+        $(esc(exs[1]))
+        $(esc(exs[2]))
+        $(esc(exs[3]))
     end
 end
 
-
-function UnderlyingNets(c::Crystal, clustering)
-    cell = c.cell
-    opts = c.options
-    early_trim = clustering isa Nothing || clustering ∉ (Clustering.Auto, Clustering.AllNodes, Clustering.SingleNodes, Clustering.Standard)
-    _graph = PeriodicGraphs.change_dimension(PeriodicGraph3D, c.graph)
-    initialvmap::Union{Nothing,Vector{Int}} = if early_trim
-        _initialvmap, graph = trim_topology(_graph)
-        types = c.types[_initialvmap]
-        remove_metal_cluster_bonds!(graph, types, opts)
-        _initialvmap
-    else
-        types = c.types
-        graph = _graph
-        nothing
-    end
-
-    remove_homoatomic_bonds!(graph, types, opts.ignore_homoatomic_bonds)
-    if !isempty(opts.export_net) && !isempty(opts._pos)
-        if initialvmap isa Vector{Int}
-            pos = opts._pos[initialvmap]
-        else
-            @ifwarn @info "The following net is exported before trimming because clustering $clustering was chosen. Use the export_subnets option to see the nets after clustering and trimming."
-            pos = opts._pos
-        end
-
-        export_default(Crystal{Nothing}(cell, types, pos, graph, opts),
-                       "net", opts.name, opts.export_net)
-    end
-    dimensions = PeriodicGraphs.dimensionality(graph)
-
-    if haskey(dimensions, 0)
-        @ifwarn @warn "Removing complex structure of dimension 0, possibly solvent residues."
-        # Note that the above warning will not appear for small solvent molecules, because
-        # those will have been removed by trim_topology beforehand.
-        dim0::Vector{Int} = reduce(vcat, @inbounds dimensions[0]; init=Int[])
-        vmap0 = trim_crystalnet!(graph, types, dim0, false)
-        types = types[vmap0]
-        dimensions = PeriodicGraphs.dimensionality(graph)
-        initialvmap = initialvmap isa Vector{Int} ? initialvmap[vmap0] : vmap0
-    end
-
+function UnderlyingNets(c::Crystal)
     groups = UnderlyingNets()
-
-    for D in sort(collect(keys(dimensions)))
-        dimD = @inbounds dimensions[D]
-        if length(dimensions) == 1
-            graphD = graph
-            typesD = types
-            vmapD = initialvmap isa Vector{Int} ? initialvmap : collect(1:nv(graph))
-        else
-            graphD = deepcopy(graph)
-            catdimD::Vector{Int} = reduce(vcat, dimD; init=Int[])
-            vmapD = trim_crystalnet!(graphD, types, catdimD, true)
-            invvmapD = zeros(Int, length(types))
-            for i in eachindex(vmapD)
-                invvmapD[vmapD[i]] = i
-            end
-            for l in dimD
-                for i in eachindex(l)
-                    l[i] = invvmapD[l[i]]
-                end
-            end
-            typesD = types[vmapD]
-            if initialvmap isa Vector{Int}
-                vmapD = initialvmap[vmapD]
-            end
-        end
-        for l in dimD # l is a connex component of dimensionality D
-            if length(dimD) == 1
-                g = graphD
-                t = typesD
-                vmap = vmapD
-            else
-                g = deepcopy(graphD)
-                tokeep::Vector{Int} = reduce(vcat, l; init=Int[])
-                vmap = trim_crystalnet!(g, typesD, tokeep, true)
-                t = typesD[vmap]
-                vmap = vmapD[vmap]
-            end
-            if early_trim
-                export_default(Crystal{Nothing}(cell, t, c.pos[vmap], g, opts),
-                            "subnet", opts.name, opts.export_subnets)
-                @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, t, g, opts)]))
-            else
-                clustering::Clustering._Clustering
-                if clustering == Clustering.Auto
-                    __pos = c.pos[vmap]
-                    alln = intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, __pos, g, Options(opts; clustering=Clustering.AllNodes)))
-                    singlen = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, t, __pos, g, Options(opts; clustering=Clustering.SingleNodes)))
-                    if alln.graph == singlen.graph
-                        export_default(alln, "subnet", opts.name, opts.export_subnets)
-                    else
-                        export_default(alln, "subnet_allnodes", opts.name, opts.export_subnets)
-                        export_default(singlen, "subnet_singlenodes", opts.name, opts.export_subnets)
-                    end
-                    @separategroups D groups push!(groups, (vmap, [
-                        CrystalNet(cell, alln.types, alln.graph, alln.options),
-                        CrystalNet(cell, singlen.types, singlen.graph, singlen.options),
-                    ]))
-                else
-                    opts = Options(opts; clustering=clustering)
-                    x = if clustering == Clustering.AllNodes
-                        intermediate_to_allnodes(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
-                    else
-                        @toggleassert clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
-                        intermediate_to_standard(Crystal{Nothing}(c.cell, t, c.pos[vmap], g, opts))
-                    end
-                    export_default(x, "subnet", opts.name, opts.export_subnets)
-                    @separategroups D groups push!(groups, (vmap, [CrystalNet(cell, x.types, x.graph, x.options)]))
-                end
-            end
+    components = separate_components(c)
+    @repeatgroups begin
+        for (vmap, component) in components[D]
+            crystals = collapse_clusters(component)
+            nets = collect_nets(crystals, Val(D))
+            push!(groups, (vmap, nets))
         end
     end
-
     return groups
 end
 
-function CrystalNet(c::Crystal, ::Nothing)::CrystalNet
-    group = UnderlyingNets(c, nothing)
+
+function CrystalNet(c::Crystal)::CrystalNet
+    group = UnderlyingNets(c)
     D = isempty(group.D3) ? isempty(group.D2) ? isempty(group.D1) ? 0 : 1 : 2 : 3
-    D == 0 && return CrystalNet{0,Int8}(c.cell, Symbol[], SVector{0,Int8}[], PeriodicGraph{0}(), c.options)
-    nonuniqueD = D != 1 && (!isempty(group.D1) || (D == 3 && !isempty(group.D2)))
-    if nonuniqueD
-        @ifwarn @warn "Presence of periodic structures of different dimensionalities. Only the highest dimensionality ($D here) will be retained."
-    end
-    interpenetratingD = false
-    @separategroups D group begin
-        interpenetratingD = length(group) > 1
-    end
-    if interpenetratingD
-        error(ArgumentError("Multiple interpenetrating $D-dimensional structures. Cannot handle this as a single CrystalNet, use UnderlyingNets instead."))
-    end
-    @separategroups D group begin
-        return last(first(group))
+    D == 0 && return CrystalNet{0,Int8}(c[1].cell, Symbol[], SVector{0,Int8}[], PeriodicGraph{0}(), c[1].options)
+    if D == 3
+        length(group.D3) > 1 && __throw_interpenetrating(D)
+        (isempty(group.D1) && isempty(group.D2)) || __warn_nonunique(D)
+        return last(first(group.D3))
+    elseif D == 2
+        length(group.D2) > 1 && __throw_interpenetrating(D)
+        isempty(group.D1) || __warn_nonunique(D)
+        return last(first(group.D2))
+    elseif D == 1
+        length(group.D1) > 1 && __throw_interpenetrating(D)
+        return last(first(group.D1))
     end
 end
+__warn_nonunique(D) = @ifwarn @warn "Presence of periodic structures of different dimensionalities. Only the highest dimensionality ($D here) will be retained."
+__throw_interpenetrating(D) = error(ArgumentError("Multiple interpenetrating $D-dimensional structures. Cannot handle this as a single CrystalNet, use UnderlyingNets instead."))
 
 function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
                        graph::PeriodicGraph, options::Options) where D
@@ -1203,21 +1184,6 @@ function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
     # Type-unstable function, but yields better performance than always falling back to BigInt
 end
 
-
-function CrystalNet(crystal::Crystal)
-    c, structure, clustering = collapse_clusters(crystal)
-    CrystalNet(c, nothing)
-end
-
-function UnderlyingNets(crystal::Crystal)
-    c, structure, clustering = collapse_clusters(crystal)
-    if crystal.options.clustering != Clustering.Intermediate &&
-            (clustering == Clustering.Intermediate ||
-             crystal.options.clustering == Clustering.Standard)
-        return UnderlyingNets(c, crystal.options.clustering)
-    end
-    UnderlyingNets(c, nothing)
-end
 
 
 const PseudoGraph = Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D}
@@ -1302,15 +1268,18 @@ function TopologyResult(x::Vector{Tuple{_Clustering,Union{_Clustering,SingleTopo
     results = ret.results
     attributions = ret.attributions
     uniques = ret.uniques
+    sort!(x; by=t -> t[2] isa _Clustering)
 
     encountered = Dict{SingleTopologyResult,Int}()
-    for (i, result) in x
+    for (_i, result) in x
         if result isa _Clustering
-            attributions[Int(i)] = Int(result)
+            j = Int(result)
+            attributions[Int(_i)] = attributions[j]
         else
-            j = get!(encountered, result, Int(i))
-            attributions[Int(i)] = j
-            if j == Int(i)
+            i = Int(_i)
+            j = get!(encountered, result, i)
+            attributions[i] = j
+            if j == i
                 push!(uniques, j)
                 results[j] = result
             end

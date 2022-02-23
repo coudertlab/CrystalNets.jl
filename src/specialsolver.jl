@@ -66,7 +66,7 @@ function rational_lu!(B::SparseMatrixCSC{BigRational}, col_offset, check::Bool=t
             piv = nonzeros(B)[ipiv]
             if iszero(piv)
                 check && checknonsingular(k-1, Val(false)) # TODO update with Pivot
-                return LU{Tf,SparseMatrixCSC{Tf,Int}}(B, collect(1:minmn), convert(BlasInt, k-1))
+                return LU{Tf,SparseMatrixCSC{Tf,Int}}(Tf.(B), Vector{BlasInt}(1:minmn), convert(BlasInt, k-1))
             end
             BigRationals.MPQ.inv!(Bkkinv, piv)
             @simd for i in ipiv+1:getcolptr(B)[k+1]-1
@@ -395,11 +395,7 @@ function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
     for _ in 1:N
         popfirst!(λs)
     end
-    δ::BigFloat = @static if VERSION < v"1.6-"
-        (isempty(λs) ? BigFloat(1) : prod(BigFloat, λs))::BigFloat
-    else
-        prod(BigFloat, λs; init=one(BigFloat))
-    end
+    δ::BigFloat = prod(BigFloat, λs; init=one(BigFloat))
     # @show δ
     # @show p
     m = ceil(Int, 2*log(δ / (MathConstants.φ - 1))/log(p))

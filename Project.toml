@@ -31,7 +31,7 @@ PeriodicGraphs = "0.5"
 Pkg = "1.5"
 StaticArrays = "0.12.4, 1.0"
 Tokenize = "0.5.8"
-julia = "1.5"
+julia = "1.6"
 
 [extras]
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"

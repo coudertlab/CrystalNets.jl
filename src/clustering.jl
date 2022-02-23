@@ -832,7 +832,7 @@ end
 
 function remove_metal_cluster_bonds!(graph, types, opts)
     if opts.ignore_metal_cluster_bonds === nothing
-        opts.clustering == Clustering.Standard || return false
+        only(opts.clusterings) == Clustering.Standard || return false
     end
     opts.ignore_metal_cluster_bonds == false && return false
     n = length(types)
@@ -889,9 +889,8 @@ end
 Recognize SBUs using heuristics based on the atom types corresponding to the `Intermediate`
 clustering algorithm.
 """
-function find_sbus(crystal, kinds=default_sbus, clustering=crystal.options.clustering)
-    separate_metals = crystal.options.separate_metals isa Bool ? crystal.options.separate_metals :
-        ((clustering == Clustering.Standard) | (clustering == Clustering.PEM))
+function find_sbus(crystal, kinds=default_sbus)
+    separate_metals = crystal.options.separate_metals::Bool
     n = nv(crystal.graph)
     classes = Vector{Int}(undef, n)
     for i in 1:n
@@ -1254,29 +1253,21 @@ struct InvalidSBU <: ClusteringError
 end
 
 
-find_clusters(c::Crystal, structure=c.options.structure) = find_clusters(c, structure, c.options.clustering)
-function find_clusters(c::Crystal{T}, structure::_StructureType, clustering::_Clustering)::Tuple{Clusters,_StructureType,_Clustering} where T
+function identify_clustering(c::Crystal{T}, structure::_StructureType, clustering::_Clustering)::Tuple{Union{Clusters,Bool},_StructureType,_Clustering} where T
     if clustering == Clustering.Auto
         if structure == StructureType.Auto
             if T === Clusters
                 return c.clusters, structure, clustering
             else
-                return find_clusters(c, structure, Clustering.EachVertex)
+                return identify_clustering(c, structure, Clustering.EachVertex)
             end
         elseif structure == StructureType.Zeolite
-            return find_clusters(c, structure, Clustering.EachVertex)
+            return identify_clustering(c, structure, Clustering.EachVertex)
         elseif structure == StructureType.Guess
-            crystal = Crystal{Nothing}(c)
-            try
-                return find_clusters(crystal, StructureType.Cluster, clustering)
-            catch e
-                if !(e isa ClusteringError)
-                    rethrow()
-                end
-            end
-            return find_clusters(c, StructureType.Auto, clustering)
+            separate_metals = c.options.separate_metals isa Bool ? c.options.separate_metals : false
+            return separate_metals, structure, clustering
         elseif structure == StructureType.MOF || structure == StructureType.Cluster
-            return find_clusters(c, structure, Clustering.Intermediate)
+            return identify_clustering(c, structure, Clustering.Intermediate)
         end
     elseif clustering == Clustering.EachVertex
         return Clusters(length(c.types)), structure, clustering
@@ -1287,17 +1278,80 @@ function find_clusters(c::Crystal{T}, structure::_StructureType, clustering::_Cl
             return c.clusters, structure, clustering
         end
     else
-        @toggleassert clustering == Clustering.Intermediate ||
-                      clustering == Clustering.AllNodes     ||
-                      clustering == Clustering.SingleNodes  ||
-                      clustering == Clustering.Standard     ||
-                      clustering == Clustering.PEM
         if clustering == Clustering.AllNodes || clustering == Clustering.SingleNodes
             clustering = Clustering.Intermediate
+        elseif clustering == Clustering.Standard
+            clustering = Clustering.PEM
         end
-        clusters = find_sbus(c, c.options.cluster_kinds, clustering)
-        return clusters, structure, clustering
+        separate_metals = c.options.separate_metals isa Bool ? c.options.separate_metals : clustering == Clustering.PEM
+        return separate_metals, structure, clustering
     end
+end
+
+function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Clusters where T
+    if c.options.separate_metals === nothing
+        c = Crystal{T}(c; separate_metals)
+    end
+    if guess
+        clusters::Clusters = try
+            find_sbus(c, c.options.cluster_kinds)
+        catch e
+            if !(e isa ClusteringError)
+                rethrow()
+            end
+            return T === Clusters ? c.clusters : Clusters(length(c.types))
+        end
+        newc = Crystal{Nothing}(c; clusterings=[Clustering.Auto], export_attributions=false, export_input=false)
+        if nv(_collapse_clusters(newc, clusters)) <= 1
+            return T === Clusters ? c.clusters : Clusters(length(c.types))
+        end
+        return clusters
+    end
+    return find_sbus(c, c.options.cluster_kinds)
+end
+
+function find_clusters(_c::Crystal{T}) where T
+    c = trim_monovalent(_c)
+    _structure = c.options.structure
+    clusterings = c.options.clusterings
+    ret = Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}}(undef, length(clusterings))
+    encountered = Dict{Tuple{_StructureType,_Clustering,Bool},Int}()
+    for (i, _clustering) in enumerate(clusterings)
+        maybeclusters, structure, clustering = identify_clustering(c, _structure, _clustering)
+        maybebool = maybeclusters isa Bool ? maybeclusters : true
+        clusters::Union{Int,Clusters} = get(encountered, (structure, clustering, maybebool)) do
+            if maybeclusters isa Clusters
+                maybeclusters
+            else
+                _find_clusters(c, structure == StructureType.Guess && clustering == Clustering.Auto, maybeclusters)
+            end
+        end
+        if clusters isa Clusters
+            encountered[(structure, clustering, maybebool)] = i
+        end
+        ret[i] = (Crystal{Nothing}(c; structure, clusterings=[_clustering]), clusters)
+    end
+    return ret
+end
+
+
+"""
+    collapse_clusters(crystal::Crystal)
+
+Return the list of crystals corresponding to the input where each cluster has been
+transformed into a new vertex, for each targeted clustering.
+"""
+function collapse_clusters(crystal::Crystal)
+    crystalclusters::Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}} = find_clusters(crystal)
+    ret = Vector{Crystal{Nothing}}(undef, length(crystalclusters))
+    for (i, (cryst, clust)) in enumerate(crystalclusters)
+        ret[i] = if clust isa Int
+            Crystal{Nothing}(ret[clust]; clusterings=cryst.options.clusterings)
+        else
+            _collapse_clusters(cryst, clust)
+        end
+    end
+    return ret
 end
 
 
@@ -1313,21 +1367,14 @@ function order_atomtype(sym)
     return anum
 end
 
-"""
-    collapse_clusters(crystal::Crystal)
-
-Return the new crystal corresponding to the input where each cluster has been
-transformed into a new vertex.
-"""
-function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.structure,
-                                       _clustering::_Clustering=c.options.clustering)
-    crystal = trim_monovalent(c)
-    clusters, structure, clustering = find_clusters(crystal, _structure, _clustering)
+function _collapse_clusters(crystal::Crystal, clusters::Clusters)
+    structure = crystal.options.structure
+    clustering = only(crystal.options.clusterings)
     if clustering == Clustering.EachVertex || structure == StructureType.Zeolite
         if crystal.options.split_O_vertex
-            return split_O_vertices(crystal), structure, clustering
+            return split_O_vertices(crystal)
         end
-        return Crystal{Clusters}(crystal, clusters; _pos=crystal.pos), structure, clustering
+        return Crystal{Nothing}(crystal; _pos=crystal.pos)
     end
     edgs = PeriodicEdge3D[]
     for s in vertices(crystal.graph)
@@ -1360,17 +1407,12 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
             end
         end
     end
-    export_default(crystal, "trimmed", crystal.options.name,
-                   crystal.options.export_input)
     n = length(clusters.sbus)
     graph = PeriodicGraph3D(n, edgs)
-    if _structure == StructureType.Guess && nv(graph) == 1
-        return collapse_clusters(crystal, StructureType.Auto)
-    end
+    export_default(crystal, "trimmed", crystal.options.name, crystal.options.export_trimmed)
     if ne(graph) == 0
-        return (Crystal{Clusters}(crystal.cell, Symbol[], clusters, SVector{3,Float64}[], graph,
-                                Options(crystal.options; _pos=SVector{3,Float64}[])),
-                structure, clustering)
+        return Crystal{Nothing}(crystal.cell, Symbol[], SVector{3,Float64}[], graph,
+                                 Options(crystal.options; _pos=SVector{3,Float64}[]))
     end
     if !isempty(crystal.options.export_attributions)
         path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")
@@ -1402,13 +1444,13 @@ function collapse_clusters(c::Crystal, _structure::_StructureType=c.options.stru
         sort!(newname; by=first, rev=true)
         types[i] = length(sbu) == 1 ? crystal.types[first(sbu).v] : Symbol(join(last.(newname)))
     end
-    ret = Crystal{Clusters}(crystal.cell, types, clusters, pos, graph, Options(crystal.options; _pos=pos))
-    if crystal.options.clustering == Clustering.Intermediate ||
-            (clustering != Clustering.Intermediate &&
-            crystal.options.clustering != Clustering.Standard)
-        export_default(ret, "clusters", crystal.options.name, crystal.options.export_clusters)
-    end
-    return ret, structure, clustering
+    ret = Crystal{Nothing}(crystal.cell, types, pos, graph, Options(crystal.options; _pos=pos))
+    # if crystal.options.clustering == Clustering.Intermediate ||
+    #         (clustering != Clustering.Intermediate &&
+    #         crystal.options.clustering != Clustering.Standard)
+    #     export_default(ret, "clusters", crystal.options.name, crystal.options.export_clusters)
+    # end
+    return ret
 end
 
 
@@ -1943,7 +1985,7 @@ end
 Convert `Intermediate` result to `SingleNodes` by collapsing all points of extension
 clusters bonded together into a new organic cluster.
 """
-function intermediate_to_singlenodes(cryst::Crystal)
+function intermediate_to_singlenodes(cryst::Crystal{Nothing})
     n = length(cryst.types)
     organics = trues(n)
     for (i,t) in enumerate(cryst.types)
@@ -1955,7 +1997,7 @@ function intermediate_to_singlenodes(cryst::Crystal)
             end
         end
     end
-    clustername = cryst.options.clustering == Clustering.Standard ? "standard" : "singlenodes"
+    clustername = only(cryst.options.clusterings) == Clustering.Standard ? "standard" : "singlenodes"
     if !any(organics)
         c = trimmed_crystal(cryst)
         export_default(c, "clusters_$clustername", c.options.name, c.options.export_clusters)

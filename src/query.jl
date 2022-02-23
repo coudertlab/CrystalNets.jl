@@ -151,7 +151,7 @@ function topological_genome(group::UnderlyingNets)
         encountered = Dict{PeriodicGraph,_Clustering}()
         subret = Vector{Tuple{_Clustering,Union{_Clustering,SingleTopologyResult}}}(undef, length(net))
         for (j, subnet) in enumerate(net)
-            clust = subnet.options.clustering
+            clust = only(subnet.options.clusterings)
             refclust = get!(encountered, subnet.graph, clust)
             subret[j] = (clust, refclust == clust ? topological_genome(subnet) : refclust)
         end

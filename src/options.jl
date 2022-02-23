@@ -298,9 +298,9 @@ Different options, passed as keyword arguments.
 
 ## Basic options
 - name: a name for the structure.
-- bonding: one of the [`Bonding`](@ref) options. Default is `Bonding.Auto`
-- structure: one of the [`StructureTypes`](@ref) options. Default is `StructureTypes.Auto`
-- clustering: one of the [`Clustering`](@ref) options. Default is `Clustering.Auto`
+- bonding: one of the [`Bonding`](@ref) options. Default is `Bonding.Auto`.
+- structure: one of the [`StructureTypes`](@ref) options. Default is `StructureTypes.Auto`.
+- clusterings: a list of [`Clustering`](@ref) options. Default is `[Clustering.Auto]`.
 
 ## Exports
 For each export option, the accepted values are either a string, indicating the path to
@@ -308,6 +308,8 @@ the directory in which to store the export, or a boolean, specifying whether or 
 the export. If the value is `true`, a path will be automatically determined. An empty
 string is equivalent to `false`.
 - export_input: the parsed structure, as a .vtf
+- export_trimmed: the parsed structure after iteratively removing all atoms having only one
+  neighbour, as a .vtf
 - export_attributions: the attribution of vertices into SBUs, as a .pdb. Only relevant for
   the `MOF` [`StructureType`](@ref).
 - export_clusters: the clustering of vertices, as a .vtf
@@ -380,10 +382,11 @@ struct Options
     ignore_homometallic_bonds::Bool
     ignore_low_occupancy::Bool
     export_input::String
+    export_trimmed::String
     force_warn::Bool
 
     # Clustering options
-    clustering::Clustering._Clustering
+    clusterings::Vector{_Clustering}
     bond_adjacent_sbus::Bool
     ignore_metal_cluster_bonds::Union{Nothing,Bool}
     cluster_kinds::ClusterKinds
@@ -419,8 +422,9 @@ struct Options
                        ignore_homometallic_bonds=nothing,
                        ignore_low_occupancy=false,
                        export_input=DOEXPORT[],
+                       export_trimmed=false,
                        force_warn=false,
-                       clustering=Clustering.Auto,
+                       clusterings=_Clustering[Clustering.Auto],
                        bond_adjacent_sbus=false,
                        ignore_metal_cluster_bonds=nothing,
                        cluster_kinds=default_sbus,
@@ -443,6 +447,7 @@ struct Options
                     )
 
         _export_input = ifbooltempdirorempty(export_input)
+        _export_trimmed = ifbooltempdirorempty(export_trimmed)
         _export_attributions = ifbooltempdirorempty(export_attributions)
         _export_clusters = ifbooltempdirorempty(export_clusters)
         _export_net = ifbooltempdirorempty(export_net)
@@ -472,8 +477,9 @@ struct Options
             _ignore_homometallic_bonds,
             ignore_low_occupancy,
             _export_input,
+            _export_trimmed,
             force_warn,
-            clustering,
+            clusterings,
             bond_adjacent_sbus,
             ignore_metal_cluster_bonds,
             cluster_kinds,
