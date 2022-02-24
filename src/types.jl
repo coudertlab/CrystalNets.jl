@@ -1034,20 +1034,20 @@ function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
         if clustering ∉ (Clustering.Auto, Clustering.AllNodes, Clustering.SingleNodes, Clustering.Standard)
             _collect_net!(ret, encountered, idx, c, clustering, Val(D))
         else
-            if clustering == Clustering.Auto
+            structure = c.options.structure
+            if clustering == Clustering.Auto && (structure == StructureType.MOF || structure == StructureType.Cluster)
                 alln = intermediate_to_allnodes(Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, Options(c.options; clusterings=[Clustering.AllNodes])))
                 singlen = intermediate_to_singlenodes(Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, Options(c.options; clusterings=[Clustering.SingleNodes])))
                 resize!(ret, length(ret)+1)
                 _collect_net!(ret, encountered, idx, alln, clustering, Val(D))
                 _collect_net!(ret, encountered, idx+1, singlen, clustering, Val(D))
                 idx += 1
+            elseif clustering == Clustering.AllNodes
+                _collect_net!(ret, encountered, idx, intermediate_to_allnodes(c), clustering, Val(D))
+            elseif clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
+                _collect_net!(ret, encountered, idx, intermediate_to_standard(c), clustering, Val(D))
             else
-                if clustering == Clustering.AllNodes
-                    _collect_net!(ret, encountered, idx, intermediate_to_allnodes(c), clustering, Val(D))
-                else
-                    @toggleassert clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
-                    _collect_net!(ret, encountered, idx, intermediate_to_standard(c), clustering, Val(D))
-                end
+                _collect_net!(ret, encountered, idx, c, clustering, Val(D))
             end
         end
         idx += 1

@@ -1288,7 +1288,7 @@ function identify_clustering(c::Crystal{T}, structure::_StructureType, clusterin
     end
 end
 
-function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Clusters where T
+function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Tuple{Bool,Clusters} where T
     if c.options.separate_metals === nothing
         c = Crystal{T}(c; separate_metals)
     end
@@ -1299,15 +1299,15 @@ function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Clus
             if !(e isa ClusteringError)
                 rethrow()
             end
-            return T === Clusters ? c.clusters : Clusters(length(c.types))
+            return true, T === Clusters ? c.clusters : Clusters(length(c.types))
         end
         newc = Crystal{Nothing}(c; clusterings=[Clustering.Auto], export_attributions=false, export_input=false)
-        if nv(_collapse_clusters(newc, clusters)) <= 1
-            return T === Clusters ? c.clusters : Clusters(length(c.types))
+        if nv(_collapse_clusters(newc, clusters).graph) <= 1
+            return true, T === Clusters ? c.clusters : Clusters(length(c.types))
         end
-        return clusters
+        return false, clusters
     end
-    return find_sbus(c, c.options.cluster_kinds)
+    return false, find_sbus(c, c.options.cluster_kinds)
 end
 
 function find_clusters(_c::Crystal{T}) where T
@@ -1323,7 +1323,12 @@ function find_clusters(_c::Crystal{T}) where T
             if maybeclusters isa Clusters
                 maybeclusters
             else
-                _find_clusters(c, structure == StructureType.Guess && clustering == Clustering.Auto, maybeclusters)
+                guess = structure == StructureType.Guess && clustering == Clustering.Auto
+                _guess, _clusters = _find_clusters(c, guess, maybeclusters)
+                if guess && !_guess
+                    structure = StructureType.Cluster
+                end
+                _clusters
             end
         end
         if clusters isa Clusters
