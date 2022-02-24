@@ -822,27 +822,86 @@ function sanity_checks!(graph, pos, types, mat, options)
     return ret
 end
 
-"""
-    remove_homoatomic_bonds!(graph::PeriodicGraph, types, targets)
 
-Remove from the graph all bonds of the form X-X where X is an atom in `targets`.
-"""
-function remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets) where D
-    isempty(targets) && return
-    n = length(types)
-    for i in 1:n
+function _remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets, ignore_homometallic) where D
+    isempty(targets) && !ignore_homometallic && return Int[]
+    metallics = Int[]
+    for i in 1:length(types)
         t = types[i]
-        t ∈ targets || continue
+        if t ∉ targets
+            ignore_homometallic && ismetal[atomic_numbers[t]] && push!(metallics, i)
+            continue
+        end
         rem_edges = PeriodicVertex{D}[]
         for x in neighbors(graph, i)
-            types[x.v] == t || continue
+            types[x.v] === t || continue
             push!(rem_edges, x)
         end
         for x in rem_edges
             rem_edge!(graph, i, x)
         end
     end
+    return metallics
+end
+
+function _remove_homometallic_bonds!(graph::PeriodicGraph{D}, types, metallics) where D
+    isempty(metallics) && return
+    for i in metallics
+        t = types[i]
+        neighsi = neighbors(graph, i)
+        neighsi_same = [j for j in 1:length(neighsi) if types[neighsi[j].v] === t]
+        isempty(neighsi_same) && continue
+        _neighsi_nometal = Vector{PeriodicVertex{D}}(undef, length(neighsi) - length(neighsi_same))
+        idx = 1
+        for j in 1:length(neighsi)
+            if j == get(neighsi_same, idx, 0)
+                idx += 1
+            else
+                _neighsi_nometal[j - idx + 1] = neighsi[j]
+            end
+        end
+        neighsi_nometal = Set{PeriodicVertex{D}}(_neighsi_nometal)
+        rem_edges = PeriodicVertex{D}[]
+        for j in neighsi_same
+            x = neighsi[j]
+            for y in neighbors(graph, x.v)
+                types[y.v] === t && continue
+                xyofs = x.ofs .+ y.ofs
+                if PeriodicVertex{D}(y.v, xyofs) ∈ neighsi_nometal
+                    push!(rem_edges, x)
+                    break
+                end
+                breakflag = false
+                for z in neighbors(graph, y.v)
+                    types[z.v] === t && continue
+                    z == PeriodicVertex{D}(x.v, .- y.ofs) && continue
+                    xyzofs = xyofs .+ z.ofs
+                    if PeriodicVertex{D}(z.v, xyzofs) ∈ neighsi_nometal
+                        push!(rem_edges, x)
+                        breakflag = true
+                        break
+                    end
+                end
+                breakflag && break
+            end
+        end
+        for x in rem_edges
+            rem_edge!(graph, i, x)
+        end
+    end
     nothing
+end
+
+"""
+    remove_homoatomic_bonds!(graph::PeriodicGraph, types, targets, ignore_homometallic)
+
+Remove from the graph all bonds of the form X-X where X is an atom in `targets`.
+Also remove all such bonds where X is a metal if the two bonded atoms up to third
+neighbours otherwise.
+"""
+function remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets, ignore_homometallic) where D
+    metallics = _remove_homoatomic_bonds!(graph, types, targets, ignore_homometallic)
+    ignore_homometallic && _remove_homometallic_bonds!(graph, types, metallics)
 end
 
 
@@ -1017,9 +1076,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
         end
     end
 
-    if !guessed_bonds
-        remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds)
-    end
+    remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds, options.ignore_homometallic_bonds)
 
     if isempty(attributions)
         crystalnothing = Crystal{Nothing}(cell, types, pos, graph, options)

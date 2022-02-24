@@ -339,8 +339,8 @@ These boolean options have a default value that may be determined by [`Bonding`]
 - authorize_pruning: remove colliding atoms in the input. Default is true.
 - wider_metallic_bonds: for bond detections, metals have a radius equal to 1.5× their Van
   der Waals radius. Default is false, unless [`StructureType`](@ref) is `MOF` or `Zeolite`.
-- ignore_homometallic_bonds: do not bond two metallic atoms of the same type. Default is
-  false, unless [`StructureType`](@ref) is `MOF`.
+- ignore_homometallic_bonds: do not bond two metallic atoms of the same type if they are
+  up to third neighbours anyway. Default is false, unless [`StructureType`](@ref) is `MOF`.
 - ignore_metal_cluster_bonds: do not bond two metallic clusters together if they share at
   least one non-metallic neighbour.
   Default is false, unless [`Clustering`](@ref) is `Standard`.
