@@ -367,6 +367,7 @@ These boolean options have a default value that may be determined by [`Bonding`]
 These fields are for internal use and should not be modified by the user:
 - dryrun: store information on possible options to try (for `guess_topology`).
 - _pos: the positions of the centre of the clusters collapsed into vertices.
+- error: store the first error that occured when building the net.
 """
 struct Options
     name::String # used for exports
@@ -410,6 +411,7 @@ struct Options
     # Internal
     _pos::Vector{SVector{3,Float64}}
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
+    error::String
 
     function Options(; name="unnamed",
                        bonding=Bonding.Auto,
@@ -444,6 +446,7 @@ struct Options
                        export_subnets=DOEXPORT[],
                        _pos=SVector{3,Float64}[],
                        dryrun=nothing,
+                       error="",
                     )
 
         _export_input = ifbooltempdirorempty(export_input)
@@ -499,6 +502,7 @@ struct Options
             _export_subnets,
             _pos,
             dryrun,
+            error,
         )
     end
 end
@@ -512,7 +516,11 @@ function Options(options::Options; kwargs...)
             if T <: Set
                 union(base[kwarg], T(val))
             elseif T === String
-                val::Union{String,Bool}
+                if kwarg === :error
+                    ifelse(isempty(options.error), val::String, options.error)
+                else
+                    val::Union{String,Bool}
+                end
             else
                 T(val)
             end

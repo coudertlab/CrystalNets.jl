@@ -958,11 +958,19 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
     return CrystalNet{D,T}(cell, types, pos, graph, options)
 end
 
+function CrystalNet{D,T}(cell::Cell, opts::Options) where {D,T<:Real}
+    return CrystalNet{D,T}(cell, Symbol[], SVector{D,T}[], PeriodicGraph{D}(), opts)
+end
+CrystalNet{D}(cell::Cell, opts::Options) where {D} = CrystalNet{D,Rational{Int8}}(cell, opts)
+
 function Base.show(io::IO, x::CrystalNet)
     print(io, typeof(x), " of ", x.options.name, " with ", length(x.types), " vertices and ",
           ne(x.graph), " edges")
     if length(x.options.clusterings) == 1
         print(io, " (clustering: ", x.options.clusterings[1], ')')
+    end
+    if !isempty(x.options.error)
+        print(io, " (an error happened: ", x.options.error, ')')
     end
     nothing
 end
@@ -997,12 +1005,19 @@ function _collect_net!(ret, encountered, idx, c, clustering, ::Val{D}) where D
     vmap, graph = trim_topology(c.graph)
     types = c.types[vmap]
     remove_metal_cluster_bonds!(graph, types, c.options)
-    remove_homoatomic_bonds!(graph, types, c.options.ignore_homoatomic_bonds)
+    remove_homoatomic_bonds!(graph, types, c.options.ignore_homoatomic_bonds, false)
     j = get!(encountered, c.graph, idx)
     if j == idx
         export_default(Crystal{Nothing}(c.cell, types, c.pos[vmap], graph, c.options),
             "subnet_$clustering", c.options.name, c.options.export_subnets)
-        ret[idx] = CrystalNet{D}(c.cell, types, graph, c.options)
+        ret[idx] = try
+            CrystalNet{D}(c.cell, types, graph, c.options)
+        catch e
+            if e isa InterruptException || (e isa TaskFailedException && e.task.result isa InterruptException)
+                rethrow()
+            end
+            CrystalNet{D}(c.cell, Options(c.options; error=string(e)))
+        end
     else
         ref = ret[j]
         ret[idx] = typeof(ref)(ref.cell, ref.types, ref.pos, ref.graph, c.options)
@@ -1088,6 +1103,12 @@ end
 function UnderlyingNets(c::Crystal)
     groups = UnderlyingNets()
     components = separate_components(c)
+    if all(isempty, components)
+        vmap = collect(1:length(c.types))
+        nets = [CrystalNet3D(c.cell, Options(c.options; clusterings=[clust])) for clust in c.options.clusterings]
+        push!(groups.D3, (vmap, nets))
+        return groups
+    end
     @repeatgroups begin
         for (vmap, component) in components[D]
             crystals = collapse_clusters(component)
@@ -1102,7 +1123,7 @@ end
 function CrystalNet(c::Crystal)::CrystalNet
     group = UnderlyingNets(c)
     D = isempty(group.D3) ? isempty(group.D2) ? isempty(group.D1) ? 0 : 1 : 2 : 3
-    D == 0 && return CrystalNet{0,Int8}(c[1].cell, Symbol[], SVector{0,Int8}[], PeriodicGraph{0}(), c[1].options)
+    D == 0 && return CrystalNet{0}(c[1].cell, c[1].options)
     if D == 3
         length(group.D3) > 1 && __throw_interpenetrating(D)
         (isempty(group.D1) && isempty(group.D2)) || __warn_nonunique(D)
@@ -1130,7 +1151,7 @@ function CrystalNet(x::UnderlyingNets)
     if isempty(x.D3)
         if isempty(x.D2)
             if isempty(x.D1)
-                error("Empty UnderlyingNets cannot be converted to a CrystalNet.")
+                CrystalNet{0}(Cell(), Options(; error="Empty UnderlyingNets cannot be converted to a CrystalNet."))
             end
             if length(x.D1) == 1
                 return x.D1[1][2][1]
@@ -1143,17 +1164,20 @@ function CrystalNet(x::UnderlyingNets)
     if length(x.D3) == 1 && isempty(x.D2) && isempty(x.D1)
         return x.D3[1][2][1]
     end
-    error("UnderlyingNets contain multiple nets, cannot be converted to a single CrystalNet.")
+    CrystalNet{0}(Cell(), Options(; error="UnderlyingNets contain multiple nets, cannot be converted to a single CrystalNet."))
 end
 function CrystalNet{D}(x::UnderlyingNets) where D
     if D == 3
-        return only(x.D3)[2][1]
+        length(x.D3) == 1 && return x.D3[1][2][1]
+        return CrystalNet{D}(Cell(), Options(; error="UnderlyingNets contains $(ifelse(isempty(x.D3), "no net", "multiple nets")) of dimension 3"))
     elseif D == 2
-        return only(x.D2)[2][1]
+        length(x.D2) == 1 && return x.D2[1][2][1]
+        return CrystalNet{D}(Cell(), Options(; error="UnderlyingNets contains $(ifelse(isempty(x.D2), "no net", "multiple nets")) of dimension 2"))
     elseif D == 1
-        return only(x.D1)[2][1]
+        length(x.D1) == 1 && return x.D1[1][2][1]
+        return CrystalNet{D}(Cell(), Options(; error="UnderlyingNets contains $(ifelse(isempty(x.D1), "no net", "multiple nets")) of dimension 1"))
     end
-    @toggleassert 1 ≤ D ≤ 3
+    CrystalNet{D}(Cell(), Options(; error="UnderlyingNets cannot be converted to a CrystalNet of dimension $D."))
 end
 
 
@@ -1172,7 +1196,7 @@ end
 function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
     placement = equilibrium(graph)
-    isempty(placement) && return CrystalNet{D,Rational{Int}}(cell, types, graph, placement, options)
+    isempty(placement) && return CrystalNet{D,Rational{Int8}}(cell, types, graph, placement, options)
     m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
     M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))
     @tryinttype Int8
@@ -1290,10 +1314,10 @@ function TopologyResult(x::Vector{Tuple{_Clustering,Union{_Clustering,SingleTopo
 end
 
 function Base.getindex(x::TopologyResult, c::_Clustering)
-    if attributions[Int(c)] == 0
+    if x.attributions[Int(c)] == 0
         throw(ArgumentError("No stored topology result for clustering $c"))
     end
-    return x.results[attributions[Int(c)]]
+    return x.results[x.attributions[Int(c)]]
 end
 Base.getindex(x::TopologyResult, c::Symbol) = getindex(x, clustering_from_symb(c))
 
@@ -1363,6 +1387,16 @@ function Base.show(io::IO, x::TopologyResult)
         k == length(samenet) || (compact ? print(io, " | ") : println(io))
     end
 end
+
+function Base.iterate(x::TopologyResult, state::Int=1)
+    next = iterate(x.uniques, state)
+    if next isa Tuple{Int8,Int}
+        return x.results[next[1]], next[2]
+    end
+    nothing
+end
+Base.eltype(::Type{TopologyResult}) = SingleTopologyResult
+Base.length(x::TopologyResult) = length(x.uniques)
 
 function Base.parse(::Type{TopologyResult}, s::AbstractString)
     splits = split(s, " | ")

@@ -296,9 +296,9 @@ function issingular(x::SMatrix{N,N,T}) where {N,T<:Rational}
     try
         return iszero(det(x))
     catch e
-        @toggleassert e isa OverflowError
-        return iszero(det(SMatrix{N,N,widen(T)}(x)))
+        e isa OverflowError || rethrow()
     end
+    return iszero(det(SMatrix{N,N,widen(T)}(x)))
 end
 
 function issingular(x::SMatrix{3,3,T})::Bool where T<:Rational
@@ -316,9 +316,9 @@ function issingular(x::SMatrix{3,3,T})::Bool where T<:Rational
     try
         return y11 * y22 == y12 * y21
     catch e
-        @toggleassert e isa OverflowError
-        return widemul(y11, y22) == widemul(y12, y21)
+        e isa OverflowError || rethrow()
     end
+    return widemul(y11, y22) == widemul(y12, y21)
     # This can overflow so the input matrix should already have a wide enough type
 end
 end
@@ -334,9 +334,9 @@ function issingular(x::SMatrix{2,2,T})::Bool where T<:Rational
     return x[2,2] == try
         x[2,1] * x12
     catch e
-        @toggleassert e isa OverflowError
-        widemul(x[2,1], x12)
+        e isa OverflowError || rethrow()
     end
+    widemul(x[2,1], x12)
     # This can overflow so the input matrix should already have a wide enough type
 end
 end

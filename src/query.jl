@@ -13,7 +13,7 @@ possibly if the `ignore_types` option is unset).
     Options must be passed directly within `net`.
 """
 function topological_genome(net::CrystalNet{D,T})::SingleTopologyResult where {D,T}
-    isempty(net.pos) && return SingleTopologyResult() # non-periodic
+    isempty(net.pos) && return SingleTopologyResult(net.options.error)
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos,
                               net.graph, net.options)
@@ -47,7 +47,7 @@ function topological_genome(net::CrystalNet{D,T})::SingleTopologyResult where {D
     return topological_genome(shrunk_net, collisions)
 end
 
-topological_genome(::CrystalNet{0,T}) where {T} = SingleTopologyResult()
+topological_genome(net::CrystalNet{0,T}) where {T} = SingleTopologyResult(net.options.error)
 
 function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNode})::SingleTopologyResult where {D,T}
     try
@@ -386,7 +386,7 @@ function guess_topology(path, defopts)
     end
     return most_plausible_genome == PeriodicGraph{0}() ? begin
             issetequal(defopts.dimensions, [1,2,3]) ? SingleTopologyResult() :
-                SingleTopologyResult("(perhaps because no net with suitable dimension in $(defopts.dimensions) was found)")
+                SingleTopologyResult("could not guess (perhaps because no net with suitable dimension in $(defopts.dimensions) was found?)")
             end : SingleTopologyResult(most_plausible_genome, nothing, final_unstable)
 end
 guess_topology(path; kwargs...) = guess_topology(path, Options(structure=StructureType.Guess; kwargs...))
@@ -512,7 +512,7 @@ function topologies_dataset(path, save, autoclean, options::Options)
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            [(Int[], TopologyResult(escape_string(string(e)::String)))]
+            [(Int[], setindex!(TopologyResult(), SingleTopologyResult(string(e)), Clustering.Auto))]
         end
         if isempty(genomes)
             push!(genomes, (Int[], setindex!(TopologyResult(), SingleTopologyResult(), Clustering.Auto)))
