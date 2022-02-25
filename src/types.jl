@@ -1217,7 +1217,7 @@ function UnderlyingNets(g::PseudoGraph, options::Options)
     n = nv(graph)
     types = [Symbol("") for _ in 1:n]
     pos = [zero(SVector{3,Float64}) for _ in 1:n]
-    return UnderlyingNets(Crystal{Nothing}(cell, types, pos, graph, options), nothing)
+    return UnderlyingNets(Crystal{Nothing}(cell, types, pos, graph, options))
 end
 UnderlyingNets(g::PseudoGraph; kwargs...) = UnderlyingNets(g, Options(; kwargs...))
 
