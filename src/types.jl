@@ -1013,7 +1013,7 @@ function _collect_net!(ret, encountered, idx, c, clustering, ::Val{D}) where D
         ret[idx] = try
             CrystalNet{D}(c.cell, types, graph, c.options)
         catch e
-            if e isa InterruptException || (e isa TaskFailedException && e.task.result isa InterruptException)
+            if e isa InterruptException || (e isa TaskFailedException && e.task.result isa InterruptException) || c.options.throw_error
                 rethrow()
             end
             CrystalNet{D}(c.cell, Options(c.options; error=string(e)))
@@ -1040,7 +1040,7 @@ function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
             _collect_net!(ret, encountered, idx+1, singlen, clustering, Val(D))
             idx += 1
         elseif clustering == Clustering.PE
-            _collect_net!(ret, encountered, idx, allnodes_to_pe(c), clustering, Val(D))
+            _collect_net!(ret, encountered, idx, pem_to_pe(c), clustering, Val(D))
         elseif clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
             _collect_net!(ret, encountered, idx, allnodes_to_singlenodes(c), clustering, Val(D))
         else
@@ -1124,18 +1124,25 @@ function CrystalNet(c::Crystal)::CrystalNet
     if D == 3
         length(group.D3) > 1 && __throw_interpenetrating(D)
         (isempty(group.D1) && isempty(group.D2)) || __warn_nonunique(D)
-        return last(first(group.D3))
+        _D3 = last(first(group.D3))
+        length(_D3) > 1 && __throw_multiplenets(D)
+        return first(_D3)
     elseif D == 2
         length(group.D2) > 1 && __throw_interpenetrating(D)
-        isempty(group.D1) || __warn_nonunique(D)
-        return last(first(group.D2))
+        isempty(group.D2) || __warn_nonunique(D)
+        _D2 = last(first(group.D2))
+        length(_D2) > 1 && __throw_multiplenets(D)
+        return first(_D2)
     elseif D == 1
         length(group.D1) > 1 && __throw_interpenetrating(D)
-        return last(first(group.D1))
+        _D1 = last(first(group.D1))
+        length(_D1) > 1 && __throw_multiplenets(D)
+        return first(_D1)
     end
 end
 __warn_nonunique(D) = @ifwarn @warn "Presence of periodic structures of different dimensionalities. Only the highest dimensionality ($D here) will be retained."
 __throw_interpenetrating(D) = error(ArgumentError("Multiple interpenetrating $D-dimensional structures. Cannot handle this as a single CrystalNet, use UnderlyingNets instead."))
+__throw_multiplenets(D) = error(ArgumentError("Found multiple nets of dimension $D, please specify a single `Clustering` option."))
 
 function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
                        graph::PeriodicGraph, options::Options) where D
@@ -1193,7 +1200,10 @@ end
 function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
     placement = equilibrium(graph)
-    isempty(placement) && return CrystalNet{D,Rational{Int8}}(cell, types, graph, placement, options)
+    if isempty(placement)
+        @toggleassert isempty(types)
+        return CrystalNet{D}(cell, options)
+    end
     m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
     M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))
     @tryinttype Int8
@@ -1309,6 +1319,23 @@ function TopologyResult(x::Vector{Tuple{_Clustering,Union{_Clustering,SingleTopo
 
     return ret
 end
+
+
+@static if VERSION < v"1.7-"
+    function Returns(x)
+        returns(args...; kwargs...) = x
+        return returns
+    end
+end
+
+function Base.get(f::Function, x::TopologyResult, c::_Clustering)
+    if x.attributions[Int(c)] == 0
+        f()
+    else
+        x.results[x.attributions[Int(c)]]
+    end
+end
+Base.get(x::TopologyResult, c::_Clustering, default) = get(Returns(default), x, c)
 
 function Base.getindex(x::TopologyResult, c::_Clustering)
     if x.attributions[Int(c)] == 0

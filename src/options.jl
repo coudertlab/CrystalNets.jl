@@ -370,6 +370,7 @@ These fields are for internal use and should not be modified by the user:
 - dryrun: store information on possible options to try (for `guess_topology`).
 - _pos: the positions of the centre of the clusters collapsed into vertices.
 - error: store the first error that occured when building the net.
+- throw_error: if set, throw the error instead of storing it in the `error` field.
 """
 struct Options
     name::String # used for exports
@@ -415,6 +416,7 @@ struct Options
     _pos::Vector{SVector{3,Float64}}
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
     error::String
+    throw_error::Bool
 
     function Options(; name="unnamed",
                        bonding=Bonding.Auto,
@@ -451,6 +453,7 @@ struct Options
                        _pos=SVector{3,Float64}[],
                        dryrun=nothing,
                        error="",
+                       throw_error=false,
                     )
 
         _export_input = ifbooltempdirorempty(export_input)
@@ -508,6 +511,7 @@ struct Options
             _pos,
             dryrun,
             error,
+            throw_error,
         )
     end
 end

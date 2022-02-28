@@ -1275,9 +1275,9 @@ function identify_clustering(c::Crystal{T}, structure::_StructureType, clusterin
             return c.clusters, structure, clustering
         end
     else
-        if clustering == Clustering.PE || clustering == Clustering.SingleNodes
+        if clustering == Clustering.SingleNodes
             clustering = Clustering.AllNodes
-        elseif clustering == Clustering.Standard
+        elseif clustering == Clustering.PE || clustering == Clustering.Standard
             clustering = Clustering.PEM
         end
         separate_metals = c.options.separate_metals isa Bool ? c.options.separate_metals : clustering == Clustering.PEM
@@ -1652,13 +1652,23 @@ function edges_of_convex_hull(atoms, num_targets, ref_mat, pos, toremove, visite
 end
 
 
-function regroup_toremove(cryst, toremove_list, msg)
+function regroup_toremove(cryst, tomerge, toremove_list, msg)
     if isempty(toremove_list)
         ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, cryst.types, cryst.pos, cryst.graph, Options(cryst.options; _pos=cryst.pos)))
         export_default(ret, "clusters_$msg", cryst.options.name, cryst.options.export_clusters)
         return ret
     end
     toremove_all = reduce(vcat, toremove_list)
+    previous_graph = PeriodicGraph(cryst.graph)
+    for v in tomerge
+        neighs = neighbors(previous_graph, v)
+        for (i, x) in enumerate(neighs)
+            for j in (i+1):length(neighs)
+                y = neighs[j]
+                add_edge!(previous_graph, x.v, PeriodicVertex(y.v, y.ofs .- x.ofs))
+            end
+        end
+    end
     graph = PeriodicGraph(cryst.graph)
     vmap = rem_vertices!(graph, toremove_all)
     rev_vmap = zeros(Int, nv(cryst.graph))
@@ -1678,7 +1688,7 @@ function regroup_toremove(cryst, toremove_list, msg)
         for u in Q
             neighs = PeriodicVertex3D[]
             metalneighs = PeriodicVertex3D[]
-            for x in neighbors(cryst.graph, u)
+            for x in neighbors(previous_graph, u)
                 if toremove[x.v]
                     push!(metalneighs, x)
                 else
@@ -1691,6 +1701,7 @@ function regroup_toremove(cryst, toremove_list, msg)
             visited_coplanar4 = Set{SVector{4,Int}}()
             keep_edges = edges_of_convex_hull(neighs, num_targets, mat, cryst.pos, toremove, visited_coplanar4)
             update_new_edgs!(new_edgs, neighs, keep_edges, toremove, rev_vmap)
+            #=
             for metal in metalneighs
                 e = PeriodicEdge3D(u, metal)
                 reverse(e) ∈ handled && continue
@@ -1747,6 +1758,7 @@ function regroup_toremove(cryst, toremove_list, msg)
                                                   copy(visited_coplanar4), keep_edges)
                 update_new_edgs!(new_edgs, copyneighs, keep_edges, toremove, rev_vmap)
             end
+            =#
         end
     end
     for (e, _b) in new_edgs
@@ -1774,11 +1786,11 @@ function identify_metallic_type(t, kinds, metalkind=getmetal(kinds))
 end
 
 """
-    allnodes_to_pe(cryst::Crystal{Nothing})
+    pem_to_pe(cryst::Crystal{Nothing})
 
-Convert `AllNodes` result to `PE` by removing all metallic sbus.
+Convert `PEM` result to `PE` by removing all metallic sbus.
 """
-function allnodes_to_pe(cryst::Crystal{Nothing})
+function pem_to_pe(cryst::Crystal{Nothing})
     n = length(cryst.types)
     visited = falses(n)
     metallic = falses(n)
@@ -1823,36 +1835,58 @@ function allnodes_to_pe(cryst::Crystal{Nothing})
     end
 
     toremove_list = Vector{Int}[]
+    tomerge = Int[]
     handled = falses(n)
+    metal_surrounded = BitVector(undef, n)
     for i in metallic_list
         handled[i] && continue
         handled[i] = true
-        seen = Dict{Int,SVector{3,Int}}(i => zero(SVector{3,Int}))
+        # seen = Dict{Int,SVector{3,Int}}(i => zero(SVector{3,Int}))
         neighs = Set{PeriodicVertex3D}()
-        seenofs = SVector{3,Int}[]
+        # seenofs = SVector{3,Int}[]
+        metal_surrounded .= false
+        metal_surrounded_list = Int[]
         Q = [PeriodicVertex3D(i)]
         for u in Q
+            surrounded = true
             for x in neighbors(cryst.graph, u.v)
                 ofs = u.ofs .+ x.ofs
                 if !metallic[x.v]
                     push!(neighs, PeriodicVertex(x.v, ofs))
+                    surrounded = false
                     continue
                 end
-                if handled[x.v]
-                    if ofs != seen[x.v]
-                        push!(seenofs, ofs .- seen[x.v])
-                    end
-                else
+                # if handled[x.v]
+                #     if ofs != seen[x.v]
+                #         push!(seenofs, ofs .- seen[x.v])
+                #     end
+                # else
+                if !handled[x.v]
                     handled[x.v] = true
-                    seen[x.v] = ofs
+                    # seen[x.v] = ofs
                     push!(Q, PeriodicVertex(x.v, ofs))
                 end
             end
+            metal_surrounded[u.v] = surrounded
+            surrounded && push!(metal_surrounded_list, u.v)
         end
-        isempty(neighs) || push!(toremove_list, getfield.(Q, :v))
+        isempty(neighs) && continue
+        surroundedflag = false
+        for v in metal_surrounded_list
+            for x in neighbors(cryst.graph, v)
+                if metal_surrounded[x.v]
+                    surroundedflag = true
+                    break
+                end
+            end
+            surroundedflag && break
+        end
+        surroundedflag && continue
+        append!(tomerge, metal_surrounded_list)
+        push!(toremove_list, getfield.(Q, :v))
     end
 
-    return regroup_toremove(cryst, toremove_list, "PE")
+    return regroup_toremove(cryst, tomerge, toremove_list, "PE")
 end
 
 
