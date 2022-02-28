@@ -74,13 +74,13 @@ organic and inorganic SBUs defined by the `MOF` structure.
 Except for `AllNodes`, infinite clusters (such as the inorganic clusters in a rod MOF) are
 split into new finite clusters using heuristics.
 - `SingleNodes`: each already-defined cluster is mapped to a vertex.
-- `AllNodes`: keep points of extension for organic clusters. Remove infinite metallic ones.
+- `AllNodes`: keep points of extension for organic clusters.
 - `Standard`: make each metallic atom its own vertex and do not bond those together if they
   share a common non-metallic neighbour.
+- `PE`: stands for Points of Extension. Keep points of extension for organic clusters,
+  remove metallic centres and bond their surrounding points of extension
 - `PEM`: stands for Points of Extension and Metals. Keep points of extension for organic
   clusters and each metal centre as a separate vertex.
-- `Intermediate`: keep points of extension for organic clusters. This is not a usual
-  clustering algorithm, but it is used internally to derive the other ones.
 """
 module Clustering
     @enum _Clustering begin
@@ -90,11 +90,11 @@ module Clustering
         SingleNodes  = 4
         AllNodes     = 5
         Standard     = 6
-        PEM          = 7
-        Intermediate = 8
+        PE           = 7
+        PEM          = 8
     end
     """See help for [`Clustering`](@ref)"""
-    Auto, Input, EachVertex, SingleNodes, AllNodes, Standard, PEM, Intermediate
+    Auto, Input, EachVertex, SingleNodes, AllNodes, Standard, PE, PEM
 end
 import .Clustering
 import .Clustering: _Clustering
@@ -113,9 +113,9 @@ function clustering_from_num(x::Integer)
     elseif x == 6
         return Clustering.Standard
     elseif x == 7
-        return Clustering.PEM
+        return Clustering.PE
     elseif x == 8
-        return Clustering.Intermediate
+        return Clustering.PEM
     end
     throw(ArgumentError("No clustering from number $x"))
 end
@@ -133,10 +133,10 @@ function clustering_from_symb(x::Symbol)
         return Clustering.AllNodes
     elseif x === :Standard
         return Clustering.Standard
+    elseif x === :PE
+        return Clustering.PEM
     elseif x === :PEM
         return Clustering.PEM
-    elseif x === :Intermediate
-        return Clustering.Intermediate
     end
     throw(ArgumentError("No clustering from symbol $x"))
 end
@@ -154,10 +154,10 @@ function Base.parse(::Type{_Clustering}, s::AbstractString)
         return Clustering.AllNodes
     elseif s == "Standard"
         return Clustering.Standard
+    elseif s == "PE"
+        return Clustering.PE
     elseif s == "PEM"
         return Clustering.PEM
-    elseif s == "Intermediate"
-        return Clustering.Intermediate
     end
     throw(ArgumentError("No clustering from string $x"))
 end
@@ -331,6 +331,9 @@ string is equivalent to `false`.
 - cluster_kinds: a [`ClusterKinds`](@ref). Default separates organic and inorganic SBUs.
 - ignore_homoatomic_bonds: a `Set{Symbol}` such that all X-X bonds of the net are removed
   if X is an atom whose type is in `ignore_homoatomic_bonds`.
+- max_polyhedron_radius: an integer specifying the maximum number of bonds between two
+  corners of the coordination polyhedron built for the [`Clustering.PE`](@ref) option.
+  Default is 4.
 
 ## Miscellaneous options
 These boolean options have a default value that may be determined by [`Bonding`](@ref),
@@ -342,8 +345,7 @@ These boolean options have a default value that may be determined by [`Bonding`]
 - ignore_homometallic_bonds: do not bond two metallic atoms of the same type if they are
   up to third neighbours anyway. Default is false, unless [`StructureType`](@ref) is `MOF`.
 - ignore_metal_cluster_bonds: do not bond two metallic clusters together if they share at
-  least one non-metallic neighbour.
-  Default is false, unless [`Clustering`](@ref) is `Standard`.
+  least one non-metallic neighbour. Default is false.
 - ignore_low_occupancy: atoms with occupancy lower than 0.5 are ignored. Default is false.
 - detect_paddlewheels: detect paddle-wheel pattern and group them into an inorganic vertex.
   Default is true.
@@ -398,6 +400,7 @@ struct Options
     split_O_vertex::Bool
     unify_sbu_decomposition::Bool
     separate_metals::Union{Nothing,Bool}
+    max_polyhedron_radius::Int
     export_attributions::String
     export_clusters::String
 
@@ -437,6 +440,7 @@ struct Options
                        split_O_vertex=true,
                        unify_sbu_decomposition=false,
                        separate_metals=nothing,
+                       max_polyhedron_radius=4,
                        export_attributions="",
                        export_clusters="",
                        skip_minimize=false,
@@ -493,6 +497,7 @@ struct Options
             split_O_vertex,
             unify_sbu_decomposition,
             separate_metals,
+            max_polyhedron_radius,
             _export_attributions,
             _export_clusters,
             skip_minimize,

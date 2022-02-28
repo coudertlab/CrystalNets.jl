@@ -6,7 +6,6 @@
 -->
 
 A Julia package for determining the topology of a net.
-Currently only works for 3-periodic nets.
 
 ## <a name="installation"></a>Installation
 
