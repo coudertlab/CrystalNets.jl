@@ -48,6 +48,7 @@ module StructureType
     end
     """See help for [`StructureType`](@ref)"""
     Auto, MOF, Cluster, Zeolite, Guess
+    export MOF, Cluster, Zeolite
 end
 import .StructureType
 import .StructureType: _StructureType
@@ -95,6 +96,7 @@ module Clustering
     end
     """See help for [`Clustering`](@ref)"""
     Auto, Input, EachVertex, SingleNodes, AllNodes, Standard, PE, PEM
+    export EachVertex, SingleNodes, AllNodes, Standard, PE, PEM
 end
 import .Clustering
 import .Clustering: _Clustering
