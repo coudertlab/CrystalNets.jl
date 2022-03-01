@@ -310,7 +310,7 @@ end
     parse_arcs(file)
 
 Parse a folder containing .arc Systre archives such as the one used by the RCSR.
-Return a pair `(flag, pairs)` with the same convention than `parse_arc`
+Return a pair `(flag, pairs)` with the same convention than [`parse_arc`](@ref).
 """
 function parse_arcs(path, lesser_priority=["epinet"])
     combine(x, y) = x * ", " * y

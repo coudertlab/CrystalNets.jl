@@ -299,80 +299,80 @@ end
 Different options, passed as keyword arguments.
 
 ## Basic options
-- name: a name for the structure.
-- bonding: one of the [`Bonding`](@ref) options. Default is `Bonding.Auto`.
-- structure: one of the [`StructureTypes`](@ref) options. Default is `StructureTypes.Auto`.
-- clusterings: a list of [`Clustering`](@ref) options. Default is `[Clustering.Auto]`.
+- `name`: a name for the structure.
+- `bonding`: one of the [`Bonding`](@ref) options. Default is `Bonding.Auto`.
+- `structure`: one of the [`StructureType`](@ref) options. Default is `StructureType.Auto`.
+- `clusterings`: a list of [`Clustering`](@ref) options. Default is `[Clustering.Auto]`.
 
 ## Exports
 For each export option, the accepted values are either a string, indicating the path to
 the directory in which to store the export, or a boolean, specifying whether or not to do
 the export. If the value is `true`, a path will be automatically determined. An empty
 string is equivalent to `false`.
-- export_input: the parsed structure, as a .vtf
-- export_trimmed: the parsed structure after iteratively removing all atoms having only one
+- `export_input`: the parsed structure, as a .vtf
+- `export_trimmed`: the parsed structure after iteratively removing all atoms having only one
   neighbour, as a .vtf
-- export_attributions: the attribution of vertices into SBUs, as a .pdb. Only relevant for
+- `export_attributions`: the attribution of vertices into SBUs, as a .pdb. Only relevant for
   the `MOF` [`StructureType`](@ref).
-- export_clusters: the clustering of vertices, as a .vtf
-- export_net: the overall extracted net on which the topology is computed, as a .vtf.
-- export_subnets: each connected component of the overall net as a separate .vtf file.
+- `export_clusters`: the clustering of vertices, as a .vtf
+- `export_net`: the overall extracted net on which the topology is computed, as a .vtf.
+- `export_subnets`: each connected component of the overall net as a separate .vtf file.
   These subnets are defined after grouping vertices according to their [`Clustering`](@ref).
 
 ## Other options
-- ignore_atoms: set of atom symbols to ignore (for instance `[:C,:H]` will
+- `ignore_atoms`: set of atom symbols to ignore (for instance `[:C,:H]` will
   remove carbohydrate solvent residues).
-- ignore_types: disregard atom types to compute the topology, making pcu and
+- `ignore_types`: disregard atom types to compute the topology, making pcu and
   pcu-b identical for example (default is true)
-- cutoff_coeff: coefficient used to detect bonds. Default is 0.75, higher
+- `cutoff_coeff`: coefficient used to detect bonds. Default is 0.75, higher
   values will include bonds that were considered too long before.
-- skip_minimize: assume that the cell is already the unit cell (default is false).
-- dimensions: the set of crystal net dimensions to consider. For instance, putting
+- `skip_minimize`: assume that the cell is already the unit cell (default is false).
+- `dimensions`: the set of crystal net dimensions to consider. For instance, putting
   `Set(3)` will ensure that only 3-dimensional nets are considered.
   Default is `Set([1,2,3])`.
-- cluster_kinds: a [`ClusterKinds`](@ref). Default separates organic and inorganic SBUs.
-- ignore_homoatomic_bonds: a `Set{Symbol}` such that all X-X bonds of the net are removed
+- `cluster_kinds`: a [`ClusterKinds`](@ref). Default separates organic and inorganic SBUs.
+- `ignore_homoatomic_bonds`: a `Set{Symbol}` such that all X-X bonds of the net are removed
   if X is an atom whose type is in `ignore_homoatomic_bonds`.
-- max_polyhedron_radius: an integer specifying the maximum number of bonds between two
-  corners of the coordination polyhedron built for the [`Clustering.PE`](@ref) option.
+- `max_polyhedron_radius`: an integer specifying the maximum number of bonds between two
+  corners of the coordination polyhedron built for the [`Clustering.PE`](@ref Clustering) option.
   Default is 4.
 
 ## Miscellaneous options
 These boolean options have a default value that may be determined by [`Bonding`](@ref),
 [`StructureType`](@ref) and [`Clustering`](@ref). They can be directly overriden here.
-- bond_adjacent_sbus: bond together SBUs which are only separated by a single C atom.
-- authorize_pruning: remove colliding atoms in the input. Default is true.
-- wider_metallic_bonds: for bond detections, metals have a radius equal to 1.5× their Van
+- `bond_adjacent_sbus`: bond together SBUs which are only separated by a single C atom.
+- `authorize_pruning`: remove colliding atoms in the input. Default is true.
+- `wider_metallic_bonds`: for bond detections, metals have a radius equal to 1.5× their Van
   der Waals radius. Default is false, unless [`StructureType`](@ref) is `MOF` or `Zeolite`.
-- ignore_homometallic_bonds: do not bond two metallic atoms of the same type if they are
+- `ignore_homometallic_bonds`: do not bond two metallic atoms of the same type if they are
   up to third neighbours anyway. Default is false, unless [`StructureType`](@ref) is `MOF`.
-- ignore_metal_cluster_bonds: do not bond two metallic clusters together if they share at
+- `ignore_metal_cluster_bonds`: do not bond two metallic clusters together if they share at
   least one non-metallic neighbour. Default is false.
-- ignore_low_occupancy: atoms with occupancy lower than 0.5 are ignored. Default is false.
-- detect_paddlewheels: detect paddle-wheel pattern and group them into an inorganic vertex.
+- `ignore_low_occupancy`: atoms with occupancy lower than 0.5 are ignored. Default is false.
+- `detect_paddlewheels`: detect paddle-wheel pattern and group them into an inorganic vertex.
   Default is true.
-- detect_organiccycles: detect organic cycles and collapse all belonging C atoms into a new
+- `detect_organiccycles`: detect organic cycles and collapse all belonging C atoms into a new
   vertex. Default is true.
-- detect_pe: detect organic points-of-extension (organic atoms bonded to another SBU) and
+- `detect_pe`: detect organic points-of-extension (organic atoms bonded to another SBU) and
   transform them into vertices. Default is true.
-- cluster_simple_pe: cluster adjacent points-of-extension if they are not part of a cycle.
+- `cluster_simple_pe`: cluster adjacent points-of-extension if they are not part of a cycle.
   Default is true.
-- separate_metals: separate each metal atom into its own vertex (instead of grouping them
+- `separate_metals`: separate each metal atom into its own vertex (instead of grouping them
   to form metallic clusters if they are adjacent or bonded by an oxygen). Default is false,
   unless [`Clustering`](@ref) is `Standard` or `PEM`.
-- split_O_vertex: if a vertex is composed of a single O, remove it and bond together all of
+- `split_O_vertex`: if a vertex is composed of a single O, remove it and bond together all of
   its neighbors. Default is true.
-- unify_sbu_decomposition: apply the same rule to decompose both periodic and finite SBUs.
+- `unify_sbu_decomposition`: apply the same rule to decompose both periodic and finite SBUs.
   Default is false.
-- force_warn: force printing warning and information even during `..._dataset` and
+- `force_warn`: force printing warning and information even during `..._dataset` and
   `..._topologies` function calls. Default is false.
 
 ## Internal fields
 These fields are for internal use and should not be modified by the user:
-- dryrun: store information on possible options to try (for `guess_topology`).
-- _pos: the positions of the centre of the clusters collapsed into vertices.
-- error: store the first error that occured when building the net.
-- throw_error: if set, throw the error instead of storing it in the `error` field.
+- `dryrun`: store information on possible options to try (for `guess_topology`).
+- `_pos`: the positions of the centre of the clusters collapsed into vertices.
+- `error`: store the first error that occured when building the net.
+- `throw_error`: if set, throw the error instead of storing it in the `error` field.
 """
 struct Options
     name::String # used for exports

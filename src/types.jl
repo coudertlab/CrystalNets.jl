@@ -19,7 +19,7 @@ end
 
 """
 Find the reference identifiers for the three dimensions for the CIF group called
-symmetry_equiv_pos_as_xyz or space_group_symop_operation_xyz.
+`symmetry_equiv_pos_as_xyz` or `space_group_symop_operation_xyz`.
 Usually this is simply ("x", "y", "z").
 """
 function find_refid(eqs)
@@ -57,6 +57,12 @@ function find_refid(eqs)
     return ("x", "y", "z")
 end
 
+"""
+    Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "y", "z"))
+
+Parse a string into its represented `EquivalentPosition` given the name of the three
+variables obtained from [`find_refid`](@ref CrystalNets.find_refid).
+"""
 function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "y", "z"))
     const_dict = Dict{String, Int}(refid[1]=>1, refid[2]=>2, refid[3]=>3)
     mat = zeros(Int, 3, 3)
@@ -180,9 +186,11 @@ end
 Representation of a periodic cell in 3D. Contains information about the cell
 (axes lengths and angles) and its symmetry group, through its Hall number.
 
-See [`SPACE_GROUP_HALL`](@ref), [`SPACE_GROUP_FULL`](@ref), [`SPACE_GROUP_HM`](@ref)`
-and [`SPACE_GROUP_IT`](@ref) for the correspondance between Hall number and usual symbolic
-representations.
+See [`SPACE_GROUP_HALL`](@ref CrystalNets.SPACE_GROUP_HALL),
+[`SPACE_GROUP_FULL`](@ref CrystalNets.SPACE_GROUP_FULL),
+[`SPACE_GROUP_HM`](@ref CrystalNets.SPACE_GROUP_HM)
+and [`SPACE_GROUP_IT`](@ref CrystalNets.SPACE_GROUP_IT)
+for the correspondance between Hall number and usual symbolic representations.
 """
 struct Cell
     hall::Int
@@ -221,6 +229,12 @@ function cell_parameters(mat::AbstractMatrix)
     γ = acosd(_a'_b/(a*b))
     return a, b, c, α, β, γ
 end
+
+"""
+    cell_parameters(cell::Cell)
+
+The sextuplet of cell parameters `(a, b, c, α, β, γ)`.
+"""
 cell_parameters(cell::Cell) = cell_parameters(cell.mat)
 
 function Cell(cell::Cell, mat::StaticArray{Tuple{3,3},BigFloat})
@@ -769,6 +783,11 @@ function Crystal{Clusters}(c::Crystal{T}; kwargs...) where T
     Crystal{Clusters}(c, Clusters(length(c.types)); kwargs...)
 end
 
+"""
+    trimmed_crystal(c::Crystal{Nothing})
+
+Rebuild the crystal after trimming its graph according to [`trim_topology`](@ref CrystalNets.trim_topology).
+"""
 function trimmed_crystal(c::Crystal{Nothing})
     g = deepcopy(c.graph)
     remove_metal_cluster_bonds!(g, c.types, c.options)

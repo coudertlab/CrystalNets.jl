@@ -29,7 +29,8 @@ export CrystalNet,
        Bonding,
        Clustering,
        SingleTopologyResult,
-       TopologyResult
+       TopologyResult,
+       ClusterKinds
 
 import LinearAlgebra: det, norm, rank
 using Base.Threads

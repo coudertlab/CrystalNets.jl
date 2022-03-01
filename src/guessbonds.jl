@@ -31,7 +31,16 @@ const ismetalloid = Bool[0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
+"""
+    guess_bonds(pos, types, mat, options)
 
+Return the bonds guessed from the positions, types and cell matrix, given as a
+`Vector{Vector{Tuple{Int,Float32}}}`.
+
+The `i`-th entry of the list is a list, whose entries are of the form `(j, dist)` which
+indicates that the representatives of vertices `i` and `j` distant of at most `dist` are
+bonded together.
+"""
 function guess_bonds(pos, types, mat, options)
     # Algorithm from chemfiles, itself from VMD
     @ifwarn begin

@@ -1,7 +1,14 @@
 ## Common utility functions
 
+"""
+    @toggleassert expression
+
+Internal macro used to assert and expression conditionally on a build-time constant.
+To toggle on or off these assertions, the constant has to be modified in the source code
+and the module rebuilt afterwards.
+"""
 macro toggleassert(ex...)
-    # Change the following boolean and reload CrystalNets to enable assertions
+    # Change the following boolean and reload CrystalNets to enable/disable assertions
     ENABLE_ASSERT = true
     if ENABLE_ASSERT
         return esc(quote
@@ -69,9 +76,22 @@ function tmpexportname(path, pre, name, ext)
     return joinpath(path, x)
 end
 
+"""
+    export_default(c::Union{PeriodicGraph,CrystalNet,Crystal}, obj=nothing, name=nothing, path=tempdir(); repeats=nothing)
+
+Export a VTF representation of an object at the given `path`.
+
+`obj` is a `String` describing the nature of the object, such as "net", "clusters" or
+"subnet" for example. Default to `string(typeof(c))`
+
+`name` is a `String` inserted in the exported file name. Default to a [`tempname`](https://docs.julialang.org/en/v1/base/file/#Base.Filesystem.tempname).
+
+`repeats` is the maximum distance between a represented atom out of the unit cell and one
+inside.
+"""
 export_default(g::PeriodicGraph, args...; kwargs...) = export_default(CrystalNet(g), args...; kwargs...)
-function export_default(c, obj=nothing, _name=nothing, path=tempdir(); _repeats=nothing)
-    repeats = _repeats isa Integer ? _repeats : begin
+function export_default(c, obj=nothing, name=nothing, path=tempdir(); repeats=nothing)
+    _repeats = repeats isa Integer ? repeats : begin
         if obj isa AbstractString && (obj == "net" || startswith(obj, "clusters") || startswith(obj, "subnet"))
             2
         else
@@ -79,15 +99,15 @@ function export_default(c, obj=nothing, _name=nothing, path=tempdir(); _repeats=
         end
     end
     if !isempty(path)
-        name = tmpexportname(path, (obj isa Nothing ? string(typeof(c)) : obj)*'_', _name, ".vtf")
-        truepath = replace(joinpath(path, name), ('\\' => "/"))
+        _name = tmpexportname(path, (obj isa Nothing ? string(typeof(c)) : obj)*'_', name, ".vtf")
+        truepath = replace(joinpath(path, _name), ('\\' => "/"))
         if obj isa Nothing
             println("Saving file (representing $(typeof(c))) at $truepath")
         else
             println("Export of $obj is enabled: saving file at $truepath")
         end
         try
-            export_vtf(truepath, c, repeats)
+            export_vtf(truepath, c, _repeats)
         catch e
             if e isa SystemError
                 @error "Failed to export because of the following error: $e"

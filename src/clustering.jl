@@ -388,7 +388,7 @@ end
 
 
 """
-split_sbu!(sbus, graph, i_sbu, classes)
+    split_sbu!(sbus, graph, i_sbu, classes)
 
 Split SBU number `i_sbu` into new SBUs according to the updated
 `classes`. The first argument `sbus` is modified in-place.
@@ -2046,15 +2046,15 @@ function allnodes_to_singlenodes(cryst::Crystal{Nothing})
 end
 
 
-"""
-    allnodes_to_standard(cryst::Crystal)
+# """
+#     allnodes_to_standard(cryst::Crystal)
 
-Convert `AllNodes` result to `Standard` by collapsing all points of extension clusters
-bonded together into a new organic cluster, and removing bonds between metallic clusters.
+# Convert `AllNodes` result to `Standard` by collapsing all points of extension clusters
+# bonded together into a new organic cluster, and removing bonds between metallic clusters.
 
-To correspond to the actual `Standard` representation, the `separate_metals` option must
-have been set when computing the `AllNodes` representation.
-"""
-function allnodes_to_standard(cryst::Crystal)
-    return allnodes_to_singlenodes(cryst)
-end
+# To correspond to the actual `Standard` representation, the `separate_metals` option must
+# have been set when computing the `AllNodes` representation.
+# """
+# function allnodes_to_standard(cryst::Crystal)
+#     return allnodes_to_singlenodes(cryst)
+# end

@@ -3,6 +3,15 @@ import Pkg
 
 const CRYSTAL_NETS_VERSION = VersionNumber(Pkg.TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["version"])
 const arc_location = normpath(joinpath(dirname(@__DIR__), "archives"))
+
+"""
+    const CRYSTAL_NETS_ARCHIVE::Dict{String,String}
+
+The archive used to recognize known topologies.
+
+You probably don't need to access it directly: rely on [`recognize_topology`](@ref) to read
+and the various archive functions like [`add_to_current_archive!`](@ref) to write.
+"""
 const CRYSTAL_NETS_ARCHIVE = if isdir(arc_location) && !isempty(readdir(arc_location))
     flag, parsed = parse_arcs(arc_location)
     if !flag
@@ -19,7 +28,31 @@ else
           If you have not encountered any such error and you did not modify or erase the archive located at $arc_location please open an issue at https://github.com/coudertlab/CrystalNets.jl/issues/new
           """)
 end
+
+"""
+    const REVERSE_CRYSTAL_NETS_ARCHIVE::Dict{String,String}
+
+Reverse of [`CRYSTAL_NETS_ARCHIVE`](@ref).
+
+Can be used to query the topological genome of known nets, as in:
+```jldoctest
+julia> REVERSE_CRYSTAL_NETS_ARCHIVE["pcu"]
+"3 1 1 0 0 1 1 1 0 1 0 1 1 1 0 0"
+
+julia> topological_genome(PeriodicGraph(ans))
+pcu
+```
+"""
 const REVERSE_CRYSTAL_NETS_ARCHIVE = Dict{String,String}(id => (startswith(key, "unstable") ? key[10:end] : key) for (key, id) in CRYSTAL_NETS_ARCHIVE)
+
+export clean_default_archive!,
+       set_default_archive!,
+       empty_default_archive!,
+       change_current_archive!,
+       refresh_current_archive!,
+       add_to_current_archive!,
+       make_archive,
+       REVERSE_CRYSTAL_NETS_ARCHIVE
 
 function _reset_archive!()
     global CRYSTAL_NETS_ARCHIVE
@@ -107,15 +140,12 @@ replaced by the new default one.
 
     To only change the archive for the current session, use `CrystalNets.change_current_archive!(custom_arc)`.
 
-    See also `refresh_current_archive!` for similar uses.
+    See also [`refresh_current_archive!`](@ref) for similar uses.
 
 !!! warning
     The previous default archive cannot be recovered afterwards, so make sure to
     keep a copy if necessary. The default archive is the set of ".arc" files located
     at $arc_location.
-
-See also `add_to_current_archive!`, `change_current_archive!`, `refresh_current_archive!`,
-`set_default_archive!`, `empty_default_archive!`
 """
 function clean_default_archive!(custom_arc=nothing; validate=true, refresh=true, name="new")
     rm(arc_location; recursive=true)
@@ -140,9 +170,6 @@ Set the current archive as the new default archive.
 !!! warning
     This archive will be kept and used for subsequent runs of CrystalNets.jl, even
     if you restart your Julia session.
-
-See also `add_to_current_archive!`, `change_current_archive!`, `refresh_current_archive!`,
-`clean_default_archive!`, `empty_default_archive!`
 """
 function set_default_archive!()
     global CRYSTAL_NETS_ARCHIVE
@@ -161,10 +188,7 @@ be emptied.
 !!! warning
     This empty archive will be kept and used for subsequent runs of CrystalNets.jl, even
     if you restart your Julia session. If you only want to empty the current archive,
-    use `empty!(CrystalNets.CRYSTAL_NETS_ARCHIVE)`.
-
-See also `add_to_current_archive!`, `change_current_archive!`, `refresh_current_archive!`,
-`clean_default_archive!`, `set_default_archive!`
+    do `empty!(CrystalNets.CRYSTAL_NETS_ARCHIVE)`.
 """
 function empty_default_archive!(; refresh=true)
     global CRYSTAL_NETS_ARCHIVE
@@ -208,9 +232,6 @@ to a format usable by CrystalNets.jl. If unsure, leave it set.
     Using an invalid archive will make CrystalNets.jl unusable. If this happens,
     simply run `CrystalNets.refresh_current_archive!()` to revert to the
     default archive.
-
-See also `add_to_current_archive!`, `refresh_current_archive!`, `clean_default_archive!`,
-`set_default_archive!`, `empty_default_archive!`
 """
 function change_current_archive!(custom_arc; validate=true)
     arc::Dict{String,String} = if validate
@@ -225,9 +246,6 @@ end
     refresh_current_archive!()
 
 Revert the current topological archive to the default one.
-
-See also `add_to_current_archive!`, `change_current_archive!`, `clean_default_archive!`,
-`set_default_archive!`, `empty_default_archive!`
 """
 function refresh_current_archive!()
     _change_current_archive!(last(parse_arcs(arc_location)))
@@ -255,9 +273,6 @@ The input `id` and `genome` are not modified by this operation.
 
     If you wish to save the archive and use it for subsequent runs, use
     `CrystalNets.set_default_archive!` after calling this function.
-
-See also `change_current_archive!`, `refresh_current_archive!`, `clean_default_archive!`,
-`set_default_archive!`, `empty_default_archive!`
 """
 function add_to_current_archive!(id::AbstractString, genome::AbstractString)
     if !isnumeric(first(genome))
@@ -298,9 +313,6 @@ the name of the latest file that bore it.
 
 The archive can then be used with `change_current_archive!(destination; validate=false)`
 for instance.
-
-See also `recognize_topologies` if you want to compare the topologies of the files
-in a directory with those of the current archive.
 """
 function make_archive(path, destination, verbose=false)
     arc = Dict{String,String}()

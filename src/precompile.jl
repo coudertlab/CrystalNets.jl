@@ -311,7 +311,6 @@ function _precompile_()
 
 
     # CrystalNets
-    Base.precompile(Tuple{Core.kwftype(typeof(CrystalNets.recognize_topologies)),NamedTuple{(:ignore_atoms,), Tuple{Tuple{Symbol}}},typeof(CrystalNets.recognize_topologies),String})
     # Base.precompile(Tuple{CrystalNets.var"#730#threadsfor_fun#121"{Tuple{Symbol}, String, Dict{String, String}, Dict{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}, Dict{String, String}, Vector{String}}})
     for T in (Bool, Int8, Int16, Int32, Int64, Int128, BigInt)
        # Base.precompile(Tuple{CrystalNets.var"#670#threadsfor_fun#114"{CrystalNet{Rational{T}}, Vector{Int}, Base.Threads.SpinLock, Vector{Pair{Int, Tuple{Matrix{Rational{CrystalNets.soft_widen(T)}}, Vector{Int}}}}, Int, DataType, Vector{Int}}})
@@ -331,8 +330,6 @@ function _precompile_()
     Base.precompile(Tuple{typeof(SparseArrays.sparse),Vector{Int},Vector{Int},Vector{CrystalNets.Modulos.Modulo{2147483629, Int32}},Int,Int,Function})
     Base.precompile(Tuple{typeof(CrystalNets.parse_chemfile),String})
     Base.precompile(Tuple{typeof(CrystalNets.parse_chemfile),String,Bool})
-    Base.precompile(Tuple{Core.kwftype(typeof(CrystalNets.parse_chemfile)),NamedTuple{(:ignore_atoms,), Tuple{Tuple{Symbol}}},typeof(CrystalNets.recognize_topologies),String})
-    Base.precompile(Tuple{Core.kwftype(typeof(CrystalNets.parse_chemfile)),NamedTuple{(:ignore_atoms,), Tuple{Tuple{Symbol}}},typeof(CrystalNets.recognize_topologies),String,Bool})
     Base.precompile(Tuple{Type{Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{1}, Axes, F, Args} where Args<:Tuple where F where Axes},typeof(CrystalNets.parsestrip),Tuple{Vector{String}}})
     Base.precompile(Tuple{typeof(-),CrystalNets.Modulos.Modulo{2147483647, Int32},CrystalNets.Modulos.Modulo{2147483647, Int32}})
     Base.precompile(Tuple{typeof(/),Int,CrystalNets.Modulos.Modulo{2147483647, Int32}})

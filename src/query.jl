@@ -166,7 +166,7 @@ end
 
 Attempt to recognize a topological genome from an archive of known genomes.
 
-!!! warn
+!!! warning
     This function does a simple lookup, not any kind of topology computation.
     To identify the topology of a `PeriodicGraph` or a `CrystalNet` `x`, query
     `topological_genome(x)` instead.
