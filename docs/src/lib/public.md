@@ -1,26 +1,28 @@
+## Main types
 ```@docs
 CrystalNet
-determine_topology
-topologies_dataset
-topological_genome
-recognize_topology
-guess_topology
-guess_dataset
+UnderlyingNets
 TopologicalGenome
 TopologyResult
 ```
 
-## Options
+## Main functions
 ```@docs
-CrystalNets.toggle_warning
-CrystalNets.toggle_export
+determine_topology
+determine_topology_dataset
+guess_topology
+guess_topology_dataset
+parse_chemfile
+topological_genome
+recognize_topology
 ```
 
+## Options
 ```@docs
 CrystalNets.Options
-Clustering
-Bonding
 StructureType
+Bonding
+Clustering
 ClusterKinds
 ```
 
@@ -39,7 +41,9 @@ make_archive
 CrystalNets.export_arc
 ```
 
-## Exports
+## Other utilities
 ```@docs
+CrystalNets.toggle_warning
+CrystalNets.toggle_export
 CrystalNets.export_default
 ```

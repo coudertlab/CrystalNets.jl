@@ -1071,7 +1071,11 @@ function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
     return ret
 end
 
+"""
+    UnderlyingNets
 
+Grouping of the connected components of a structure according to their dimensionality.
+"""
 struct UnderlyingNets
     D1::Vector{Tuple{Vector{Int},Vector{CrystalNet1D}}}
     D2::Vector{Tuple{Vector{Int},Vector{CrystalNet2D}}}

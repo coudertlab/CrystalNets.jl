@@ -14,14 +14,14 @@ end
 DocMeta.setdocmeta!(CrystalNets, :DocTestSetup, quote
     using CrystalNets
     using PeriodicGraphs
-    import CrystalNets: Options
+    import CrystalNets: Options, Clustering, Bonding, StructureType
 
     CrystalNets.toggle_export(false)
     CrystalNets.toggle_warning(false)
 end; recursive=true)
 
 makedocs(
-    sitename = "CrystalNets",
+    sitename = "CrystalNets.jl",
     format = Documenter.HTML(),
     modules = [CrystalNets],
     pages = [

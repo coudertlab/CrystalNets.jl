@@ -82,12 +82,12 @@ end
 Export a VTF representation of an object at the given `path`.
 
 `obj` is a `String` describing the nature of the object, such as "net", "clusters" or
-"subnet" for example. Default to `string(typeof(c))`
+"subnet" for example. Default is `string(typeof(c))`.
 
-`name` is a `String` inserted in the exported file name. Default to a [`tempname`](https://docs.julialang.org/en/v1/base/file/#Base.Filesystem.tempname).
+`name` is a `String` inserted in the exported file name. Default is a [`tempname`](https://docs.julialang.org/en/v1/base/file/#Base.Filesystem.tempname).
 
 `repeats` is the maximum distance between a represented atom out of the unit cell and one
-inside.
+inside. Default is between 2 and 6, depending on `obj` and the size of the graph.
 """
 export_default(g::PeriodicGraph, args...; kwargs...) = export_default(CrystalNet(g), args...; kwargs...)
 function export_default(c, obj=nothing, name=nothing, path=tempdir(); repeats=nothing)

@@ -419,8 +419,8 @@ end
 =#
 
 """
-    topologies_dataset(path, save, autoclean, options::Options)
-    topologies_dataset(path, save=true, autoclean=true; kwargs...)
+    determine_topology_dataset(path, save, autoclean, options::Options)
+    determine_topology_dataset(path, save=true, autoclean=true; kwargs...)
 
 Given a path to a directory containing structure input files, compute the
 topology of each structure within the directory.
@@ -443,7 +443,7 @@ is removed at the end if the computation was successful.
 If `save` is set and `autoclean` is unset, the directory of temporary files will
 be renamed into "\\\$path/../results_\\\$i.OLD\\\$j".
 """
-function topologies_dataset(path, save, autoclean, options::Options)
+function determine_topology_dataset(path, save, autoclean, options::Options)
     if isdirpath(path)
         path = dirname(path)
     end
@@ -540,17 +540,17 @@ function topologies_dataset(path, save, autoclean, options::Options)
     end
     return result
 end
-function topologies_dataset(path, save=true, autoclean=true; kwargs...)
+function determine_topology_dataset(path, save=true, autoclean=true; kwargs...)
     opts, restore_warns = db_options(; kwargs...)
-    topologies_dataset(path, save, autoclean, opts)
+    determine_topology_dataset(path, save, autoclean, opts)
     restore_warns && (DOWARN[] = true)
 end
 
 
 
 """
-    guess_dataset(path, save, autoclean, options::Options)
-    guess_dataset(path, save=true, autoclean=true; kwargs...)
+    guess_topology_dataset(path, save, autoclean, options::Options)
+    guess_topology_dataset(path, save=true, autoclean=true; kwargs...)
 
 Given a path to a directory containing structure input files, guess the topology of each
 structure within the directory using [`guess_topology`](@ref).
@@ -565,9 +565,9 @@ not to export any file since those actions may critically reduce performance,
 especially for numerous files.
 
 The `save` and `autoclean` arguments work identically to their counterpart for
-[`topologies_dataset`](@ref).
+[`determine_topology_dataset`](@ref).
 """
-function guess_dataset(path, save, autoclean, options::Options)
+function guess_topology_dataset(path, save, autoclean, options::Options)
     if isdirpath(path)
         path = dirname(path)
     end
@@ -655,8 +655,8 @@ function guess_dataset(path, save, autoclean, options::Options)
     end
     return result
 end
-function guess_dataset(path, save=true, autoclean=true; kwargs...)
+function guess_topology_dataset(path, save=true, autoclean=true; kwargs...)
     opts, restore_warns = db_options(; structure=StructureType.Guess, kwargs...)
-    guess_dataset(path, save, autoclean, opts)
+    guess_topology_dataset(path, save, autoclean, opts)
     restore_warns && (DOWARN[] = true)
 end

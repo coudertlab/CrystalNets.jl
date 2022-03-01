@@ -1093,6 +1093,7 @@ end
 
 """
        parse_chemfile(path, options::Options)
+       parse_chemfile(path; kwargs...)
 
 Parse a file given in any recognised chemical format and extract the topological
 information.

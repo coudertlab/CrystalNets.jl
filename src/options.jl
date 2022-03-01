@@ -29,7 +29,7 @@ as well as the clustering algorithm used.
 
 The choices are:
 - `Auto`: No specific structure information. Use Van der Waals radii for bond detection and
-  `Input` as [`Clustering`](@ref CrystalNets.Clustering), or `EachVertex` if the input does not provide residues.
+  `Input` as [`Clustering`](@ref), or `EachVertex` if the input does not provide residues.
 - `MOF`: Use Van der Waals radii for non-metallic atoms and larger radii for metals. Detect
   organic and inorganic clusters and subdivide them according to `AllNodes` and
   `SingleNodes` to identify underlying nets.
@@ -63,7 +63,7 @@ This choice only affects the creation of a `UnderlyingNets` from a `Crystal`, no
 `Crystal` itself, and in particular not the bond detection algorithm.
 
 The basic choices are:
-- `Auto`: determined using the [`StructureType`](@ref CrystalNets.StructureType).
+- `Auto`: determined using the [`StructureType`](@ref).
 - `Input`: use the input residues as vertices. Fail if some atom does not belong to a
   residue.
 - `EachVertex`: each atom is its own vertex. Vertices with degree 2 or lower are

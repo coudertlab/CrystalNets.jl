@@ -18,18 +18,18 @@ module CrystalNets
 
 export CrystalNet,
        UnderlyingNets,
+       TopologicalGenome,
+       TopologyResult,
+       determine_topology,
+       determine_topology_dataset,
+       guess_topology,
+       guess_topology_dataset,
        parse_chemfile,
        topological_genome,
        recognize_topology,
-       determine_topology,
-       guess_topology,
-       topologies_dataset,
-       guess_dataset,
        StructureType,
        Bonding,
        Clustering,
-       TopologicalGenome,
-       TopologyResult,
        ClusterKinds
 
 import LinearAlgebra: det, norm, rank
@@ -46,10 +46,23 @@ import Logging
 const DOWARN = Base.RefValue{Bool}(false)
 const DOEXPORT = Base.RefValue{Bool}(false)
 
+"""
+    toggle_warning(to=nothing)
+
+Toggle warnings on (if `to == true`) or off (if `to == false`).
+Without an argument, toggle on and off repeatedly at each call.
+"""
 function toggle_warning(to=nothing)
     global DOWARN
     DOWARN[] = to isa Nothing ? !DOWARN[] : to
 end
+
+"""
+    toggle_export(to=nothing)
+
+Toggle exports on (if `to == true`) or off (if `to == false`).
+Without an argument, toggle on and off repeatedly at each call.
+"""
 function toggle_export(to=nothing)
     global DOEXPORT
     DOEXPORT[] = to isa Nothing ? !DOEXPORT[] : to
