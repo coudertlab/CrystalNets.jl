@@ -12,14 +12,14 @@ possibly if the `ignore_types` option is unset).
 !!! info
     Options must be passed directly within `net`.
 """
-function topological_genome(net::CrystalNet{D,T})::SingleTopologyResult where {D,T}
-    isempty(net.pos) && return SingleTopologyResult(net.options.error)
+function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
+    isempty(net.pos) && return TopologicalGenome(net.options.error)
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos,
                               net.graph, net.options)
     end
     shrunk_net, _collisions = collision_nodes(net)
-    _collisions isa Nothing && return SingleTopologyResult(net.graph, nothing, true)
+    _collisions isa Nothing && return TopologicalGenome(net.graph, nothing, true)
     collisions::Vector{CollisionNode} = _collisions
 
     if !net.options.skip_minimize
@@ -29,14 +29,14 @@ function topological_genome(net::CrystalNet{D,T})::SingleTopologyResult where {D
             flag = false
         catch e
             if T == Rational{BigInt} || !(e isa OverflowError || e isa InexactError)
-                return SingleTopologyResult(string(e)::String)
+                return TopologicalGenome(string(e)::String)
             end
         end
         if flag # not in the catch to avoid a StackOverflow of errors in case something goes wrong
             newnet = CrystalNet{D,widen(soft_widen(T))}(net; ignore_types=false)
             return topological_genome(newnet)
         end
-        _collisions isa Nothing && return SingleTopologyResult(shrunk_net.graph, nothing, true)
+        _collisions isa Nothing && return TopologicalGenome(shrunk_net.graph, nothing, true)
         collisions = _collisions
     end
 
@@ -47,17 +47,17 @@ function topological_genome(net::CrystalNet{D,T})::SingleTopologyResult where {D
     return topological_genome(shrunk_net, collisions)
 end
 
-topological_genome(net::CrystalNet{0,T}) where {T} = SingleTopologyResult(net.options.error)
+topological_genome(net::CrystalNet{0,T}) where {T} = TopologicalGenome(net.options.error)
 
-function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNode})::SingleTopologyResult where {D,T}
+function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNode})::TopologicalGenome where {D,T}
     try
         g::PeriodicGraph{D} = topological_key(net, collisions)
         unstable = g.width[] == -2
         unstable && (g.width[] = -1)
-        return SingleTopologyResult(g, recognize_topology(g), unstable)
+        return TopologicalGenome(g, recognize_topology(g), unstable)
     catch e
         if T == Rational{BigInt} || !(e isa OverflowError || e isa InexactError)
-            return SingleTopologyResult(string(e)::String)
+            return TopologicalGenome(string(e)::String)
         end
     end
     return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), collisions)
@@ -90,7 +90,7 @@ end
 Compute the topological genome of a periodic graph.
 If given a topological key (as a string), it is converted to a `PeriodicGraph` first.
 """
-function topological_genome(g::PeriodicGraph, options::Options)::SingleTopologyResult
+function topological_genome(g::PeriodicGraph, options::Options)::TopologicalGenome
     net = CrystalNet(g, options)
     return topological_genome(net)
 end
@@ -149,7 +149,7 @@ function topological_genome(group::UnderlyingNets)
     ret = Tuple{Vector{Int},TopologyResult}[]
     @loop_group for (id, net) in group
         encountered = Dict{PeriodicGraph,_Clustering}()
-        subret = Vector{Tuple{_Clustering,Union{_Clustering,SingleTopologyResult}}}(undef, length(net))
+        subret = Vector{Tuple{_Clustering,Union{_Clustering,TopologicalGenome}}}(undef, length(net))
         for (j, subnet) in enumerate(net)
             clust = only(subnet.options.clusterings)
             refclust = get!(encountered, subnet.graph, clust)
@@ -237,7 +237,7 @@ function determine_topologies(path, options::Options)
             Tuple{Vector{Int},TopologyResult}[]
         end
         if isempty(genomes)
-            push!(genomes, (Int[], setindex!(TopologyResult(), SingleTopologyResult(), options.clustering)))
+            push!(genomes, (Int[], setindex!(TopologyResult(), TopologicalGenome(), options.clustering)))
         end
         for (j, (_, genome)) in enumerate(genomes)
             newname = length(genomes) == 1 ? name : name * '/' * string(j)
@@ -276,7 +276,7 @@ macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
                 unstable, counter = encountered_genomes[sig]
                 encountered_genomes[sig] = (unstable, counter + 1)
             else
-                genome = topological_genome(net)::SingleTopologyResult
+                genome = topological_genome(net)::TopologicalGenome
                 if dim == maxdim && genome.name !== nothing
                     $ifprintinfo
                     return genome
@@ -385,9 +385,9 @@ function guess_topology(path, defopts)
         end
     end
     return most_plausible_genome == PeriodicGraph{0}() ? begin
-            issetequal(defopts.dimensions, [1,2,3]) ? SingleTopologyResult() :
-                SingleTopologyResult("could not guess (perhaps because no net with suitable dimension in $(defopts.dimensions) was found?)")
-            end : SingleTopologyResult(most_plausible_genome, nothing, final_unstable)
+            issetequal(defopts.dimensions, [1,2,3]) ? TopologicalGenome() :
+                TopologicalGenome("could not guess (perhaps because no net with suitable dimension in $(defopts.dimensions) was found?)")
+            end : TopologicalGenome(most_plausible_genome, nothing, final_unstable)
 end
 guess_topology(path; kwargs...) = guess_topology(path, Options(structure=StructureType.Guess; kwargs...))
 
@@ -512,10 +512,10 @@ function topologies_dataset(path, save, autoclean, options::Options)
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            [(Int[], setindex!(TopologyResult(), SingleTopologyResult(string(e)), Clustering.Auto))]
+            [(Int[], setindex!(TopologyResult(), TopologicalGenome(string(e)), Clustering.Auto))]
         end
         if isempty(genomes)
-            push!(genomes, (Int[], setindex!(TopologyResult(), SingleTopologyResult(), Clustering.Auto)))
+            push!(genomes, (Int[], setindex!(TopologyResult(), TopologicalGenome(), Clustering.Auto)))
         end
         for (j, (_, genome)) in enumerate(genomes)
             newname = length(genomes) == 1 ? file * '/' : file * '/' * string(j)
@@ -628,31 +628,31 @@ function guess_dataset(path, save, autoclean, options::Options)
     @threads for file in files
         f = joinpath(path, file)
 
-        genome::SingleTopologyResult = try
+        genome::TopologicalGenome = try
             guess_topology(f, options)
         catch e
             if e isa InterruptException ||
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            SingleTopologyResult(escape_string(string(e)::String))
+            TopologicalGenome(escape_string(string(e)::String))
         end
         open(joinpath(resultdir, string(threadid())), "a") do results
             println(results, file, '/', genome)
         end
     end
 
-    ret = Pair{String,SingleTopologyResult}[]
+    ret = Pair{String,TopologicalGenome}[]
     for _f in readdir(resultdir; join=true)
         basename(_f) == "data" && continue
         for l in eachline(_f)
             splits = split(l, '/')
             isempty(last(splits)) && @show _f, l
             _genome = pop!(splits)
-            push!(ret, Pair(join(splits, '/'), parse(SingleTopologyResult, _genome)))
+            push!(ret, Pair(join(splits, '/'), parse(TopologicalGenome, _genome)))
         end
     end
-    result::Dict{String,SingleTopologyResult} = Dict(ret)
+    result::Dict{String,TopologicalGenome} = Dict(ret)
     if save
         i = 0
         tmpresultdir = resultdir*".OLD"*string(i)

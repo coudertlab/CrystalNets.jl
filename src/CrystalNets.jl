@@ -28,7 +28,7 @@ export CrystalNet,
        StructureType,
        Bonding,
        Clustering,
-       SingleTopologyResult,
+       TopologicalGenome,
        TopologyResult,
        ClusterKinds
 

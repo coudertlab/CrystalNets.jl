@@ -1255,27 +1255,27 @@ CrystalNet{D}(g::PseudoGraph; kwargs...) where {D} = CrystalNet{D}(UnderlyingNet
 
 const SmallDimPeriodicGraph = Union{PeriodicGraph{0}, PeriodicGraph1D, PeriodicGraph2D, PeriodicGraph3D}
 
-mutable struct SingleTopologyResult
+mutable struct TopologicalGenome
     genome::SmallDimPeriodicGraph
     name::Union{Nothing,String}
     unstable::Bool
     error::String
 end
 
-SingleTopologyResult(g, name, unstable=false) = SingleTopologyResult(g, name, unstable, "")
-SingleTopologyResult(x::AbstractString) = SingleTopologyResult(PeriodicGraph{0}(), nothing, false, x)
-SingleTopologyResult() = SingleTopologyResult("")
+TopologicalGenome(g, name, unstable=false) = TopologicalGenome(g, name, unstable, "")
+TopologicalGenome(x::AbstractString) = TopologicalGenome(PeriodicGraph{0}(), nothing, false, x)
+TopologicalGenome() = TopologicalGenome("")
 
-function ==(s1::SingleTopologyResult, s2::SingleTopologyResult)
+function ==(s1::TopologicalGenome, s2::TopologicalGenome)
     s1.genome == s2.genome || return false
     ndims(s1.genome) == 0 && return s1.error = s2.error
     return true
 end
-function Base.hash(s::SingleTopologyResult, h::UInt)
+function Base.hash(s::TopologicalGenome, h::UInt)
     isempty(s.error) ? hash(s.error, h) : s.name === nothing ? hash(s.genome, h) : hash(s.name, h)
 end
 
-function Base.show(io::IO, x::SingleTopologyResult)
+function Base.show(io::IO, x::TopologicalGenome)
     if !isempty(x.error)
         print(io, "FAILED with: ", x.error)
     elseif ndims(x.genome) == 0
@@ -1289,38 +1289,38 @@ function Base.show(io::IO, x::SingleTopologyResult)
     end
 end
 
-function Base.parse(::Type{SingleTopologyResult}, s::AbstractString)
+function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
     if startswith(s, "UNKNOWN")
-        return SingleTopologyResult(PeriodicGraph(s[9:end]), nothing, false)
+        return TopologicalGenome(PeriodicGraph(s[9:end]), nothing, false)
     end
-    s == "non-periodic" && return SingleTopologyResult()
+    s == "non-periodic" && return TopologicalGenome()
     if startswith(s, "unstable")
-        return SingleTopologyResult(PeriodicGraph(s[10:end]), nothing, true)
+        return TopologicalGenome(PeriodicGraph(s[10:end]), nothing, true)
     end
     if startswith(s, "FAILED")
-        return SingleTopologyResult(s[13:end])
+        return TopologicalGenome(s[13:end])
     end
-    return SingleTopologyResult(parse(PeriodicGraph, REVERSE_CRYSTAL_NETS_ARCHIVE[s]), s, false)
+    return TopologicalGenome(parse(PeriodicGraph, REVERSE_CRYSTAL_NETS_ARCHIVE[s]), s, false)
 end
 
 
 struct TopologyResult
-    results::SizedVector{8,SingleTopologyResult}
+    results::SizedVector{8,TopologicalGenome}
     attributions::MVector{8,Int8}
     uniques::Vector{Int8}
 end
 
-TopologyResult() = TopologyResult(SizedVector{8,SingleTopologyResult}(undef),
+TopologyResult() = TopologyResult(SizedVector{8,TopologicalGenome}(undef),
                                   MVector{8,Int8}(0, 0, 0, 0, 0, 0, 0, 0), Int8[])
 
-function TopologyResult(x::Vector{Tuple{_Clustering,Union{_Clustering,SingleTopologyResult}}})
+function TopologyResult(x::Vector{Tuple{_Clustering,Union{_Clustering,TopologicalGenome}}})
     ret = TopologyResult()
     results = ret.results
     attributions = ret.attributions
     uniques = ret.uniques
     sort!(x; by=t -> t[2] isa _Clustering)
 
-    encountered = Dict{SingleTopologyResult,Int}()
+    encountered = Dict{TopologicalGenome,Int}()
     for (_i, result) in x
         if result isa _Clustering
             j = Int(result)
@@ -1364,7 +1364,7 @@ function Base.getindex(x::TopologyResult, c::_Clustering)
 end
 Base.getindex(x::TopologyResult, c::Symbol) = getindex(x, clustering_from_symb(c))
 
-function Base.setindex!(x::TopologyResult, a::Union{SingleTopologyResult,_Clustering}, c::_Clustering)
+function Base.setindex!(x::TopologyResult, a::Union{TopologicalGenome,_Clustering}, c::_Clustering)
     i = Int(c)
     notuniqueflag = false
     if a isa _Clustering
@@ -1389,7 +1389,7 @@ function Base.setindex!(x::TopologyResult, a::Union{SingleTopologyResult,_Cluste
             push!(x.uniques, i)
         end
         x.attributions[i] = i
-        x.results[i] = a::SingleTopologyResult
+        x.results[i] = a::TopologicalGenome
     end
     x
 end
@@ -1438,7 +1438,7 @@ function Base.iterate(x::TopologyResult, state::Int=1)
     end
     nothing
 end
-Base.eltype(::Type{TopologyResult}) = SingleTopologyResult
+Base.eltype(::Type{TopologyResult}) = TopologicalGenome
 Base.length(x::TopologyResult) = length(x.uniques)
 
 function Base.parse(::Type{TopologyResult}, s::AbstractString)
@@ -1446,7 +1446,7 @@ function Base.parse(::Type{TopologyResult}, s::AbstractString)
     if length(splits) == 1
         splits = split(s, '\n')
     end
-    ret = Tuple{_Clustering,Union{_Clustering,SingleTopologyResult}}[]
+    ret = Tuple{_Clustering,Union{_Clustering,TopologicalGenome}}[]
     for sp in splits
         _clusterings, result = split(sp, ": ")
         clusterings = split(_clusterings, ',')
@@ -1457,7 +1457,7 @@ function Base.parse(::Type{TopologyResult}, s::AbstractString)
                 push!(ret, (parse(_Clustering, clust[1] == ' ' ? clust[2:end] : clust), ref_cluster))
             end
         end
-        push!(ret, (ref_cluster, parse(SingleTopologyResult, result)))
+        push!(ret, (ref_cluster, parse(TopologicalGenome, result)))
     end
     return TopologyResult(ret)
 end
