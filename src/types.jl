@@ -1238,12 +1238,21 @@ end
 
 const PseudoGraph = Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D}
 function UnderlyingNets(g::PseudoGraph, options::Options)
+    groups = UnderlyingNets()
     graph = PeriodicGraph(g)
+    dimensions = PeriodicGraphs.dimensionality(graph)
+    @ifwarn if haskey(dimensions, 0)
+        @error "Detected substructure of dimension 0 in the input graph. It will be ignored for topology computation."
+    end
     cell = Cell()
-    n = nv(graph)
-    types = [Symbol("") for _ in 1:n]
-    pos = [zero(SVector{3,Float64}) for _ in 1:n]
-    return UnderlyingNets(Crystal{Nothing}(cell, types, pos, graph, options))
+    @repeatgroups begin
+        for vmap in get(dimensions, D, Vector{Int}[])
+            nets = PeriodicGraphs.change_dimension(PeriodicGraph{D}, graph[vmap])
+            types = fill(Symbol(""), nv(nets))
+            push!(groups, (vmap, [CrystalNet{D}(cell, types, nets, options)]))
+        end
+    end
+    return groups
 end
 UnderlyingNets(g::PseudoGraph; kwargs...) = UnderlyingNets(g, Options(; kwargs...))
 
@@ -1255,7 +1264,30 @@ CrystalNet{D}(g::PseudoGraph; kwargs...) where {D} = CrystalNet{D}(UnderlyingNet
 
 const SmallDimPeriodicGraph = Union{PeriodicGraph{0}, PeriodicGraph1D, PeriodicGraph2D, PeriodicGraph3D}
 
-mutable struct TopologicalGenome
+"""
+    TopologicalGenome
+
+A topological genome computed by `CrystalNets.jl`.
+
+Store both the actual genome (as a `PeriodicGraph`) and the name of the net, if recognized.
+
+Like for a `PeriodicGraph`, the textual representation of a `TopologicalGenome` can be
+parsed back into a `TopologicalGenome`:
+```jldoctest
+julia> topology = topological_genome(CrystalNet(PeriodicGraph("2  1 2 0 0  2 1 0 1  2 1 1 0")))
+hcb
+
+julia> typeof(topology)
+TopologicalGenome
+
+julia> topology.genome  # The actual topological genome, as a PeriodicGraph
+PeriodicGraph2D(2, PeriodicEdge2D[(1, 2, (-1,0)), (1, 2, (0,0)), (1, 2, (0,1))])
+
+julia> parse(TopologicalGenome, "hcb") == topology
+true
+```
+"""
+struct TopologicalGenome
     genome::SmallDimPeriodicGraph
     name::Union{Nothing,String}
     unstable::Bool
@@ -1268,7 +1300,7 @@ TopologicalGenome() = TopologicalGenome("")
 
 function ==(s1::TopologicalGenome, s2::TopologicalGenome)
     s1.genome == s2.genome || return false
-    ndims(s1.genome) == 0 && return s1.error = s2.error
+    ndims(s1.genome) == 0 && return s1.error == s2.error
     return true
 end
 function Base.hash(s::TopologicalGenome, h::UInt)
@@ -1304,6 +1336,33 @@ function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
 end
 
 
+"""
+    TopologyResult
+
+The result of a topology computation on a structure with different [`Clustering`](@ref)
+options.
+
+Its representation includes the name of the clustering options along with their
+corresponding genome. It is omitted if there is only one clustering option which is
+[`Auto`](@ref Clustering).
+
+Like for a [`TopologicalGenome`](@ref) (or a `PeriodicGraph`), the textual representation
+of a `TopologyResult` can be parsed back to a `TopologyResult`:
+```jldoctest
+julia> mof5 = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif", "MOF-5.cif");
+
+julia> topologies = determine_topology(mof5, structure=StructureType.MOF, clusterings=[Clustering.Auto, Clustering.Standard, Clustering.PE])
+AllNodes, SingleNodes: pcu
+Standard: xbh
+PE: cab
+
+julia> typeof(topologies)
+TopologyResult
+
+julia> parse(TopologyResult, repr(topologies)) == topologies
+true
+```
+"""
 struct TopologyResult
     results::SizedVector{8,TopologicalGenome}
     attributions::MVector{8,Int8}
@@ -1339,6 +1398,26 @@ function TopologyResult(x::Vector{Tuple{_Clustering,Union{_Clustering,Topologica
     return ret
 end
 
+function ==(t1::TopologyResult, t2::TopologyResult)
+    for (a1, a2) in zip(t1.attributions, t2.attributions)
+        if a1 * a2 == 0
+            a1 + a2 == 0 || return false
+        else
+            t1.results[a1] == t2.results[a2] || return false
+        end
+    end
+    return true
+end
+
+function Base.hash(t::TopologyResult, h::UInt)
+    for i in 1:8
+        a = t.attributions[i]
+        a == 0 && continue
+        h = hash(t.results[a], hash(i, h))
+    end
+    return h
+end
+
 
 @static if VERSION < v"1.7-"
     function Returns(x)
@@ -1363,6 +1442,7 @@ function Base.getindex(x::TopologyResult, c::_Clustering)
     return x.results[x.attributions[Int(c)]]
 end
 Base.getindex(x::TopologyResult, c::Symbol) = getindex(x, clustering_from_symb(c))
+Base.getindex(x::TopologyResult, i) = x.results[x.uniques[i]]
 
 function Base.setindex!(x::TopologyResult, a::Union{TopologicalGenome,_Clustering}, c::_Clustering)
     i = Int(c)
@@ -1422,6 +1502,11 @@ function Base.show(io::IO, x::TopologyResult)
         push!(samenet[rev_vmap[j]], i)
     end
 
+    if length(samenet) == 1 && length(samenet[1]) == 1 && x.uniques[1] == 1 # Auto
+        print(io, x.results[1])
+        return
+    end
+
     compact = get(io, :compact, false)
     for (k, l) in enumerate(samenet)
         join(io, (string(clustering_from_num(k)) for k in l), compact ? ',' : ", ")
@@ -1447,6 +1532,10 @@ function Base.parse(::Type{TopologyResult}, s::AbstractString)
         splits = split(s, '\n')
     end
     ret = Tuple{_Clustering,Union{_Clustering,TopologicalGenome}}[]
+    if length(splits) == 1 && (startswith(s, "FAILED") || length(split(splits[1], ": ")) == 1)
+        push!(ret, (Clustering.Auto, parse(TopologicalGenome, s)))
+        return TopologyResult(ret)
+    end
     for sp in splits
         _clusterings, result = split(sp, ": ")
         clusterings = split(_clusterings, ',')

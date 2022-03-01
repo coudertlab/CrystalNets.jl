@@ -1,6 +1,5 @@
 ## Types
 ```@docs
-PeriodicGraphs.PeriodicGraph
 CrystalNets.Crystal
 CrystalNets.Clusters
 CrystalNets.CollisionNode

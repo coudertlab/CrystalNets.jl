@@ -63,26 +63,6 @@ function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNo
     return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), collisions)
 end
 
-function topological_genome(x::Vector{CrystalNet{T}}) where {T}
-    init = topological_genome(popfirst!(x))
-    derived = String[]
-    last_derived = init
-    while !isempty(x)
-        net = popfirst!(x)
-        if !isempty(net.types)
-            _derived = topological_genome(net)
-            if _derived != last_derived
-                push!(derived, _derived)
-                last_derived = _derived
-            end
-        end
-    end
-    if isempty(derived)
-        return init
-    end
-    return string(init, " | ", join(derived, " | "))
-end
-
 """
     topological_genome(g::Union{String,PeriodicGraph}, options::Options=Options())
     topological_genome(g::Union{String,PeriodicGraph}; kwargs...)
@@ -90,9 +70,9 @@ end
 Compute the topological genome of a periodic graph.
 If given a topological key (as a string), it is converted to a `PeriodicGraph` first.
 """
-function topological_genome(g::PeriodicGraph, options::Options)::TopologicalGenome
-    net = CrystalNet(g, options)
-    return topological_genome(net)
+function topological_genome(g::PeriodicGraph, options::Options)
+    nets = UnderlyingNets(g, options)
+    return topological_genome(nets)
 end
 topological_genome(s::String, options::Options) = topological_genome(PeriodicGraph(s), options)
 topological_genome(g::Union{String,PeriodicGraph}; kwargs...) = topological_genome(g, Options(; kwargs...))
@@ -445,7 +425,7 @@ end
 Given a path to a directory containing structure input files, compute the
 topology of each structure within the directory.
 Return a dictionary linking each file name to the result.
-The result is a [`TopologyResult`](@ref)`, containing the topological genome, the name if
+The result is a [`TopologyResult`](@ref), containing the topological genome, the name if
 known and the stability of the net. In case of error, the exception is reported.
 
 It is strongly recommended to toggle warnings off (through [`toggle_warning`](@ref)) and

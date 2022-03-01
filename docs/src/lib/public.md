@@ -6,6 +6,7 @@ topological_genome
 recognize_topology
 guess_topology
 guess_dataset
+TopologicalGenome
 TopologyResult
 ```
 

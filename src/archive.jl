@@ -36,12 +36,23 @@ Reverse of [`CRYSTAL_NETS_ARCHIVE`](@ref).
 
 Can be used to query the topological genome of known nets, as in:
 ```jldoctest
-julia> REVERSE_CRYSTAL_NETS_ARCHIVE["pcu"]
-"3 1 1 0 0 1 1 1 0 1 0 1 1 1 0 0"
+julia> REVERSE_CRYSTAL_NETS_ARCHIVE["dia"]
+"3 1 2 0 0 0 1 2 0 0 1 1 2 0 1 0 1 2 1 0 0"
 
-julia> topological_genome(PeriodicGraph(ans))
-pcu
+julia> topological_genome(CrystalNet(PeriodicGraph(ans)))
+dia
 ```
+
+!!! note
+    It is also possible to directly access the topological genome as a `PeriodicGraph`
+    by parsing the name as a [`TopologicalGenome`](@ref):
+    ```jldoctest
+    julia> parse(TopologicalGenome, "pcu").genome
+    PeriodicGraph3D(1, PeriodicEdge3D[(1, 1, (0,0,1)), (1, 1, (0,1,0)), (1, 1, (1,0,0))])
+
+    julia> string(parse(TopologicalGenome, "nbo").genome) == REVERSE_CRYSTAL_NETS_ARCHIVE["nbo"]
+    true
+    ```
 """
 const REVERSE_CRYSTAL_NETS_ARCHIVE = Dict{String,String}(id => (startswith(key, "unstable") ? key[10:end] : key) for (key, id) in CRYSTAL_NETS_ARCHIVE)
 

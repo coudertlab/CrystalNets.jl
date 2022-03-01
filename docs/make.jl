@@ -15,6 +15,9 @@ DocMeta.setdocmeta!(CrystalNets, :DocTestSetup, quote
     using CrystalNets
     using PeriodicGraphs
     import CrystalNets: Options
+
+    CrystalNets.toggle_export(false)
+    CrystalNets.toggle_warning(false)
 end; recursive=true)
 
 makedocs(
@@ -23,7 +26,7 @@ makedocs(
     modules = [CrystalNets],
     pages = [
         "Home" => "index.md",
-        "Tutorials" => [
+        "Mini-tutorials" => [
             "Visualization"      => "man/visualization.md",
             "Database studies"   => "man/database.md",
             "Clustering options" => "man/clustering.md",
