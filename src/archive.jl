@@ -149,7 +149,7 @@ replaced by the new default one.
     This archive will be kept and used for subsequent runs of CrystalNets.jl, even
     if you restart your Julia session.
 
-    To only change the archive for the current session, use `CrystalNets.change_current_archive!(custom_arc)`.
+    To only change the archive for the current session, use [`change_current_archive!(custom_arc)`](@ref change_current_archive!).
 
     See also [`refresh_current_archive!`](@ref) for similar uses.
 
@@ -237,11 +237,11 @@ to a format usable by CrystalNets.jl. If unsure, leave it set.
     This modification will only last for the duration of this Julia session.
 
     If you wish to change the default archive and use it for subsequent runs, use
-    `CrystalNets.clean_default_archive!`.
+    [`clean_default_archive!`](@ref).
 
 !!! warning
     Using an invalid archive will make CrystalNets.jl unusable. If this happens,
-    simply run `CrystalNets.refresh_current_archive!()` to revert to the
+    simply run [`refresh_current_archive!()`](@ref) to revert to the
     default archive.
 """
 function change_current_archive!(custom_arc; validate=true)
@@ -283,7 +283,7 @@ The input `id` and `genome` are not modified by this operation.
     This modification will only last for the duration of this Julia session.
 
     If you wish to save the archive and use it for subsequent runs, use
-    `CrystalNets.set_default_archive!` after calling this function.
+    [`set_default_archive!`](@ref) after calling this function.
 """
 function add_to_current_archive!(id::AbstractString, genome::AbstractString)
     if !isnumeric(first(genome))
@@ -322,7 +322,7 @@ it to `destination`, if specified. Each file of the directory should correspond
 to a unique topology: if a topology is encountered multiple times, it will be assigned
 the name of the latest file that bore it.
 
-The archive can then be used with `change_current_archive!(destination; validate=false)`
+The archive can then be used with [`change_current_archive!(destination; validate=false)`](@ref change_current_archive!)
 for instance.
 """
 function make_archive(path, destination, verbose=false)

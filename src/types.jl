@@ -640,7 +640,7 @@ function edges_from_bonds(bonds, mat, pos)
         old_dst = ref_dst
         for ofsx in -1:1, ofsy in -1:1, ofsz in -1:1 # TODO: optimize with the periodic_distance trick?
             dst = norm(mat * (pos[i] .- (pos[k] .+ (ofsx, ofsy, ofsz))))
-            if maxdist == -1f0
+            if maxdist == -Inf32 # only keep the closest
                 if dst < maxdist || abs2(dst - old_dst) < 1e-3
                     push!(offset, (ofsx, ofsy, ofsz))
                     old_dst = (dst + old_dst)/2
@@ -1055,8 +1055,8 @@ function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
             alln = Crystal{Nothing}(c; clusterings=[Clustering.AllNodes])
             singlen = allnodes_to_singlenodes(Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, Options(c.options; clusterings=[Clustering.SingleNodes])))
             resize!(ret, length(ret)+1)
-            _collect_net!(ret, encountered, idx, alln, clustering, Val(D))
-            _collect_net!(ret, encountered, idx+1, singlen, clustering, Val(D))
+            _collect_net!(ret, encountered, idx, alln, Clustering.AllNodes, Val(D))
+            _collect_net!(ret, encountered, idx+1, singlen, Clustering.SingleNodes, Val(D))
             idx += 1
         elseif clustering == Clustering.PE
             _collect_net!(ret, encountered, idx, pem_to_pe(c), clustering, Val(D))

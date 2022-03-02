@@ -42,7 +42,9 @@ function parse_cif(file)
             @toggleassert loopisspecified
             if startswith(l[i:j], "data")
                 inloop = false
-                @toggleassert !haskey(all_data, "atom_site_fract_x")
+                @ifwarn if haskey(all_data, "atom_site_fract_x")
+                    @error "The CIF file may contain multiple inputs: only keeping the last one."
+                end
                 i, j, x = nextword(l, x)
                 continue
             end
@@ -77,7 +79,9 @@ function parse_cif(file)
                 loopspec = String[]
                 lastword = ""
             elseif j-i > 4 && l[i:i+4] == "data_"
-                @toggleassert !haskey(all_data, "data") || !haskey(all_data, "atom_site_fract_x")
+                @ifwarn if haskey(all_data, "data") && haskey(all_data, "atom_site_fract_x")
+                    @error "The CIF file may contain multiple inputs: only keeping the last one."
+                end
                 all_data["data"] = l[i+5:j]
             else
                 complete_lastword = get(all_data, lastword, "")
@@ -233,7 +237,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
         bond_b = popvecstring!(parsed, "geom_bond_atom_site_label_2")
         dists = (haskey(parsed, "geom_bond_distance") ? 
                     parsestrip.(Float32, popvecstring!(parsed, "geom_bond_distance")) :
-                    fill(zero(Float32), length(bond_a)))
+                    fill(-Inf32, length(bond_a)))
         bonds = [Tuple{Int,Float32}[] for _ in 1:natoms]
         for i in 1:length(bond_a)
             x = get(correspondence, bond_a[i], 0)
@@ -244,8 +248,8 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
                 @ifwarn @error "Atom $missingatom, used in a bond, has either zero or multiple placements in the CIF file. This invalidates all bonds from the file, which will thus be discarded."
                 break
             end
-            d = 1.001*dists[i] # to avoid rounding errors
-            if d ≤ 0f0 || isinf(d) || isnan(d)
+            d = 1.001f0*dists[i] # to avoid rounding errors
+            if isnan(d) || (d != -Inf32 && (d ≤ 0f0 || isinf(d)))
                 @ifwarn @error "Invalid bond distance of $d between atoms $(bond_a[i]) and $(bond_b[i])"
                 continue
             end
@@ -549,7 +553,14 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, passO, passCN, mat,
     end
     if !isempty(invalidatoms)
         s = String.(collect(invalidatoms))
-        @ifwarn @warn (dofix ? "After attempted fix, f" : "F")*"ound $(join(s, ", ", " and ")) with invalid number of bonds."
+        @ifwarn begin
+            endmsg = join(s, ", ", " and ")*" with invalid number of bonds."
+            if dofix
+                @warn "After attempted fix, found remaining "*endmsg
+            else
+                @info "Initial pass found "*endmsg
+            end
+        end
     end
     return invalidatoms
 end
@@ -1004,8 +1015,8 @@ function parse_as_chemfile(frame, options, name)
     else
         bonds = [Tuple{Int,Float32}[] for _ in 1:n]
         for (a, b) in eachcol(Chemfiles.bonds(topology))
-            push!(bonds[a+1], (b+1, -1f0))
-            push!(bonds[b+1], (a+1, -1f0))
+            push!(bonds[a+1], (b+1, -Inf32))
+            push!(bonds[b+1], (a+1, -Inf32))
         end
         @toggleassert all(issorted, bonds)
         if !(options.dryrun isa Nothing) && options.bonding == Bonding.Auto

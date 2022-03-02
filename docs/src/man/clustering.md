@@ -1,8 +1,4 @@
-```@meta
-EditURL = "<unknown>/docs/lit/man/clustering.jl"
-```
+TBD
 
----
-
-*This page was generated using [Literate.jl](https://github.com/fredrikekre/Literate.jl).*
-
+In the meantime, check the [`Clustering`](@ref) information on the different available
+options.

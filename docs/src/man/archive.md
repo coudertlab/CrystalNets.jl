@@ -1,8 +1,4 @@
-```@meta
-EditURL = "<unknown>/docs/lit/man/archive.jl"
-```
+TDB
 
----
-
-*This page was generated using [Literate.jl](https://github.com/fredrikekre/Literate.jl).*
-
+In the meantime, if you want to use your custom archive, check the functions defined in
+the [Archive](@ref) section.

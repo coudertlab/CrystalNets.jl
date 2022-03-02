@@ -1,8 +1,4 @@
-```@meta
-EditURL = "<unknown>/docs/lit/man/database.jl"
-```
+TBD
 
----
-
-*This page was generated using [Literate.jl](https://github.com/fredrikekre/Literate.jl).*
-
+In the meantime, check [`determine_topology_dataset`](@ref), [`guess_topology_dataset`](@ref),
+and [`TopologyResult`](@ref).

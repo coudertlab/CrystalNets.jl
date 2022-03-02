@@ -43,7 +43,7 @@ bonded together.
 """
 function guess_bonds(pos, types, mat, options)
     # Algorithm from chemfiles, itself from VMD
-    @ifwarn begin
+    @ifwarn if options.bonding != Bonding.Guess
         @warn "Guessing bonds with custom algorithm (from Chemfiles and VMD). This may take a while for big structures and may be inexact."
         @info "To avoid guessing bonds, use a file format that contains the bonds."
     end
