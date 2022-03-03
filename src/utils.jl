@@ -66,7 +66,7 @@ function tmpexportname(path, pre, name, ext)
         return tempname(path; cleanup=false)*ext
     end
     i = 0
-    pre = pre*name*'_'
+    pre = pre*(name::String)*'_'
     x = pre*string(i)*ext
     paths = Set{String}(readdir(path; sort=false, join=false))
     while x ∈ paths
@@ -279,11 +279,11 @@ const element_categories = Symbol[ # populated using PeriodicTable.jl
     :metal, :metal, :metal, :metal, :halogen, :noble, :metal]
 
 
-function string_atomtype(t)
+function string_atomtype(t::Symbol)
     replace(string(t), "Pc" => 'P', "Ss" => 'S')
 end
 
-function representative_atom(t, default=0)
+function representative_atom(t::Symbol, default::Int=0)
     at = get(atomic_numbers, t, 0)
     at == 0 || return t, at
     styp = string(t)
@@ -321,7 +321,7 @@ function issingular(x::SMatrix{N,N,T}) where {N,T<:Rational}
     return iszero(det(SMatrix{N,N,widen(T)}(x)))
 end
 
-function issingular(x::SMatrix{3,3,T})::Bool where T<:Rational
+function issingular(x::SMatrix{3,3,T,9})::Bool where T<:Rational
 @inbounds begin
     (i, j, k) = iszero(x[1,1]) ? (iszero(x[1,2]) ? (3,1,2)  : (2,1,3)) : (1,2,3)
     iszero(x[1,i]) && return true
@@ -343,7 +343,7 @@ function issingular(x::SMatrix{3,3,T})::Bool where T<:Rational
 end
 end
 
-function issingular(x::SMatrix{2,2,T})::Bool where T<:Rational
+function issingular(x::SMatrix{2,2,T,4})::Bool where T<:Rational
 @inbounds begin
     if iszero(x[1,1])
         (iszero(x[1,2]) || iszero(x[2,1])) && return true
@@ -351,8 +351,8 @@ function issingular(x::SMatrix{2,2,T})::Bool where T<:Rational
     end
     U = widen(T)
     x12 = x[1,2] // U(x[1,1])
-    return x[2,2] == try
-        x[2,1] * x12
+    try
+        return x[2,2] == x[2,1] * x12
     catch e
         e isa OverflowError || rethrow()
     end
@@ -365,7 +365,7 @@ function issingular(x::SMatrix{1,1,T})::Bool where T<:Rational
     iszero(@inbounds x[1,1])
 end
 
-function isrank3(x::AbstractMatrix{T}) where T<:Rational
+function isrank3(x::Matrix{T}) where T<:Rational
     _n, n = size(x)
     @toggleassert _n == 3
     n < 3 && return false
@@ -391,7 +391,7 @@ function isrank3(x::AbstractMatrix{T}) where T<:Rational
     return false
 end
 
-function isrank2(x::AbstractMatrix{T}) where T<:Rational
+function isrank2(x::Matrix{T}) where T<:Rational
     _n, n = size(x)
     @toggleassert _n == 2
     n < 2 && return false
@@ -434,7 +434,7 @@ end
 
 
 """
-    nextword(l, k)
+    nextword(l::String, k::Int)
 
 Return the triplet of indices `(i, j, x)` such that `l[i:j]` is the next word in the
 string `l` after position `k`.
@@ -442,7 +442,7 @@ Use `k = x` to get the following word, and so forth.
 
 `(0, 0, 0)` is returned if there is no next word.
 """
-function nextword(l, i)
+function nextword(l::String, i::Int)
     n = lastindex(l)
     i == n && return (0, 0, 0)
 

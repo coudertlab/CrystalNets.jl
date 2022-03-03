@@ -53,8 +53,189 @@ function __lookup_kwbody__(mnokw::Method)
     return f
 end
 
+function precompile_kwarg(@nospecialize(tt), @nospecialize(kwargtypes))
+    let fbody = try __lookup_kwbody__(which(tt)) catch missing end
+        if !ismissing(fbody)
+            precompile(Tuple{Core.Typeof(fbody), kwargtypes..., tt...})
+        end
+    end
+end
+
 function _precompile_()
     ccall(:jl_generating_output, Cint, ()) == 1 || return nothing
+
+    graph = PeriodicGraph3D
+    types = Vector{Symbol}
+    opts = CrystalNets.Options
+    cryst = CrystalNets.Crystal{Nothing}
+    crystclust = CrystalNets.Crystal{CrystalNets.Clusters}
+    clust = CrystalNets.Clusters
+    _pos = SVector{3,Float64}
+    p_pos = Vector{SVector{3,Float64}}
+    pos{D,T} = SVector{D,Rational{T}}
+    ppos{D,T} = Vector{SVector{D,Rational{T}}}
+    ofs{D} = SVector{D,Int}
+    pofs{D} = Vector{SVector{D,Int}}
+    cnet{D,T} = CrystalNet{D,Rational{T}}
+    mat = SMatrix{3,3,BigFloat,9}
+    fmat = SMatrix{3,3,Float64,9}
+    sbus = Vector{Vector{PeriodicVertex3D}}
+    kinds = CrystalNets.ClusterKinds
+    structure = StructureType._StructureType
+    clustering = Clustering._Clustering
+    clusterings = Vector{Clustering._Clustering}
+    neighs = Vector{PeriodicVertex3D}
+    edgs = Vector{PeriodicEdge3D}
+    cell = CrystalNets.Cell
+
+    # kwargs = Base.Pairs{Symbol,V,Tuple{Vararg{Symbol,N}}, NamedTuple{names,T}} where {V,N,names,T<:Tuple{Vararg{Any,N}}}
+
+    # utils.jl
+    precompile(Tuple{typeof(CrystalNets.recursive_readdir!), Vector{String}, String, String})
+    precompile(Tuple{typeof(CrystalNets.recursive_readdir), String})
+    precompile(Tuple{typeof(CrystalNets.tmpexportname), String, String, String, String})
+    precompile(Tuple{typeof(CrystalNets.tmpexportname), String, String, Nothing, String})
+    for S in (Int, Nothing)
+        for D in 2:3
+            precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph{D}, String, String, String}, (S,))
+            for T in (Int8, Int16, Int32, Int64, Int128, BigInt)
+                precompile_kwarg(Tuple{typeof(export_default), cnet{D, T}, String, String, String}, (S,))
+            end
+        end
+        precompile_kwarg(Tuple{typeof(export_default), cryst, String, String, String}, (S,))
+        precompile_kwarg(Tuple{typeof(export_default), crystclust, String, String, String}, (S,))
+    end
+    # precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph2D, String, String, String}, (kwargs,))
+    # precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph3D, String, String, String}, (kwargs,))
+    precompile(Tuple{typeof(CrystalNets.string_atomtype), Symbol})
+    precompile(Tuple{typeof(CrystalNets.representative_atom), Symbol, Int})
+    for T in (Int8, Int16, Int32, Int64, Int128, BigInt)
+        precompile(Tuple{typeof(CrystalNets.soft_widen), T})
+        precompile(Tuple{typeof(CrystalNets.soft_widen), Rational{T}})
+        for D in 2:3
+            precompile(Tuple{typeof(CrystalNets.issingular), SMatrix{N, N, Rational{T}, N*N}})
+            precompile(Tuple{typeof(CrystalNets.angle), pos{D,T}, pos{D, T}})
+            precompile(Tuple{typeof(CrystalNets.dihedral), pos{D,T},pos{D,T},pos{D,T}})
+        end
+        precompile(Tuple{typeof(CrystalNets.isrank3), Matrix{Rational{T}}})
+        precompile(Tuple{typeof(CrystalNets.isrank2), Matrix{Rational{T}}})
+        precompile(Tuple{typeof(CrystalNets.back_to_unit), Rational{T}})
+    end
+    precompile(Tuple{typeof(CrystalNets.nextword), String, Int})
+
+    # options.jl
+    precompile(Tuple{typeof(CrystalNets.clustering_from_num), Int})
+    precompile(Tuple{typeof(CrystalNets.clustering_from_num), Int8})
+    precompile(Tuple{typeof(CrystalNets.clustering_from_symb), Symbol})
+    precompile(Tuple{typeof(parse), Type{clustering}, String})
+    precompile(Tuple{typeof(parse), Type{clustering}, SubString{String}})
+    precompile(Tuple{typeof(getindex), kinds, Int})
+    precompile(Tuple{typeof(getindex), kinds, Symbol})
+    precompile(Tuple{typeof(CrystalNets.getmetal), kinds})
+    precompile(Tuple{typeof(length), kinds})
+    precompile(Tuple{typeof(CrystalNets.ifbooltempdirorempty), String})
+    precompile(Tuple{typeof(CrystalNets.ifbooltempdirorempty), Bool})
+    precompile(Tuple{Type{CrystalNets.Options}})
+    precompile(Tuple{Type{CrystalNets.Options}, CrystalNets.Options})
+
+    # types.jl 1/2
+    # TODO: trimmed_crystal, prepare_periodic_distance_computations, periodic_distance!,
+    # parse(::EquivalentPosition), sortprune_bondlist!, get_bondlist, edges_from_bonds
+    # Crystal{Nothing}(cell, types, pos, graph, options)
+
+    # symmetries.jl
+    # TODO: find_hall_number
+
+
+    # clustering.jl
+    precompile(Tuple{typeof(CrystalNets.regroup_sbus), graph, Vector{Int}, Vector{Int}})
+    precompile(Tuple{typeof(CrystalNets._trim_monovalent!), graph})
+    precompile(Tuple{typeof(CrystalNets.trim_monovalent), cryst})
+    precompile(Tuple{typeof(CrystalNets.trim_monovalent), crystclust})
+    precompile(Tuple{typeof(CrystalNets.delete_target_from_list!), sbus, Int})
+    precompile(Tuple{typeof(CrystalNets.is_paddlewheel_candidate!), Vector{Union{Missing, Tuple{Symbol, PeriodicVertex3D}}}, sbus, Int, types, Set{Int}})
+    # precompile(Tuple{typeof(CrystalNets.bond_carboxylic_acid!), graph, types})
+    precompile(Tuple{typeof(CrystalNets.regroup_paddlewheel!), graph, clust, types, Set{Int}})
+    precompile(Tuple{typeof(CrystalNets.split_sbu!), clust, graph, Int, Vector{Int}})
+    precompile(Tuple{typeof(CrystalNets.reclassify!), clust, Vector{Int}, Int, graph, types, Dict{Symbol,Int}, Int})
+    precompile(Tuple{typeof(CrystalNets.add_to_newclass!), Vector{Int}, graph, clust, Int, Int, types, Set{Symbol}})
+    precompile(Tuple{typeof(CrystalNets.add_to_merge_or_newclass!), Vector{Int}, Vector{Tuple{ofs{3},Int}}, graph, clust, Set{Int}, Int, Int})
+    precompile(Tuple{typeof(CrystalNets.small_cycles_around), graph, p_pos, mat, Int, PeriodicVertex3D, Vector{Int}, Set{Int}})
+    precompile(Tuple{typeof(CrystalNets.in_small_cycles_around), graph, p_pos, mat, Int, Vector{Int}, Set{Int}})
+    precompile(Tuple{typeof(CrystalNets.detect_organiccycles), Vector{Int}, graph, p_pos, mat, Int, Set{Int}})
+    precompile(Tuple{typeof(CrystalNets.group_cycle), Vector{Set{Int}}, types, graph})
+    precompile(Tuple{typeof(CrystalNets.identify_metallic_type), Symbol, kinds, Int})
+    precompile(Tuple{typeof(CrystalNets.remove_metal_cluster_bonds!), graph, types, opts})
+    precompile(Tuple{typeof(CrystalNets.find_sbus), cryst, kinds})
+    precompile(Tuple{typeof(CrystalNets.find_sbus), crystclust, kinds})
+    precompile(Tuple{typeof(CrystalNets._split_this_sbu!), Vector{Int}, graph, Int, types, Symbol, sbus})
+    precompile(Tuple{typeof(CrystalNets.split_special_sbu!), graph, sbus, graph, types, Bool})
+    precompile(Tuple{typeof(CrystalNets.split_O_vertices), cryst})
+    precompile(Tuple{typeof(CrystalNets.split_O_vertices), crystclust})
+    precompile(Tuple{typeof(CrystalNets.identify_clustering), cryst, structure, clustering})
+    precompile(Tuple{typeof(CrystalNets.identify_clustering), crystclust, structure, clustering})
+    precompile(Tuple{typeof(CrystalNets.order_atomtype), Symbol})
+    precompile(Tuple{typeof(CrystalNets._collapse_clusters), cryst, clust})
+    precompile(Tuple{typeof(CrystalNets._find_clusters), cryst, Bool, Bool})
+    precompile(Tuple{typeof(CrystalNets._find_clusters), crystclust, Bool, Bool})
+    precompile(Tuple{typeof(CrystalNets.find_clusters), cryst})
+    precompile(Tuple{typeof(CrystalNets.find_clusters), crystclust})
+    precompile(Tuple{typeof(CrystalNets.collapse_clusters), cryst})
+    precompile(Tuple{typeof(CrystalNets.collapse_clusters), crystclust})
+    precompile(Tuple{typeof(CrystalNets.update_new_edgs!), Dict{PeriodicEdge3D,Bool}, neighs, BitMatrix, BitVector, Vector{Int}})
+    precompile(Tuple{typeof(sort), SVector{4,Int}})
+    precompile(Tuple{typeof(CrystalNets.edges_of_convex_hull), neighs, Int, fmat, p_pos, BitVector, Set{SVector{4,Int}}, BitMatrix})
+    precompile(Tuple{typeof(CrystalNets.edges_of_convex_hull), neighs, Int, fmat, p_pos, BitVector, Set{SVector{4,Int}}})
+    precompile(Tuple{typeof(CrystalNets.regroup_toremove), cryst, Vector{Int}, Vector{Vector{Int}}, String})
+    precompile(Tuple{typeof(CrystalNets.pem_to_pe), cryst})
+    precompile(Tuple{typeof(CrystalNets.regroup_vmap), cryst, Vector{Int}, Vector{Int}, String})
+    precompile(Tuple{typeof(CrystalNets.allnodes_to_singlenodes), cryst})
+
+    # guessbonds.jl
+    precompile(Tuple{typeof(CrystalNets.guess_bonds), p_pos, types, fmat, opts})
+
+    # types.jl, 2/2
+    # TODO: UnderlyingNets(::Crystal)
+
+    # input.jl
+    precompile(Tuple{typeof(CrystalNets.parse_cif),String})
+    precompile(Tuple{typeof(CrystalNets.parsestrip), Float64, String})
+    precompile(Tuple{typeof(CrystalNets.parsestrip), Float32, String})
+    precompile(Tuple{typeof(CrystalNets.parsestrip), BigFloat, String})
+    precompile(Tuple{typeof(CrystalNets.parsestrip), String})
+    precompile(Tuple{typeof(CrystalNets.popstring!), Dict{String, Union{Vector{String},String}}, String})
+    precompile(Tuple{typeof(CrystalNets.popvecstring!), Dict{String, Union{Vector{String},String}}, String})
+    precompile(Tuple{typeof(CrystalNets.CIF), Dict{String, Union{Vector{String},String}}})
+    precompile(Tuple{typeof(CrystalNets.CIF), String})
+    precompile(Tuple{typeof(CrystalNets.parse_arc), String})
+    precompile(Tuple{typeof(CrystalNets.parse_arcs), String, Vector{String}})
+    precompile(Tuple{typeof(CrystalNets.parse_arcs), String})
+    precompile(Tuple{typeof(CrystalNets.parse_atom_name), String})
+    precompile(Tuple{typeof(CrystalNets.parse_atom), String})
+    precompile(Tuple{typeof(CrystalNets.chem_atoms), Chemfiles.Residue})
+    precompile(Tuple{typeof(CrystalNets.attribute_residues), Vector{Chemfiles.Residue}, Int, Bool})
+    precompile(Tuple{typeof(CrystalNets.check_collision), p_pos, mat})
+    precompile(Tuple{typeof(CrystalNets.fix_atom_on_a_bond!), graph, p_pos, fmat})
+    precompile(Tuple{typeof(CrystalNets.least_plausible_neighbours), Vector{Float64}, Int})
+    precompile(Tuple{typeof(CrystalNets.fix_valence!), PeriodicGraph3D, p_pos, types, Vector{Int}, Vector{Int}, fmat, Val{true}, opts})
+    precompile(Tuple{typeof(CrystalNets.fix_valence!), PeriodicGraph3D, p_pos, types, Vector{Int}, Vector{Int}, fmat, Val{false}, opts})
+    precompile(Tuple{typeof(CrystalNets.sanitize_removeatoms!), graph, p_pos, types, fmat, opts})
+    precompile(Tuple{typeof(CrystalNets.remove_triangles!), graph, p_pos, types, fmat, edgs})
+    precompile(Tuple{typeof(CrystalNets.remove_triangles!), graph, p_pos, types, fmat})
+    precompile(Tuple{typeof(CrystalNets._detect_bent_bond), graph, p_pos, Int, Int, fmat})
+    precompile(Tuple{typeof(CrystalNets.detect_bent_bond), graph, p_pos, Int, Int, fmat})
+    precompile(Tuple{typeof(CrystalNets.sanity_checks!), graph, p_pos, types, fmat, opts})
+    precompile(Tuple{typeof(CrystalNets._remove_homoatomic_bonds!), graph, types, Set{Symbol}, Bool})
+    precompile(Tuple{typeof(CrystalNets._remove_homometallic_bonds!), graph, types, Vector{Int}})
+    precompile(Tuple{typeof(CrystalNets.remove_homoatomic_bonds!), graph, types, Set{Symbol}, Bool})
+    precompile(Tuple{typeof(CrystalNets.finalize_checks), cell, p_pos, types, Vector{Int}, Vector{Vector{Tuple{Int,Float32}}}, Bool, opts, String})
+    precompile(Tuple{typeof(CrystalNets.parse_as_cif), opts, String})
+    precompile(Tuple{typeof(CrystalNets.parse_as_chemfile), Chemfiles.Frame, opts, String})
+    precompile(Tuple{typeof(CrystalNets.parse_chemfile), String, opts})
+    # precompile_kwarg(Tuple{typeof(parse_chemfile), String}, (kwargs,))
+
+    # precompile(Tuple{typeof(CrystalNets.), })
+
 
     # Tokenize
     Base.precompile(Tuple{typeof(Base._collect),UnitRange{Int},Tokenize.Lexers.Lexer{IOBuffer, Tokenize.Tokens.Token},Base.HasEltype,Base.SizeUnknown})

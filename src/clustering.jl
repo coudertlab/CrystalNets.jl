@@ -235,7 +235,7 @@ function bond_carboxylic_acid!(graph, types)
 end
 
 """
-    function regroup_paddlewheel!(graph, types, clusters)
+    regroup_paddlewheel!(graph, clusters::Clusters, types, periodicsbus)
 
 Identify paddle-wheel patterns made of two opposite SBUs and regroup them into
 one.
@@ -708,7 +708,7 @@ function small_cycles_around(graph, pos, mat, i, u_init, classes, acceptedclasse
             #β = dihedral(last_prev_vec, last_vec, new_vec)
             #β < 20 || β > 160 || continue
             ofs = last_offset .+ x.ofs
-            γ = angle(init_vec, mat * (pos[x.v] .+ ofs .- pos_init))
+            γ = Float64(angle(init_vec, mat * (pos[x.v] .+ ofs .- pos_init)))
             if last_parent == i
                 last_diffangle = (180 - γ)/2
                 last_angle = γ + last_diffangle
@@ -827,6 +827,15 @@ function group_cycle(organiccycle, types, graph)
         push!(groups, group)
     end
     return groups
+end
+
+function identify_metallic_type(t::Symbol, kinds::ClusterKinds, metalkind::Int=getmetal(kinds))
+    t, at = representative_atom(t)
+    ismetal[at] && return true
+    k = kinds[t]
+    k == metalkind && return true
+    k ∈ kinds.tomerge && return missing
+    return false
 end
 
 
@@ -1250,111 +1259,38 @@ struct InvalidSBU <: ClusteringError
 end
 
 
-function identify_clustering(c::Crystal{T}, structure::_StructureType, clustering::_Clustering)::Tuple{Union{Clusters,Bool},_StructureType,_Clustering} where T
+function identify_clustering(c::Crystal{T}, structure::_StructureType, clustering::_Clustering) where T
     if clustering == Clustering.Auto
         if structure == StructureType.Auto
             if T === Clusters
-                return c.clusters, structure, clustering
+                return structure, clustering, c.clusters
             else
                 return identify_clustering(c, structure, Clustering.EachVertex)
             end
         elseif structure == StructureType.Zeolite
             return identify_clustering(c, structure, Clustering.EachVertex)
         elseif structure == StructureType.Guess
-            separate_metals = c.options.separate_metals isa Bool ? c.options.separate_metals : false
-            return separate_metals, structure, clustering
-        elseif structure == StructureType.MOF || structure == StructureType.Cluster
-            return identify_clustering(c, structure, Clustering.AllNodes)
+            separate_metals = c.options.separate_metals isa Bool ? c.options.separate_metals::Bool : false
+            return structure, clustering, separate_metals
         end
+        @toggleassert structure == StructureType.MOF || structure == StructureType.Cluster
+        return identify_clustering(c, structure, Clustering.AllNodes)
     elseif clustering == Clustering.EachVertex
-        return Clusters(length(c.types)), structure, clustering
+        return structure, clustering, Clusters(length(c.types))
     elseif clustering == Clustering.Input
-        if T === Nothing
+        if T === Clusters
+            return structure, clustering, c.clusters
+        else
             throw(ArgumentError("Cannot use input residues as clusters: the input does not have residues."))
-        else
-            return c.clusters, structure, clustering
-        end
-    else
-        if clustering == Clustering.SingleNodes
-            clustering = Clustering.AllNodes
-        elseif clustering == Clustering.PE || clustering == Clustering.Standard
-            clustering = Clustering.PEM
-        end
-        separate_metals = c.options.separate_metals isa Bool ? c.options.separate_metals : clustering == Clustering.PEM
-        return separate_metals, structure, clustering
-    end
-end
-
-function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Tuple{Bool,Clusters} where T
-    if c.options.separate_metals === nothing
-        c = Crystal{T}(c; separate_metals)
-    end
-    if guess
-        clusters::Clusters = try
-            find_sbus(c, c.options.cluster_kinds)
-        catch e
-            if !(e isa ClusteringError)
-                rethrow()
-            end
-            return true, T === Clusters ? c.clusters : Clusters(length(c.types))
-        end
-        newc = Crystal{Nothing}(c; clusterings=[Clustering.Auto], export_attributions=false, export_input=false)
-        if nv(_collapse_clusters(newc, clusters).graph) <= 1
-            return true, T === Clusters ? c.clusters : Clusters(length(c.types))
-        end
-        return false, clusters
-    end
-    return false, find_sbus(c, c.options.cluster_kinds)
-end
-
-function find_clusters(_c::Crystal{T}) where T
-    c = trim_monovalent(_c)
-    _structure = c.options.structure
-    clusterings = c.options.clusterings
-    ret = Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}}(undef, length(clusterings))
-    encountered = Dict{Tuple{_StructureType,_Clustering,Bool},Int}()
-    for (i, _clustering) in enumerate(clusterings)
-        maybeclusters, structure, clustering = identify_clustering(c, _structure, _clustering)
-        maybebool = maybeclusters isa Bool ? maybeclusters : true
-        clusters::Union{Int,Clusters} = get(encountered, (structure, clustering, maybebool)) do
-            if maybeclusters isa Clusters
-                maybeclusters
-            else
-                separate_metals::Bool = maybeclusters
-                guess = structure == StructureType.Guess && clustering == Clustering.Auto
-                _guess, _clusters = _find_clusters(c, guess, separate_metals)
-                if guess && !_guess
-                    structure = StructureType.Cluster
-                end
-                _clusters
-            end
-        end
-        if clusters isa Clusters
-            encountered[(structure, clustering, maybebool)] = i
-        end
-        ret[i] = (Crystal{Nothing}(c; structure, clusterings=[_clustering]), clusters)
-    end
-    return ret
-end
-
-
-"""
-    collapse_clusters(crystal::Crystal)
-
-Return the list of crystals corresponding to the input where each cluster has been
-transformed into a new vertex, for each targeted clustering.
-"""
-function collapse_clusters(crystal::Crystal)
-    crystalclusters::Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}} = find_clusters(crystal)
-    ret = Vector{Crystal{Nothing}}(undef, length(crystalclusters))
-    for (i, (cryst, clust)) in enumerate(crystalclusters)
-        ret[i] = if clust isa Int
-            Crystal{Nothing}(ret[clust]; clusterings=cryst.options.clusterings)
-        else
-            _collapse_clusters(cryst, clust)
         end
     end
-    return ret
+    if clustering == Clustering.SingleNodes
+        clustering = Clustering.AllNodes
+    elseif clustering == Clustering.PE || clustering == Clustering.Standard
+        clustering = Clustering.PEM
+    end
+    separate_metals2 = c.options.separate_metals isa Bool ? c.options.separate_metals::Bool : clustering == Clustering.PEM
+    return structure, clustering, separate_metals2
 end
 
 
@@ -1370,7 +1306,7 @@ function order_atomtype(sym)
     return anum
 end
 
-function _collapse_clusters(crystal::Crystal, clusters::Clusters)
+function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters)
     structure = crystal.options.structure
     clustering = only(crystal.options.clusterings)
     if clustering == Clustering.EachVertex || structure == StructureType.Zeolite
@@ -1448,6 +1384,78 @@ function _collapse_clusters(crystal::Crystal, clusters::Clusters)
         types[i] = length(sbu) == 1 ? crystal.types[first(sbu).v] : Symbol(join(last.(newname)))
     end
     ret = Crystal{Nothing}(crystal.cell, types, pos, graph, Options(crystal.options; _pos=pos))
+    return ret
+end
+
+function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Tuple{Bool,Clusters} where T
+    if c.options.separate_metals === nothing
+        c = Crystal{T}(c; separate_metals)
+    end
+    if guess
+        clusters::Clusters = try
+            find_sbus(c, c.options.cluster_kinds)
+        catch e
+            if !(e isa ClusteringError)
+                rethrow()
+            end
+            return true, T === Clusters ? c.clusters : Clusters(length(c.types))
+        end
+        newc = Crystal{Nothing}(c; clusterings=[Clustering.Auto], export_attributions=false, export_input=false)
+        if nv(_collapse_clusters(newc, clusters).graph) <= 1
+            return true, T === Clusters ? c.clusters : Clusters(length(c.types))
+        end
+        return false, clusters
+    end
+    return false, find_sbus(c, c.options.cluster_kinds)
+end
+
+function find_clusters(_c::Crystal{T}) where T
+    c = trim_monovalent(_c)
+    _structure = c.options.structure
+    clusterings = c.options.clusterings
+    ret = Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}}(undef, length(clusterings))
+    encountered = Dict{Tuple{_StructureType,_Clustering,Bool},Int}()
+    for (i, _clustering) in enumerate(clusterings)
+        identified = identify_clustering(c, _structure, _clustering)
+        structure = identified[1]
+        maybeclusters = identified[3]
+        idx = maybeclusters isa Bool ? identified::Tuple{_StructureType,_Clustering,Bool} :
+                                       (structure, identified[2], true)
+        clusters::Union{Int,Clusters} = get!(encountered, idx, i)
+        if clusters == i
+            if maybeclusters isa Clusters
+                clusters = maybeclusters
+            else
+                separate_metals = maybeclusters
+                guess = structure == StructureType.Guess && identified[2] == Clustering.Auto
+                _guess, clusters = _find_clusters(c, guess, separate_metals)
+                if guess && !_guess
+                    structure = StructureType.Cluster
+                end
+            end
+        end
+        ret[i] = (Crystal{Nothing}(c; structure, clusterings=[_clustering]), clusters)
+    end
+    return ret
+end
+
+
+"""
+    collapse_clusters(crystal::Crystal)
+
+Return the list of crystals corresponding to the input where each cluster has been
+transformed into a new vertex, for each targeted clustering.
+"""
+function collapse_clusters(crystal::Crystal)
+    crystalclusters::Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}} = find_clusters(crystal)
+    ret = Vector{Crystal{Nothing}}(undef, length(crystalclusters))
+    for (i, (cryst, clust)) in enumerate(crystalclusters)
+        ret[i] = if clust isa Int
+            Crystal{Nothing}(ret[clust]; clusterings=cryst.options.clusterings)
+        else
+            _collapse_clusters(cryst, clust)
+        end
+    end
     return ret
 end
 
@@ -1776,15 +1784,6 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
 end
 
 
-function identify_metallic_type(t, kinds, metalkind=getmetal(kinds))
-    t, at = representative_atom(t)
-    ismetal[at] && return true
-    k = kinds[t]
-    k == metalkind && return true
-    k ∈ kinds.tomerge && return missing
-    return false
-end
-
 """
     pem_to_pe(cryst::Crystal{Nothing})
 
@@ -1883,7 +1882,7 @@ function pem_to_pe(cryst::Crystal{Nothing})
         end
         surroundedflag && continue
         append!(tomerge, metal_surrounded_list)
-        push!(toremove_list, getfield.(Q, :v))
+        push!(toremove_list, [y.v for y in Q])
     end
 
     return regroup_toremove(cryst, tomerge, toremove_list, "PE")
@@ -1894,9 +1893,9 @@ function regroup_vmap(cryst, vmap, isolate, msg)
     clusters, periodicsbus = regroup_sbus(cryst.graph, vmap, isolate)
     if !isempty(periodicsbus)
         # Abandon. This can happen for example if a single-C SBU has been split previously
-        c = trimmed_crystal(cryst)
-        export_default(c, "clusters_$msg", c.options.name, c.options.export_clusters)
-        return c
+        trimmed_c = trimmed_crystal(cryst)
+        export_default(trimmed_c, "clusters_$msg", trimmed_c.options.name, trimmed_c.options.export_clusters)
+        return trimmed_c
     end
     edgs = PeriodicEdge3D[]
     for s in vertices(cryst.graph)

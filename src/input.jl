@@ -111,7 +111,7 @@ function parsestrip(T, s)
 end
 parsestrip(s) = parsestrip(BigFloat, s)
 
-function popstring!(parsed, name)::String
+function popstring!(parsed, name)
     if !haskey(parsed, name)
         throw(ArgumentError("Invalid CIF file (cannot find \"_$name\" field)."))
     end
@@ -122,7 +122,7 @@ function popstring!(parsed, name)::String
     return only(x::Vector{String})
 end
 
-function popvecstring!(parsed, name)::Vector{String}
+function popvecstring!(parsed, name)
     if !haskey(parsed, name)
         throw(ArgumentError("Invalid CIF file (cannot find \"_$name\" field in loop)."))
     end
@@ -130,7 +130,7 @@ function popvecstring!(parsed, name)::Vector{String}
     if x isa String
         return String[x]
     end
-    return x
+    return x::Vector{String}
 end
 
 """
@@ -140,7 +140,7 @@ Make a CIF object out of the parsed file.
 """
 CIF(file::AbstractString) = CIF(parse_cif(file))
 function CIF(parsed::Dict{String, Union{Vector{String},String}})
-    natoms = length(parsed["atom_site_label"])
+    natoms = length(parsed["atom_site_label"]::Vector{String})
     equivalentpositions = haskey(parsed, "symmetry_equiv_pos_as_xyz") ?
         popvecstring!(parsed, "symmetry_equiv_pos_as_xyz") : 
         haskey(parsed, "space_group_symop_operation_xyz") ?
@@ -373,11 +373,20 @@ function parse_atom(name)
     return atom
 end
 
-
+@static if !isdefined(Chemfiles, :atoms) # up to 0.9.3 included
+    function chem_atoms(residue::Chemfiles.Residue)
+        count = size(residue)
+        result = Array{UInt64}(undef, count)
+        Chemfiles.__check(Chemfiles.lib.chfl_residue_atoms(Chemfiles.__const_ptr(residue), pointer(result), count))
+        return result
+    end
+else
+    const chem_atoms = Chemfiles.atoms
+end
 
 function attribute_residues(residues, n, assert_use_existing_residues)
     m = length(residues)
-    atoms_in_residues = m == 0 ? 0 : sum(length(atoms(r)) for r in residues)
+    atoms_in_residues = m == 0 ? 0 : sum(length(chem_atoms(r)) for r in residues)
     @toggleassert atoms_in_residues <= n
 
     if atoms_in_residues < n
@@ -394,21 +403,13 @@ function attribute_residues(residues, n, assert_use_existing_residues)
     end
     attributions = zeros(Int, n)
     for i_residue in 1:m
-        for atom in atoms(residues[i_residue])
+        for atom in chem_atoms(residues[i_residue])
             attributions[atom+1] = i_residue
         end
     end
     return attributions
 end
 
-@static if !isdefined(Chemfiles, :atoms) # up to 0.9.3 included
-    function atoms(residue::Chemfiles.Residue)
-        count = size(residue)
-        result = Array{UInt64}(undef, count)
-        Chemfiles.__check(Chemfiles.lib.chfl_residue_atoms(Chemfiles.__const_ptr(residue), pointer(result), count))
-        return result
-    end
-end
 
 """
     check_collision(pos, mat)
@@ -478,7 +479,7 @@ Find the positions of the n least probable neighbours of an atom, given the list
 
 This function is highly empirical and should not be considered utterly reliable.
 """
-function least_plausible_neighbours(Δs, n)
+function least_plausible_neighbours(Δs::Vector{Float64}, n::Int)
     m = length(Δs)
     m ≤ n && return collect(1:m) # may happen because H bonds cannot be removed
     p::Vector{Int} = sortperm(Δs)
@@ -491,7 +492,7 @@ macro reduce_valence_to1()
         ___m = length(___neighs)
         if ___m > 1
             ___posi = pos[i]
-            ___Δs = [norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___neighs]
+            ___Δs = Float64[norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___neighs]
             ___toremove = least_plausible_neighbours(___Δs, ___m - 1)
             ___neighs = copy(___neighs) # otherwise the list is modified by rem_edge!
             for v in ___toremove
@@ -514,10 +515,10 @@ macro reduce_valence(dofix, n1, n2, nm=0)
         if $dofix && ___m > ___n2
             ___posi = pos[i]
             ___noHatoms = [x for x in ___neighs if types[x.v] !== :H && types[x.v] !== :D]
-            ___Δs = [norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___noHatoms]
+            ___Δs = Float64[norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___noHatoms]
             ___toremove = least_plausible_neighbours(___Δs, ___m - ___n2)
             for v in ___toremove
-                rem_edge!(graph, PeriodicEdge{N}(i, ___noHatoms[v]))
+                rem_edge!(graph, PeriodicEdge3D(i, ___noHatoms[v]))
             end
         end
     end)
@@ -525,7 +526,7 @@ end
 
 
 """
-    fix_valence!(graph::PeriodicGraph, pos, types, mat, ::Val{dofix}) where dofix
+    fix_valence!(graph::PeriodicGraph3D, pos, types, passO, passCN, mat, ::Val{dofix}, options) where {dofix}
 
 Attempt to ensure that the coordinence of certain atoms are at least plausible
 by removing some edges from the graph.
@@ -533,8 +534,8 @@ These atoms are H, halogens, O, N and C.
 if `dofix` is set, actually modify the graph; otherwise, only emit a warning.
 In both cases, return a list of atoms with invalid coordinence.
 """
-function fix_valence!(graph::PeriodicGraph{N}, pos, types, passO, passCN, mat,
-                      ::Val{dofix}, options) where {N,dofix}
+function fix_valence!(graph::PeriodicGraph3D, pos, types, passO, passCN, mat,
+                      ::Val{dofix}, options) where {dofix}
     # Small atoms valence check
     n = length(types)
     invalidatoms = Set{Symbol}()
@@ -566,7 +567,7 @@ function fix_valence!(graph::PeriodicGraph{N}, pos, types, passO, passCN, mat,
 end
 
 """
-    sanitize_removeatoms!(graph, pos, types, mat)
+    sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
 
 Special heuristics to remove atoms that seem to arise from an improper cleaning of the file.
 Currently implemented:
@@ -575,7 +576,7 @@ Currently implemented:
 TODO:
 - O atoms with 4 coplanar bonds (warning only).
 """
-function sanitize_removeatoms!(graph::PeriodicGraph{N}, pos, types, mat, options) where N
+function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
     toremove = Set{Int}()
     flag = true
     for (i, t) in enumerate(types)
@@ -630,17 +631,17 @@ end
 
 
 """
-    remove_triangles!(graph::PeriodicGraph, pos, types, mat, options)
+    remove_triangles!(graph::PeriodicGraph3D, pos, types, mat, toinvestigate=collect(edges(graph)))
 
 In a configuration where atoms A, B and C are pairwise bonded, remove the longest of the
 three bonds if it is suspicious (too large and too close to the third atom).
 """
-function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, toinvestigate=collect(edges(graph))) where N
-    preprocessed = Dict{PeriodicEdge{N},Tuple{Float64,Bool}}()
-    removeedges = Dict{PeriodicEdge{N},Tuple{PeriodicEdge{N},PeriodicEdge{N}}}()
-    rev_removeedges = Dict{PeriodicEdge{N},Set{PeriodicEdge{N}}}()
+function remove_triangles!(graph::PeriodicGraph3D, pos, types, mat, toinvestigate=collect(edges(graph))) where N
+    preprocessed = Dict{PeriodicEdge3D,Tuple{Float64,Bool}}()
+    removeedges = Dict{PeriodicEdge3D,Tuple{PeriodicEdge3D,PeriodicEdge3D}}()
+    rev_removeedges = Dict{PeriodicEdge3D,Set{PeriodicEdge3D}}()
     while !isempty(toinvestigate)
-        new_toinvestigate = Set{PeriodicEdge{N}}()
+        new_toinvestigate = Set{PeriodicEdge3D}()
         for e in toinvestigate
             s, d = e.src, e.dst.v
             bondlength, supcutoff = get!(preprocessed, e) do
@@ -663,7 +664,7 @@ function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, toinvestiga
                     (typd === :C && ismetal[atomic_numbers[typs]])
                 end
                 neigh_s = neighbors(graph, s)
-                neigh_d = [PeriodicVertex{N}(x.v, x.ofs .+ e.dst.ofs) for x in neighbors(graph, d)]
+                neigh_d = [PeriodicVertex3D(x.v, x.ofs .+ e.dst.ofs) for x in neighbors(graph, d)]
                 for x in intersect(neigh_s, neigh_d) # triangle
                     l1 = norm(mat * (pos[x.v] .+ x.ofs .- pos[d] .- e.dst.ofs))
                     l1 < bondlength || continue
@@ -683,10 +684,10 @@ function remove_triangles!(graph::PeriodicGraph{N}, pos, types, mat, toinvestiga
                             continue
                         end
                         removeedges[e] = (e1, e2)
-                        push!(get!(rev_removeedges, e1, Set{PeriodicEdge{N}}()), e)
-                        push!(get!(rev_removeedges, e2, Set{PeriodicEdge{N}}()), e)
+                        push!(get!(rev_removeedges, e1, Set{PeriodicEdge3D}()), e)
+                        push!(get!(rev_removeedges, e2, Set{PeriodicEdge3D}()), e)
                         invalidate = get(rev_removeedges, e, nothing)
-                        if invalidate isa Set{PeriodicEdge{N}}
+                        if invalidate isa Set{PeriodicEdge3D}
                             # This means that e was part of some triangles but no longer exists
                             for ex in invalidate
                                 ea, eb = removeedges[ex]
@@ -1080,8 +1081,8 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
             if !(options.dryrun isa Nothing)
                 options.dryrun[:invalidatoms] = invalidatoms
             end
-            recompute_bonds = sanity_checks!(graph, pos, types, cell.mat, options)
-            @ifwarn if recompute_bonds
+            recompute_bonds2 = sanity_checks!(graph, pos, types, cell.mat, options)
+            @ifwarn if recompute_bonds2
                 @warn "Remaining bonds of suspicious lengths. Proceeding anyway."
             end
         end
