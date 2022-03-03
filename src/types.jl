@@ -1478,6 +1478,8 @@ function Base.setindex!(x::TopologyResult, a::Union{TopologicalGenome,_Clusterin
     x
 end
 
+TopologyResult(s::String) = setindex!(TopologyResult(), TopologicalGenome(s), Clustering.Auto)
+
 function Base.setindex!(x::TopologyResult, ::Nothing, c::_Clustering)
     i = Int(c)
     if x.attributions[i] == i

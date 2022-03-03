@@ -84,7 +84,7 @@ function parse_cif(file)
                 end
                 all_data["data"] = l[i+5:j]
             else
-                complete_lastword = get(all_data, lastword, "")
+                complete_lastword::String = get(all_data, lastword, "")
                 if complete_lastword == ""
                     k::Int = findprev(isequal('\n'), l, i)
                     n::Int = count("\n", l[1:k])
@@ -491,8 +491,7 @@ macro reduce_valence_to1()
         ___neighs = neighbors(graph, i)
         ___m = length(___neighs)
         if ___m > 1
-            ___posi = pos[i]
-            ___Δs = Float64[norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___neighs]
+            ___Δs = Float64[norm(mat * (pos[x.v] .+ x.ofs .- pos[i])) for x in ___neighs]
             ___toremove = least_plausible_neighbours(___Δs, ___m - 1)
             ___neighs = copy(___neighs) # otherwise the list is modified by rem_edge!
             for v in ___toremove
@@ -513,9 +512,8 @@ macro reduce_valence(dofix, n1, n2, nm=0)
         $comparison && continue
         ($invalidcond) && push!(invalidatoms, t)
         if $dofix && ___m > ___n2
-            ___posi = pos[i]
             ___noHatoms = [x for x in ___neighs if types[x.v] !== :H && types[x.v] !== :D]
-            ___Δs = Float64[norm(mat * (pos[x.v] .+ x.ofs - ___posi)) for x in ___noHatoms]
+            ___Δs = Float64[norm(mat * (pos[x.v] .+ x.ofs .- pos[i])) for x in ___noHatoms]
             ___toremove = least_plausible_neighbours(___Δs, ___m - ___n2)
             for v in ___toremove
                 rem_edge!(graph, PeriodicEdge3D(i, ___noHatoms[v]))
@@ -602,16 +600,14 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
                     typu = types[u.v]
                     if typu === :C
                         u.v ∈ toremove && continue
-                        bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
-                        bondlength > 1.45 && continue
+                        Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i]))) > 1.45 && continue
                         @ifwarn if isempty(toremove)
                             @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed."
                         end
                         push!(toremove, u.v)
                     elseif typu == t && u.v > i
                         u.v ∈ toremove && continue
-                        bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
-                        bondlength > 0.9 && continue
+                        Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i]))) > 0.9 && continue
                         @ifwarn if isempty(toremove)
                             @warn "$t atoms suspiciously close to one another(bond length: $bondlength). One will be removed."
                         end
@@ -976,10 +972,10 @@ function parse_as_cif(cif::CIF, options, name)
 end
 
 
-function parse_as_chemfile(frame, options, name)
+function parse_as_chemfile(frame::Chemfiles.Frame, options, name)
     types = Symbol[]
     for i in Int(size(frame))-1:-1:0
-        typ = Symbol(type(Chemfiles.Atom(frame, i)))
+        typ = Symbol(Chemfiles.type(Chemfiles.Atom(frame, i))::String)
         if typ ∈ options.ignore_atoms
             Chemfiles.remove_atom!(frame, i)
         else
@@ -987,8 +983,8 @@ function parse_as_chemfile(frame, options, name)
         end
     end
 
-    _pos = collect(eachcol(positions(frame)))
-    cell = Cell(SMatrix{3,3,BigFloat}(matrix(Chemfiles.UnitCell(frame)))')
+    _pos = collect(eachcol(Chemfiles.positions(frame)))
+    cell = Cell(SMatrix{3,3,BigFloat,9}(Chemfiles.matrix(Chemfiles.UnitCell(frame)))')
 
     pos::Vector{SVector{3,Float64}} = Ref(inv(cell.mat)) .* _pos
 
@@ -1006,8 +1002,8 @@ function parse_as_chemfile(frame, options, name)
 
     n = length(pos)
     guessed_bonds = false
-    topology = Chemfiles.Topology(frame)
-    if Chemfiles.bonds_count(topology) == 0
+    _topology = Chemfiles.Topology(frame)
+    if Chemfiles.bonds_count(_topology) == 0
         guessed_bonds = true
         bonds = guess_bonds(pos, types, Float64.(cell.mat), options)
         for (u, bondu) in enumerate(bonds), (v, _) in bondu
@@ -1015,7 +1011,7 @@ function parse_as_chemfile(frame, options, name)
         end
     else
         bonds = [Tuple{Int,Float32}[] for _ in 1:n]
-        for (a, b) in eachcol(Chemfiles.bonds(topology))
+        for (a, b) in eachcol(Chemfiles.bonds(_topology))
             push!(bonds[a+1], (b+1, -Inf32))
             push!(bonds[b+1], (a+1, -Inf32))
         end
@@ -1029,7 +1025,7 @@ function parse_as_chemfile(frame, options, name)
     m = Int(Chemfiles.count_residues(topology))
     residues = [Chemfiles.Residue(topology, i) for i in 0:(m-1)]
 
-    attributions = attribute_residues(residues, n, options.structure == StructureType.Input)
+    attributions = attribute_residues(residues, n, options.bonding == Bonding.Input)
     return finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
 end
 

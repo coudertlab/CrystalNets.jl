@@ -174,7 +174,7 @@ function determine_topology(path, options::Options)
     if length(genomes) == 1
         return genomes[1][2]
     end
-    length(genomes) == 0 && return "non-periodic"
+    length(genomes) == 0 && return TopologyResult("")
     return genomes
 end
 determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs...))
@@ -492,10 +492,10 @@ function determine_topology_dataset(path, save, autoclean, options::Options)
               (e isa TaskFailedException && e.task.result isa InterruptException)
                 rethrow()
             end
-            [(Int[], setindex!(TopologyResult(), TopologicalGenome(string(e)), Clustering.Auto))]
+            [(Int[], TopologyResult(string(e)))]
         end
         if isempty(genomes)
-            push!(genomes, (Int[], setindex!(TopologyResult(), TopologicalGenome(), Clustering.Auto)))
+            push!(genomes, (Int[], TopologyResult("")))
         end
         for (j, (_, genome)) in enumerate(genomes)
             newname = length(genomes) == 1 ? file * '/' : file * '/' * string(j)

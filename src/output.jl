@@ -40,7 +40,7 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
                 sty = sty[1:13]*"etc" # otherwise VMD fails to load the .vtf
             end
             name = colorname ? get!(encounteredtypes, ty) do
-                string(" name ", numencounteredtypes+=1,)
+                string(" name ", (numencounteredtypes::Int)+=1,)
             end : n ≥ 32768 ? "" : string(" name ", i)
             atomnum = representative_atom(ty, i)[2]
             push!(atomnums, atomnum)

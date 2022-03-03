@@ -17,6 +17,7 @@ julia> determine_topology(FILE)
 module CrystalNets
 
 export CrystalNet,
+       CrystalNet1D, CrystalNet2D, CrystalNet3D,
        UnderlyingNets,
        TopologicalGenome,
        TopologyResult,
