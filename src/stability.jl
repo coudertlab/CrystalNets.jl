@@ -21,6 +21,7 @@ struct CollisionNode
     neighs::Vector{Int}
 end
 (Base.:(==))(c1::CollisionNode, c2::CollisionNode) = c1.num == c2.num && c1.g == c2.g
+Base.hash(c::CollisionNode, h::UInt) = hash(c.g, hash(c.num, hash(c.neighs, h)))
 Base.length(c::CollisionNode) = c.num
 
 """
@@ -194,7 +195,7 @@ function _order_collision(subgraph, subnodes)
 end
 
 """
-    order_collision(graph::PeriodicGraph, rnge)
+    order_collision(graph::PeriodicGraph, colliding)
 
 Given collision node (in the form of the corresponding list of colliding vertices), find
 an ordering of them which is independent of the current ordering of these vertices and of
@@ -240,17 +241,7 @@ function order_collision(graph::PeriodicGraph{D}, colliding) where D
 end
 
 
-
-function collision_utils(collisions, vmap)
-    num_withcolliding = length(vmap)
-    rev_vmap = Vector{Int}(undef, num_withcolliding)
-    for (i, j) in enumerate(vmap)
-        rev_vmap[j] = i
-    end
-    return collision_utils(collisions, num_withcolliding, rev_vmap)
-end
-
-function collision_utils(collisions, num_withcolliding::Int, rev_vmap=nothing)
+function collision_utils(collisions::Vector{CollisionNode}, num_withcolliding::Int, rev_vmap=nothing)
     m = length(collisions)
     num_nocolliding = num_withcolliding - m
     n = num_nocolliding + sum(length, collisions)
@@ -262,6 +253,15 @@ function collision_utils(collisions, num_withcolliding::Int, rev_vmap=nothing)
     end
 
     return n, m, num_withcolliding, num_nocolliding, collisions
+end
+
+function collision_utils(collisions::Vector{CollisionNode}, vmap::Vector{Int})
+    num_withcolliding = length(vmap)
+    rev_vmap = Vector{Int}(undef, num_withcolliding)
+    for (i, j) in enumerate(vmap)
+        rev_vmap[j] = i
+    end
+    return collision_utils(collisions, num_withcolliding, rev_vmap)
 end
 
 """
@@ -329,17 +329,17 @@ end
 
 
 """
-    CollisionNode(graph, node, vmap=nothing)
+    CollisionNode(graph::PeriodicGraph, node::UnitRange{Int}, vmap=nothing)
 
 Return a canonical `CollisionNode` identifying the collision node.
 This depends on the order of its neighbours, which is given by their order in the graph or
 in `vmap` if provided.
 """
-function CollisionNode(graph, node::UnitRange, rev_vmap=nothing)
+function CollisionNode(graph::PeriodicGraph, node::UnitRange{Int}, rev_vmap=nothing)
     return CollisionNode(unsorted_node(graph, node), rev_vmap)
 end
 
-function unsorted_node(graph::PeriodicGraph, node::UnitRange)
+function unsorted_node(graph::PeriodicGraph, node::UnitRange{Int})
     neighbors_of_node_set = Set{Int}()
     for u in node
         for x in neighbors(graph, u)
@@ -394,7 +394,7 @@ function CollisionNode(c::CollisionNode, rev_vmap)
 end
 
 
-function collect_collisions(net)
+function collect_collisions(net::CrystalNet)
     sortedpos = issorted(net.pos) ? net.pos : sort(net.pos)
     @toggleassert all(pos -> all(x -> 0 ≤ x < 1, pos), net.pos)
     collision_sites = Vector{Int}[]

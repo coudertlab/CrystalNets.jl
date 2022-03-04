@@ -174,7 +174,7 @@ function get_spglib_dataset(net::CrystalNet3D)
 end
 
 
-function find_symmetries(net::CrystalNet3D{Rational{S}}, collisions::Vector{CollisionNode}) where S
+function find_symmetries(net::CrystalNet3D{Rational{S}}, collisions) where S
     T = soft_widen(S)
     U = soft_widen(T)
     lattice = Matrix{Cdouble}(LinearAlgebra.I, 3, 3) # positions are expressed in this basis
