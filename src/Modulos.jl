@@ -5,7 +5,7 @@ module Modulos
 import Base: isequal, ==, +, -, *, inv, /, ^, hash, show, unsigned
 import Base.Checked: mul_with_overflow
 
-export Modulo, is_invertible, CRT
+export Modulo, is_invertible
 
 """
 `Modulo{p,T}(n)` creates a modular number in mod `p` with value `n%p` represented
@@ -127,47 +127,6 @@ end
 isequal(k::Integer, x::Modulo) = isequal(x, k)
 ==(x::Modulo, k::Integer) = isequal(x, k)
 ==(k::Integer, x::Modulo) = isequal(x, k)
-
-
-@noinline __throw_not_coprime() = error("Moduli must be coprime")
-function _CRT(a, n, y::Modulo{m}) where m
-    gcd(n,m) == 1 || __throw_not_coprime()
-    b = Integer(y)
-    k = inv(Modulo{m}(n)) * (b - a)
-    return z = a + Integer(k) * n
-end
-
-findmod(::Modulo{p}) where {p} = p
-
-"""
-`CRT(m1,m2,...)`: Chinese Remainder Theorem
-```julia
-julia> CRT( Modulo{11}(4), Modulo{14}(8) )
-92
-
-julia> 92%11
-4
-
-julia> 92%14
-8
-```
-"""
-function CRT(mfirst::Modulo{p}, mtuple::Modulo...) where p
-    n = length(mtuple)
-    n == 0 && return 0
-
-    result = Integer(mfirst)
-    prodmod = p
-
-    for m in mtuple
-        result = _CRT(result, p, m)
-        prodmod *= findmod(m)
-    end
-
-    return result
-end
-
-CRT() = 0
 
 function show(io::IO, x::Modulo{p,T}) where {p,T}
     verbose = get(io, :typeinfo, Any) != Modulo{p,T}

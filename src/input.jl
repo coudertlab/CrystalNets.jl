@@ -913,7 +913,7 @@ function remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets, ignor
 end
 
 
-function parse_as_cif(cif::CIF, options, name)
+function parse_as_cif(cif::CIF, options::Options, name::String)
     guessed_bonds = false
     n = length(cif.ids)
     ignored = Int[]
@@ -972,7 +972,7 @@ function parse_as_cif(cif::CIF, options, name)
 end
 
 
-function parse_as_chemfile(frame::Chemfiles.Frame, options, name)
+function parse_as_chemfile(frame::Chemfiles.Frame, options::Options, name::String)
     types = Symbol[]
     for i in Int(size(frame))-1:-1:0
         typ = Symbol(Chemfiles.type(Chemfiles.Atom(frame, i))::String)
@@ -987,8 +987,9 @@ function parse_as_chemfile(frame::Chemfiles.Frame, options, name)
     cell = Cell(SMatrix{3,3,BigFloat,9}(Chemfiles.matrix(Chemfiles.UnitCell(frame)))')
 
     pos::Vector{SVector{3,Float64}} = Ref(inv(cell.mat)) .* _pos
+    mat = Float64.(cell.mat)
 
-    toremove = check_collision(pos, cell.mat)
+    toremove = check_collision(pos, mat)
     if !isempty(toremove)
         deleteat!(types, toremove)
         deleteat!(pos, toremove)
@@ -1005,7 +1006,7 @@ function parse_as_chemfile(frame::Chemfiles.Frame, options, name)
     _topology = Chemfiles.Topology(frame)
     if Chemfiles.bonds_count(_topology) == 0
         guessed_bonds = true
-        bonds = guess_bonds(pos, types, Float64.(cell.mat), options)
+        bonds = guess_bonds(pos, types, mat, options)
         for (u, bondu) in enumerate(bonds), (v, _) in bondu
             v > u && Chemfiles.add_bond!(frame, u-1, v-1)
         end
@@ -1030,7 +1031,9 @@ function parse_as_chemfile(frame::Chemfiles.Frame, options, name)
 end
 
 
-function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
+function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vector{Symbol},
+                         attributions::Vector{Int}, bonds::Vector{Vector{Tuple{Int,Float32}}},
+                         guessed_bonds::Bool, options::Options, name::String)
     n = length(pos)
 
     mat = Float64.(cell.mat)
@@ -1067,7 +1070,7 @@ function finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, o
                 end
                 bonds = guess_bonds(pos, types, mat, options)
                 guessed_bonds = true
-                graph = PeriodicGraph3D(n, edges_from_bonds(bonds, cell.mat, pos))
+                graph = PeriodicGraph3D(n, edges_from_bonds(bonds, mat, pos))
             end
             invalidatoms = fix_valence!(graph, pos, types, passO, passCN, mat, Val(true), options)
             remaining_not_fixed = !isempty(invalidatoms)

@@ -30,19 +30,20 @@ mutable struct SpglibDataset
     _std_mapping_to_primitive::Ptr{Cint}
     _pointgroup_symbol::NTuple{6,Cchar}
 end
+
+function joinletters(x)
+    letters = Char.(x)
+    fzero = findfirst(==('\0'), letters)
+    return join(letters[i] for i in 1:(isnothing(fzero) ? length(letters) : (fzero-1)))
+end
+
 function Base.getproperty(ds::SpglibDataset, name::Symbol)
     if name === :international_symbol
-        letters = Char.(getfield(ds, :_international_symbol))
-        fzero = findfirst(==('\0'), collect(letters))
-        return join(letters[i] for i in 1:(isnothing(fzero) ? length(letters) : (fzero-1)))
+        return joinletters(getfield(ds, :_international_symbol))
     elseif name === :hall_symbol
-        letters = Char.(getfield(ds, :_hall_symbol))
-        fzero = findfirst(==('\0'), collect(letters))
-        return join(letters[i] for i in 1:(isnothing(fzero) ? length(letters) : (fzero-1)))
+        return joinletters(getfield(ds, :_hall_symbol))
     elseif name === :choice
-        letters = Char.(getfield(ds, :_choice))
-        fzero = findfirst(==('\0'), collect(letters))
-        return join(letters[i] for i in 1:(isnothing(fzero) ? length(letters) : (fzero-1)))
+        return joinletters(getfield(ds, :_choice))
     elseif name === :transformation_matrix
         return reshape(collect(getfield(ds, :_transformation_matrix)), (3,3))
     elseif name === :origin_shift
@@ -57,9 +58,7 @@ function Base.getproperty(ds::SpglibDataset, name::Symbol)
         a = unsafe_wrap(Array, getfield(ds, :_site_symmetry_symbols), getfield(ds, :n_atoms))
         ret = Vector{String}(undef, length(a))
         for i in 1:length(a)
-            letters = Char.(a[i])
-            fzero = findfirst(==('\0'), collect(letters))
-            ret[i] = join(letters[j] for j in 1:(isnothing(fzero) ? length(letters) : (fzero-1)))
+            ret[i] = joinletters(a[i])
         end
         return ret
     elseif name === :equivalent_atoms
@@ -81,9 +80,7 @@ function Base.getproperty(ds::SpglibDataset, name::Symbol)
     elseif name === :std_mapping_to_primitive
         return unsafe_wrap(Array, getfield(ds, :_std_mapping_to_primitive), getfield(ds, :n_std_atoms))
     elseif name === :pointgroup_symbol
-        letters = Char.(getfield(ds, :_pointgroup_symbol))
-        fzero = findfirst(==('\0'), collect(letters))
-        return join(letters[i] for i in 1:(isnothing(fzero) ? length(letters) : (fzero-1)))
+        return joinletters(getfield(ds, :_pointgroup_symbol))
     else
         getfield(ds, name)
     end
@@ -177,7 +174,7 @@ function get_spglib_dataset(net::CrystalNet3D)
 end
 
 
-function find_symmetries(net::CrystalNet3D{Rational{S}}, collisions) where S
+function find_symmetries(net::CrystalNet3D{Rational{S}}, collisions::Vector{CollisionNode}) where S
     T = soft_widen(S)
     U = soft_widen(T)
     lattice = Matrix{Cdouble}(LinearAlgebra.I, 3, 3) # positions are expressed in this basis

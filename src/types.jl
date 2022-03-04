@@ -71,7 +71,7 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
     curr_val::Union{Rational{Int}, Nothing} = nothing
     curr_sign::Union{Bool, Nothing} = nothing
     encountered_div::Bool = false
-    i = 1
+    i::Int = 1
     something_written = false
     for x in tokenize(lowercase(s))
         k = Tokenize.Tokens.kind(x)
@@ -95,7 +95,7 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                     curr_num = nothing
                 end
                 sign = isnothing(curr_sign) ? 1 : 2*curr_sign - 1
-                val = isnothing(curr_val)  ? 1 : curr_val
+                val = isnothing(curr_val)  ? 1//1 : curr_val
                 j = const_dict[Tokenize.Tokens.untokenize(x)]
                 mat[i,j] += sign * val
                 curr_val = nothing
@@ -122,9 +122,8 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                 end
                 if !isnothing(curr_val)
                     sign = isnothing(curr_sign) ? 1 : 2*curr_sign - 1
-                    @ifwarn begin if !iszero(ofs[i])
-                            @warn "Existing offset already existing for position $i in {$s}"
-                        end
+                    @ifwarn if !iszero(ofs[i])
+                        @warn "Existing offset already existing for position $i in {$s}"
                     end
                     ofs[i] += sign * Rational{Int}(curr_val)
                     curr_val = nothing
@@ -151,14 +150,14 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
     EquivalentPosition(SMatrix{3,3,Int,9}(mat), SVector{3,Rational{Int}}(ofs))
 end
 
-function Base.show(io::IO, eq::EquivalentPosition)
-    function rationaltostring(x, notofs::Bool, first::Bool)
-        if notofs && (x == 1 || x == -1)
-            return x < 0 ? '-' : first ? "" : "+"
-        end
-        sign = x < 0 || first ? "" : "+"
-        sign * (denominator(x) == 1 ? string(numerator(x)) : string(numerator(x))*'/'*string(denominator(x)))
+function rationaltostring(x::Int, notofs::Bool, first::Bool)
+    if notofs && (x == 1 || x == -1)
+        return x < 0 ? "-" : first ? "" : "+"
     end
+    return x < 0 || first ? string(x) : string('+', x)
+end
+
+function Base.show(io::IO, eq::EquivalentPosition)
     xyz = ('x', 'y', 'z')
     for i in 1:3
         first = true
@@ -276,7 +275,7 @@ struct CIF
     bonds::Vector{Vector{Tuple{Int,Float32}}}
 end
 
-function keepinbonds(bonds, keep)
+function keepinbonds(bonds::Vector{Vector{Tuple{Int,Float32}}}, keep::Vector{Int})
     @toggleassert issorted(keep)
     (isempty(keep) || isempty(bonds)) && return Vector{Tuple{Int,Float32}}[]
     n = length(bonds)
@@ -303,7 +302,7 @@ function keepinbonds(bonds, keep)
     return ret
 end
 
-function add_to_bondlist!(bondlist, x, d)
+function add_to_bondlist!(bondlist::Vector{Tuple{Int,Float32}}, x::Int, d::Float32)
     addedflag = false
     for (i, (j, _)) in enumerate(bondlist)
         if j ≥ x
@@ -320,7 +319,7 @@ function add_to_bondlist!(bondlist, x, d)
     nothing
 end
 
-function get_bondlist(bondlist, x)
+function get_bondlist(bondlist::Vector{Tuple{Int,Float32}}, x::Int)
     for (j, d) in bondlist
         if j ≥ x
             if j == x
@@ -332,7 +331,7 @@ function get_bondlist(bondlist, x)
     return Inf32
 end
 
-function sortprune_bondlist!(bondlist)
+function sortprune_bondlist!(bondlist::Vector{Tuple{Int,Float32}})
     sort!(bondlist)
     toremove = Int[]
     k = 0
@@ -347,25 +346,13 @@ function sortprune_bondlist!(bondlist)
     nothing
 end
 
-function keep_atoms(cif::CIF, kept)
-    kept_ids = sort!([cif.ids[i] for i in kept])
-    unique!(kept_ids)
-    idmap = Vector{Int}(undef, length(cif.types)) # upper bound on maximum(kept_ids)
-    for (i,x) in enumerate(kept_ids)
-        idmap[x] = i
-    end
-    return CIF(cif.cifinfo, cif.cell, [idmap[cif.ids[i]] for i in kept],
-               cif.types[kept_ids], cif.pos[:, kept], keepinbonds(cif.bonds, kept))
-end
-
-
 function prepare_periodic_distance_computations(mat)
     a, b, c, α, β, γ = cell_parameters(mat)
     ortho = all(x -> isapprox(Float16(x), 90; rtol=0.02), (α, β, γ))
     _a, _b, _c = eachcol(mat)
-    safemin = min(dot(cross(_b, _c), _a)/(b*c),
-                  dot(cross(_c, _a), _b)/(a*c),
-                  dot(cross(_a, _b), _c)/(a*b))/2
+    safemin = min(Float64(dot(cross(_b, _c), _a)/(b*c)),
+                  Float64(dot(cross(_c, _a), _b)/(a*c)),
+                  Float64(dot(cross(_a, _b), _c)/(a*b)))/2
     # safemin is the half-distance between opposite planes of the unit cell
     return MVector{3,Float64}(undef), ortho, safemin
 end
@@ -411,7 +398,7 @@ function periodic_distance(u, mat, ortho=nothing, safemin=nothing)
     if ortho === nothing || safemin === nothing
         _, ortho, safemin = prepare_periodic_distance_computations(mat)
     end
-    periodic_distance!(similar(u), u, mat, ortho, safemin)
+    periodic_distance!(similar(u), u, mat, ortho::Bool, safemin::Bool)
 end
 
 
@@ -619,7 +606,7 @@ end
 
 
 """
-    edges_from_bonds(bonds, mat, pos)
+    edges_from_bonds(bonds::Vector{Vector{Tuple{Int,Float32}}}, mat, pos)
 
 Given a bond list `bonds` containing triplets `(a, b, dist)` where atoms `a` and `b` are
 bonded if their distance is lower than `dist`, the 3×3 matrix of the cell `mat` and the
@@ -628,7 +615,8 @@ atoms, extract the list of PeriodicEdge3D corresponding to the bonds.
 Since the adjacency matrix wraps bonds across the boundaries of the cell, the edges
 are extracted so that the closest representatives are chosen to form bonds.
 """
-function edges_from_bonds(bonds, mat, pos)
+function edges_from_bonds(bonds::Vector{Vector{Tuple{Int,Float32}}},
+                          mat::SMatrix{3,3,Float64,9}, pos::Vector{SVector{3,Float64}})
     n = length(pos)
     edges = PeriodicEdge3D[]
     ref_dst = norm(mat*[1, 1, 1])
@@ -994,15 +982,6 @@ function Base.show(io::IO, x::CrystalNet)
     nothing
 end
 
-function trim_crystalnet!(graph, types, tohandle, keep)
-    sort!(tohandle)
-    toremove = keep ? deleteat!(collect(1:length(types)), tohandle) : tohandle
-    vmap = rem_vertices!(graph, toremove)
-    return vmap
-end
-
-
-
 function separate_components(c::Crystal{T}) where T
     graph = PeriodicGraphs.change_dimension(PeriodicGraph3D, c.graph)
     dimensions = PeriodicGraphs.dimensionality(graph)
@@ -1020,7 +999,7 @@ function separate_components(c::Crystal{T}) where T
 end
 
 
-function _collect_net!(ret, encountered, idx, c, clustering, ::Val{D}) where D
+function _collect_net!(ret::Vector{<:CrystalNet{D}}, encountered, idx, c, clustering) where D
     vmap, graph = trim_topology(c.graph)
     types = c.types[vmap]
     remove_metal_cluster_bonds!(graph, types, c.options)
@@ -1035,7 +1014,7 @@ function _collect_net!(ret, encountered, idx, c, clustering, ::Val{D}) where D
             if e isa InterruptException || (e isa TaskFailedException && e.task.result isa InterruptException) || c.options.throw_error
                 rethrow()
             end
-            CrystalNet{D}(c.cell, Options(c.options; error=string(e)))
+            CrystalNet{D}(c.cell, Options(c.options; error=(string(e)::String)))
         end
     else
         ref = ret[j]
@@ -1055,15 +1034,15 @@ function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
             alln = Crystal{Nothing}(c; clusterings=[Clustering.AllNodes])
             singlen = allnodes_to_singlenodes(Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, Options(c.options; clusterings=[Clustering.SingleNodes])))
             resize!(ret, length(ret)+1)
-            _collect_net!(ret, encountered, idx, alln, Clustering.AllNodes, Val(D))
-            _collect_net!(ret, encountered, idx+1, singlen, Clustering.SingleNodes, Val(D))
+            _collect_net!(ret, encountered, idx, alln, Clustering.AllNodes)
+            _collect_net!(ret, encountered, idx+1, singlen, Clustering.SingleNodes)
             idx += 1
         elseif clustering == Clustering.PE
-            _collect_net!(ret, encountered, idx, pem_to_pe(c), clustering, Val(D))
+            _collect_net!(ret, encountered, idx, pem_to_pe(c), clustering)
         elseif clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
-            _collect_net!(ret, encountered, idx, allnodes_to_singlenodes(c), clustering, Val(D))
+            _collect_net!(ret, encountered, idx, allnodes_to_singlenodes(c), clustering)
         else
-            _collect_net!(ret, encountered, idx, c, clustering, Val(D))
+            _collect_net!(ret, encountered, idx, c, clustering)
             export_default(c, "clusters_$clustering", c.options.name, c.options.export_clusters)
         end
         idx += 1
@@ -1140,7 +1119,7 @@ function UnderlyingNets(c::Crystal)
 end
 
 
-function CrystalNet(c::Crystal)::CrystalNet
+function CrystalNet(c::Crystal)
     group = UnderlyingNets(c)
     D = isempty(group.D3) ? isempty(group.D2) ? isempty(group.D1) ? 0 : 1 : 2 : 3
     D == 0 && return CrystalNet{0}(c[1].cell, c[1].options)
@@ -1156,18 +1135,18 @@ function CrystalNet(c::Crystal)::CrystalNet
         _D2 = last(first(group.D2))
         length(_D2) > 1 && __throw_multiplenets(D)
         return first(_D2)
-    elseif D == 1
-        length(group.D1) > 1 && __throw_interpenetrating(D)
-        _D1 = last(first(group.D1))
-        length(_D1) > 1 && __throw_multiplenets(D)
-        return first(_D1)
     end
+    @toggleassert D == 1
+    length(group.D1) > 1 && __throw_interpenetrating(D)
+    _D1 = last(first(group.D1))
+    length(_D1) > 1 && __throw_multiplenets(D)
+    return first(_D1)
 end
 __warn_nonunique(D) = @ifwarn @warn "Presence of periodic structures of different dimensionalities. Only the highest dimensionality ($D here) will be retained."
 __throw_interpenetrating(D) = error(ArgumentError("Multiple interpenetrating $D-dimensional structures. Cannot handle this as a single CrystalNet, use UnderlyingNets instead."))
 __throw_multiplenets(D) = error(ArgumentError("Found multiple nets of dimension $D, please specify a single `Clustering` option."))
 
-function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
+function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
                        graph::PeriodicGraph, options::Options) where D
     ne(graph) == 0 && return CrystalNet{D}(cell, types, PeriodicGraph{D}(nv(graph)), options)
     g = change_dimension(PeriodicGraph{D}, graph)
@@ -1220,9 +1199,8 @@ macro tryinttype(T)
     end)
 end
 
-function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
-                       graph::PeriodicGraph{D}, options::Options) where D
-    placement = equilibrium(graph)
+function _CrystalNet(cell::Cell, types::Vector{Symbol}, graph::PeriodicGraph{D},
+                     placement, options::Options) where D
     if isempty(placement)
         @toggleassert isempty(types)
         return CrystalNet{D}(cell, options)
@@ -1236,6 +1214,12 @@ function CrystalNet{D}(cell::Cell, types::AbstractVector{Symbol},
     @tryinttype Int128
     return CrystalNet{D,Rational{BigInt}}(cell, types, graph, placement, options)
     # Type-unstable function, but yields better performance than always falling back to BigInt
+end
+
+function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
+                       graph::PeriodicGraph{D}, options::Options) where D
+    placement = equilibrium(graph)
+    _CrystalNet(cell, types, graph, placement, options)
 end
 
 
@@ -1253,7 +1237,7 @@ function UnderlyingNets(g::PseudoGraph, options::Options)
         for vmap in get(dimensions, D, Vector{Int}[])
             nets = PeriodicGraphs.change_dimension(PeriodicGraph{D}, graph[vmap])
             types = fill(Symbol(""), nv(nets))
-            push!(groups, (vmap, [CrystalNet{D}(cell, types, nets, options)]))
+            push!(groups, (vmap, CrystalNet{D}[CrystalNet{D}(cell, types, nets, options)]))
         end
     end
     return groups
@@ -1368,7 +1352,7 @@ true
 ```
 """
 struct TopologyResult
-    results::SizedVector{8,TopologicalGenome}
+    results::SizedVector{8,TopologicalGenome,Vector{TopologicalGenome}}
     attributions::MVector{8,Int8}
     uniques::Vector{Int8}
 end
@@ -1430,7 +1414,7 @@ end
     end
 end
 
-function Base.get(f::Function, x::TopologyResult, c::_Clustering)
+function Base.get(f::Union{Function,Type}, x::TopologyResult, c::_Clustering)
     if x.attributions[Int(c)] == 0
         f()
     else

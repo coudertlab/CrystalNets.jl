@@ -644,7 +644,7 @@ end
 
 
 """
-    find_candidates(net::CrystalNet{D}) where D
+    find_candidates(net::CrystalNet{D}, collisions::Vector{CollisionNode}) where D
 
 Return a non-empty set of candidates `u => basis` where `u` is a vertex and `basis` is
 matrix whose columns are `D` linearly independent euclidean embeddings of edges.
@@ -655,7 +655,7 @@ Also return a `category_map` linking each vertex to its category number, as defi
 
 See also: [`candidate_key`](@ref)
 """
-function find_candidates(net::CrystalNet{D,T}, collisions) where {D,T}
+function find_candidates(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}) where {D,T}
     L = D*D
     U = soft_widen(T)
     if D == 3

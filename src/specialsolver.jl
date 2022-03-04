@@ -12,7 +12,7 @@ import SparseArrays: getcolptr
 using BigRationals
 
 
-function rational_lu!(B::SparseMatrixCSC, col_offset, check=true)
+function rational_lu!(B::SparseMatrixCSC, col_offset::Vector{Int}, check=true)
     Tf = eltype(B)
     m, n = size(B)
     minmn = min(m, n)
@@ -53,7 +53,7 @@ end
 
 # function lu!(B::SparseMatrixCSC{<:Rational}, ::Val{Pivot} = Val(false);
 #                            col_offset, check::Bool = true) where Pivot
-function rational_lu!(B::SparseMatrixCSC{BigRational}, col_offset, check::Bool=true)
+function rational_lu!(B::SparseMatrixCSC{BigRational}, col_offset::Vector{Int}, check::Bool=true)
     Tf = Rational{BigInt}
     m, n = size(B)
     minmn = min(m, n)
@@ -167,28 +167,6 @@ function rational_lu(A::SparseMatrixCSC, check::Bool=true, ::Type{Ti}=BigRationa
     rational_lu!(B, col_offset, check)
 end
 
-#=
-function lu(A::Hermitian{T, <:SparseMatrixCSC{T}}, pivot::Union{Val{false}, Val{true}} = Val(false); check::Bool = true) where {T<:Rational, Pivot}
-    lu(ishermitian(A.data) ? A.data : sparse(A), pivot)
-end
-
-function Base.getproperty(F::LU{T,<:SparseMatrixCSC{<:Rational{<:Integer}, <:Integer}}, d::Symbol) where T
-    m, n = size(F)
-    if d === :L
-        L = tril!(getfield(F, :factors)[1:m, 1:min(m,n)])
-        for i = 1:min(m,n); L[i,i] = one(T); end
-        return L
-    elseif d === :U
-        return triu!(getfield(F, :factors)[1:min(m,n), 1:n])
-    elseif d === :p
-        return ipiv2perm(getfield(F, :ipiv), m)
-    elseif d === :P
-        return Matrix{T}(LinearAlgebra.I, m, m)[:,invperm(F.p)]
-    else
-        getfield(F, d)
-    end
-end
-=#
 
 function forward_substitution!(L::SparseMatrixCSC, b)
     _, n = size(L)
@@ -230,7 +208,7 @@ function backward_substitution!(U::SparseMatrixCSC, b)
     nothing
 end
 
-function linsolve!(F::LU{<:Any,<:AbstractSparseMatrix}, B::Base.StridedVecOrMat)
+function linsolve!(F::LU{<:Any,<:AbstractSparseMatrix}, B::Matrix)
     TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(F)))
     BB = similar(B, TFB, size(B))
     copyto!(BB, B)
@@ -244,15 +222,8 @@ function linsolve!(F::LU{<:Any,<:AbstractSparseMatrix}, B::Base.StridedVecOrMat)
     return BB
 end
 
-#=
-function ldiv!(F::LU{<:Any,<:AbstractSparseMatrix}, B::Base.StridedVecOrMat)
-    forward_substitution!(F.L, B)
-    backward_substitution!(F.U, B)
-    return B
-end
-=#
 
-function rational_solve(::Val{N}, A, Y) where N
+function rational_solve(::Val{N}, A::SparseMatrixCSC{Int,Int}, Y::Matrix{Int}) where N
     B = rational_lu(A, false)
     if !issuccess(B)
         error("Singular exception while equilibrating. Is the graph connected?")
@@ -263,61 +234,6 @@ function rational_solve(::Val{N}, A, Y) where N
 end
 
 
-
-# function _inner_dixon_p!(Z::Matrix{Rational{T}}, h, x̄, sqh, tmp) where T
-#     for j in eachindex(Z)
-#         ua = MPZ.set(h)
-#         ub = @inbounds x̄[j]
-#         va = zero(T)
-#         vb = one(T)
-#         k = 0
-#         while ub >= sqh
-#             k += 1
-#             # cpua = deepcopy(ua)
-#             # cpub = deepcopy(ub)
-#             MPZ.tdiv_qr!(tmp, ua, ua, ub)
-#             ua, ub = ub, ua
-#             # @toggleassert tmp == cpua ÷ cpub
-#             # @toggleassert ua == cpub
-#             # @toggleassert ub == cpua - tmp * cpub
-#             # cpuc = deepcopy(va)
-#             if typemin(Clong) < vb < typemax(Clong)
-#                 MPZ.mul_si!(tmp, vb % Clong)
-#             else
-#                 tmp *= vb
-#             end
-#             flag = signbit(va)
-#             va = abs(va)
-#             if va < typemax(Culong)
-#                 if flag
-#                     MPZ.sub_ui!(tmp, va)
-#                 else
-#                     MPZ.add_ui!(tmp, va)
-#                 end
-#                 va, vb = vb, T(tmp)
-#             else
-#                 va, vb = vb, va + tmp
-#             end
-#             # @toggleassert vb == cpuc + tmp * va
-#         end
-#         uc, vc = if T === BigInt
-#             Base.divgcd(ub, vb)
-#         else
-#             ud, vd = Base.divgcd(ub, vb)
-#             if T !== BigInt
-#                 m = typemin(T)
-#                 M = typemax(T)
-#                 (m < ud < M && m < vd < M) || return false
-#             end
-#             (ud % T, vd % T)
-#         end
-#
-#         @inbounds Z[j] = (-2*isodd(k)+1) * Base.checked_den(uc, vc)
-#         # @show Z[j]
-#         # @toggleassert mod((-1)^isodd(k) * ub, h) == mod(vb * x̄[j], h)
-#     end
-#     return true
-# end
 
 function copyuntil(j, oldZ, ::Type{T}) where T
     Z = similar(oldZ, T)
@@ -330,7 +246,8 @@ function copyuntil(j, oldZ, ::Type{T}) where T
 end
 
 
-function _inner_dixon_p!(indices, Z::Matrix{Rational{T}}, h, x̄, sqh, tmp) where T
+function _inner_dixon_p!(indices::Vector{Int}, Z::Matrix{Rational{T}}, h::BigInt,
+                         x̄::Matrix{BigInt}, sqh::BigInt, tmp::BigInt) where T
     while !isempty(indices)
         j = pop!(indices)
         ua = MPZ.set(h)
@@ -365,6 +282,11 @@ function _inner_dixon_p!(indices, Z::Matrix{Rational{T}}, h, x̄, sqh, tmp) wher
             else
                 va, vb = vb, va + tmp
             end
+            #= or replace all of the above since if typeomin(Clong) < ... by
+            MPZ.mul!(tmp, vb)
+            MPZ.add!(tmp, va)
+            va, vb, tmp = vb, tmp, va
+            =#
             # @toggleassert vb == cpuc + tmp * va
         end
 
@@ -388,7 +310,7 @@ function _inner_dixon_p!(indices, Z::Matrix{Rational{T}}, h, x̄, sqh, tmp) wher
     return true
 end
 
-function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
+function dixon_p(::Val{N}, A::SparseMatrixCSC{Int,Int}, C::LU{Modulo{p,Int32},SparseMatrixCSC{Modulo{p,Int32},Int},Vector{Int}}, Y::Matrix{Int}) where {N,p}
     λs = [norm(x) for x in eachcol(A)]
     append!(λs, [norm(x) for x in eachcol(Y)])
     partialsort!(λs, N)
@@ -404,14 +326,14 @@ function dixon_p(::Val{N}, A, C::Factorization{Modulo{p,T}}, Y) where {N,p,T}
     B = copy(Y)
     x̄ = BigInt.(linsolve!(C, B))
     X = copy(x̄)
-    @toggleassert A * Modulo{p,T}.(X) == B
+    @toggleassert A * Modulo{p,Int32}.(X) == B
     h = one(BigInt) # = p^i
     tmp = BigInt()
     for i in 1:m-1
         MPZ.mul_si!(h, p)
         B .= (B .- A*Integer.(X)) .÷ p
         X .= Integer.(linsolve!(C, B))
-        @toggleassert A * Modulo{p,T}.(X) == B
+        @toggleassert A * Modulo{p,Int32}.(X) == B
         # x̄ .+= h .* X
         @inbounds for j in eachindex(x̄)
             MPZ.mul!(tmp, X[j], h)
@@ -449,7 +371,7 @@ integer `n×n` matrix and `Y` is a dense integer `n×N` matrix, using Dixon's me
 
 Return `X` as a matrix of `Rational{Int128}`.
 """
-function dixon_solve(::Val{N}, A, Y) where N
+function dixon_solve(::Val{N}, A::SparseMatrixCSC{Int,Int}, Y::Matrix{Int}) where N
     # @show time_ns()
     typeofB = Union{
         LU{Modulo{2147483647,Int32},SparseMatrixCSC{Modulo{2147483647,Int32},Int}},

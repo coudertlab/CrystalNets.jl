@@ -14,19 +14,17 @@ function export_dataline(f, x)
     println(f, inbetween*x)
 end
 
-function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname=false)
+function export_vtf(file, __c::Union{Crystal,CrystalNet}, repeatedges=6, colorname=false)
     mkpath(splitdir(file)[1])
-    n = length(c.types)
-    @toggleassert length(c.pos) == n
-    if c isa CrystalNet
-        c = CrystalNet3D(c)
-    end
-    invcorres = [PeriodicVertex3D(i) for i in 1:n]
-    corres = Dict{PeriodicVertex3D,Int}([invcorres[i]=>i for i in 1:n])
-    encounteredtypes = Dict{Symbol,String}()
-    atomnums = Int[]
-    numencounteredtypes = 0
+    n = length(__c.types)
+    @toggleassert length(__c.pos) == n
+    c = __c isa CrystalNet ? CrystalNet3D(__c) : __c
     open(file, write=true) do f
+        invcorres = [PeriodicVertex3D(i) for i in 1:n]
+        corres = Dict{PeriodicVertex3D,Int}([invcorres[i]=>i for i in 1:n])
+        encounteredtypes = Dict{Symbol,String}()
+        atomnums = Int[]
+        numencounteredtypes = 0
         println(f, """
         ###############################
         # written by PeriodicGraphs.jl
@@ -39,9 +37,17 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
             if length(sty) > 16
                 sty = sty[1:13]*"etc" # otherwise VMD fails to load the .vtf
             end
-            name = colorname ? get!(encounteredtypes, ty) do
-                string(" name ", (numencounteredtypes::Int)+=1,)
-            end : n ≥ 32768 ? "" : string(" name ", i)
+            name = if colorname
+                _name = get(encounteredtypes, ty, missing)
+                if _name isa String
+                    _name
+                else
+                    numencounteredtypes += 1
+                    encounteredtypes[ty] = string(" name ", numencounteredtypes)
+                end
+            else
+                n ≥ 32768 ? "" : string(" name ", i)
+            end
             atomnum = representative_atom(ty, i)[2]
             push!(atomnums, atomnum)
             resid = colorname ? i : 0
@@ -100,21 +106,18 @@ function export_vtf(file, c::Union{Crystal,CrystalNet}, repeatedges=6, colorname
     end
 end
 
-# function export_vtf(file, cif::CIF, repeatedges=1)
-#     export_vtf(file, CrystalNet(cif), repeatedges, true)
-# end
 
-function export_cif(file, c::Union{Crystal, CIF})
+function export_cif(file, __c::Union{Crystal, CIF})
     mkpath(splitdir(file)[1])
-    info = if c isa CIF
-        c = expand_symmetry(c)
-        copy(c.cifinfo)
+    c, info = if __c isa CIF
+        ___c = expand_symmetry(__c)
+        ___c, copy(__c.cifinfo)
     else
-        Dict{String,Union{String,Vector{String}}}("data"=>last(splitdir(file)))
+        __c, Dict{String,Union{String,Vector{String}}}("data"=>last(splitdir(file)))
     end
     loops = Dict{Int, Tuple{Vector{String}, Vector{Vector{String}}}}()
     open(file, write=true) do f
-        print(f, "data_"); println(f, pop!(info, "data")*"\n\n")
+        print(f, "data_"); println(f, popstring!(info, "data")*"\n\n")
         for (id, data) in info
             if data isa String
                 print(f, '_'); print(f, id)
@@ -132,7 +135,7 @@ function export_cif(file, c::Union{Crystal, CIF})
         end
 
         #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
-        _a, _b, _c, α, β, γ = Float64.(cell_parameters(c.cell))
+        _a, _b, _c, α, β, γ = Float64.(cell_parameters(c.cell::Cell))
 
         println(f, """
 
@@ -153,25 +156,25 @@ function export_cif(file, c::Union{Crystal, CIF})
         _symmetry_equiv_pos_as_xyz
         x,y,z""")
 
-        for eq in c.cell.equivalents
+        for eq in (c.cell::Cell).equivalents
             println(f, eq)
         end
         println(f)
 
-        n = c isa CIF ? length(c.ids) : length(c.types)
+        n::Int = c isa CIF ? length(c.ids) : length(c.types)
         if !haskey(loops, n)
             loops[n] = (String[], Vector{String}[])
         end
         append!(loops[n][1],
                 ["atom_site_label", "atom_site_type_symbol",
                  "atom_site_fract_x", "atom_site_fract_y", "atom_site_fract_z"])
-        labels = String[string_atomtype(c.types[c isa CIF ? c.ids[i] : i])*string(i) for i in 1:n]
-        pos = string.(round.(c isa Crystal ? reduce(hcat, c.pos) : c.pos; sigdigits=6))
-        append!(loops[n][2], [labels, string_atomtype.(c.types[x] for x in (c isa CIF ? c.ids : collect(1:n))),
+        labels = String[string_atomtype(c.types[c isa CIF ? c.ids[i] : i]::Symbol)*string(i) for i in 1:n]
+        pos = string.(round.(c isa CIF ? c.pos::Matrix{Float64} : reduce(hcat, c.pos)::Matrix{Float64}; sigdigits=6))
+        append!(loops[n][2], [labels, string_atomtype.((c.types[x])::Symbol for x in (c isa CIF ? c.ids : collect(1:n))::Vector{Int}),
                 pos[1,:], pos[2,:], pos[3,:]])
 
-        if c isa Crystal
-            bonds = edges(c.graph)
+        if c isa Union{Crystal{Clusters}, Crystal{Nothing}}
+            bonds = edges((c.graph)::PeriodicGraph3D)
             src = String[]
             dst = String[]
             mult = Int[]
@@ -222,7 +225,7 @@ function export_cgd(file, c::Crystal)
         #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
         _a, _b, _c, α, β, γ = Float64.(cell_parameters(c.cell))
         print(f, "\tGROUP\t\"")
-        join(f, split(c.cell.spacegroup, ' '))
+        print(f, RAW_SYMMETRY_DATA[c.cell.hall][4])
         println("\"")
         println(f, "\tCELL\t", _a, ' ', _b, ' ', _c, ' ', α, ' ', β, ' ', γ, ' ')
         println(f, "\tATOM")
@@ -247,7 +250,7 @@ end
 
 function export_cgd(file, g::PeriodicGraph)
     mkpath(splitdir(file)[1])
-    open(file, write=true) do f
+    f = open("/tmp/foobar", "w")#open(file, write=true) do f
         println(f, "PERIODIC_GRAPH\n")
         println(f, "ID ", basename(splitext(file)[1]), '\n')
         println(f, "EDGES")
@@ -267,7 +270,7 @@ function export_cgd(file, g::PeriodicGraph)
             println(f)
         end
         println(f, "END\n")
-    end
+    #end
 end
 export_cgd(file, c::CrystalNet) = export_cgd(file, change_dimension(PeriodicGraph3D, c.graph))
 
