@@ -2,7 +2,7 @@
 
 module Modulos
 
-import Base: isequal, ==, +, -, *, inv, /, ^, hash, show, unsigned
+import Base: ==, +, -, *, inv, /, ^, hash, show, unsigned
 import Base.Checked: mul_with_overflow
 
 export Modulo, is_invertible
@@ -26,8 +26,7 @@ function hash(x::Modulo{p}, h::UInt64=UInt64(0)) where p
     hash(Integer(x), hash(p, h))
 end
 
-isequal(x::Modulo{p}, y::Modulo{p}) where {p} = Integer(x) == Integer(y)
-==(x::Modulo, y::Modulo) = isequal(x, y)
+==(x::Modulo{p}, y::Modulo{p}) where {p} = Integer(x) == Integer(y)
 
 function +(x::Modulo{p,T1}, y::Modulo{p,T2}) where {p,T1,T2}
     T = promote_type(T1,T2)
@@ -120,13 +119,11 @@ end
 /(k::Integer, x::Modulo{p,T}) where {p,T} = Modulo{p,T}(k) / x
 
 
-function isequal(x::Modulo{p,T1}, k::T2) where {p,T1,T2<:Integer}
+function ==(x::Modulo{p,T1}, k::T2) where {p,T1,T2<:Integer}
     T = promote_type(T1,T2)
     T(x) == T(mod(k, p))
 end
-isequal(k::Integer, x::Modulo) = isequal(x, k)
-==(x::Modulo, k::Integer) = isequal(x, k)
-==(k::Integer, x::Modulo) = isequal(x, k)
+==(k::Integer, x::Modulo) = x == k
 
 function show(io::IO, x::Modulo{p,T}) where {p,T}
     verbose = get(io, :typeinfo, Any) != Modulo{p,T}

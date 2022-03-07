@@ -28,6 +28,7 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
             shrunk_net, _collisions = minimize(shrunk_net, collisions)
             flag = false
         catch e
+            net.options.throw_error && rethrow()
             if T == Rational{BigInt} || !(e isa OverflowError || e isa InexactError)
                 return TopologicalGenome(string(e)::String)
             end
@@ -54,6 +55,7 @@ function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNo
         g::PeriodicGraph{D} = topological_key(net, collisions)
         unstable = g.width[] == -2
         unstable && (g.width[] = -1)
+        ne(g) == 0 && return TopologicalGenome(net.options.error)
         return TopologicalGenome(g, recognize_topology(g), unstable)
     catch e
         if T == Rational{BigInt} || !(e isa OverflowError || e isa InexactError)
@@ -78,7 +80,7 @@ topological_genome(s::String, options::Options) = topological_genome(PeriodicGra
 topological_genome(g::Union{String,PeriodicGraph}; kwargs...) = topological_genome(g, Options(; kwargs...))
 
 
-function _loop_group!(ex, id, net, group)
+function _loop_group!(ex::Expr, id::Symbol, net::Symbol, group::Expr)
     for j in 1:length(ex.args)
         arg = ex.args[j]
         if arg isa Symbol
@@ -179,65 +181,6 @@ function determine_topology(path, options::Options)
 end
 determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs...))
 
-#=
-"""
-    determine_topologies(path, options::Options)
-    determine_topologies(path; kwargs...)
-
-Compute the topology of the files at `path`.
-Return a triplet `(tops, genomes, failed)` where:
-- `tops` is a dictionary linking each file name to its topology name, if recognised, or
-  topological genome otherwise.
-  If an input file "X" contains interpenetrating nets, they will automatically be separated
-  and each subnet (called "X/1", "X/2", ...) will be linked to its corresponding topology.
-- `genomes` contain the topological genomes that have been encountered but were not part of
-  the archive.
-- `failed` is a dictionary linking each file name to the tuple `(e, bt)` that stores the
-  information on the cause of the failure of CrystalNets. It can be visualised with
-  `Base.showerror(stdout, e, bt)`.
-"""
-function determine_topologies(path, options::Options)
-    dircontent = isdir(path) ? collect(enumerate(readdir(path; join=true))) : [(1, path)]
-    n = length(dircontent)
-    ret = [Pair{String,String}[] for _ in 1:n]
-    newgenomes = [String[] for _ in 1:n]
-    failed::Vector{Union{Missing, Pair{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}}} =
-        fill(missing, n)
-    @threads for (i, f) in dircontent
-        name = last(splitdir(f))
-        # println(name)
-        genomes::Vector{Tuple{Vector{Int},TopologyResult}} = try
-            topological_genome(UnderlyingNets(parse_chemfile(f, options)))
-        catch e
-            if e isa InterruptException ||
-              (e isa TaskFailedException && e.task.result isa InterruptException)
-                rethrow()
-            end
-            failed[i] = (name => (e, catch_backtrace()))
-            Tuple{Vector{Int},TopologyResult}[]
-        end
-        if isempty(genomes)
-            push!(genomes, (Int[], setindex!(TopologyResult(), TopologicalGenome(), options.clustering)))
-        end
-        for (j, (_, genome)) in enumerate(genomes)
-            newname = length(genomes) == 1 ? name : name * '/' * string(j)
-            id = recognize_topology(genome)
-            if startswith(id, "UNKNOWN")
-                push!(newgenomes[i], id[9:end])
-            end
-            push!(ret[i], (newname => id))
-        end
-    end
-    newgens = sort!(collect(Iterators.flatten(newgenomes)))
-    return Dict(Iterators.flatten(ret)), unique!(newgens),
-           Dict(skipmissing(failed))
-end
-function determine_topologies(path; kwargs...)
-    opts, restore_warns = db_options(; kwargs...)
-    determine_topologies(path, opts)
-    restore_warns && (DOWARN[] = true)
-end
-=#
 
 macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
     crystaldef = skipcrystal ? nothing : :(crystal = parse_chemfile(path, $opts))
@@ -279,7 +222,7 @@ Tries to determine the topology of the file at `path` by passing various options
 If none is found, return the topological genome encountered most often through
 the variation of options.
 """
-function guess_topology(path, defopts)
+function guess_topology(path, defopts::Options)
     maxdim = maximum(defopts.dimensions; init=0)
     encountered_graphs = Dict{PeriodicGraph,PeriodicGraph}()
     encountered_genomes = Dict{PeriodicGraph,Tuple{Bool,Int}}()
@@ -371,52 +314,6 @@ function guess_topology(path, defopts)
 end
 guess_topology(path; kwargs...) = guess_topology(path, Options(structure=StructureType.Guess; kwargs...))
 
-#=
-"""
-    guess_topologies(path, options)
-    guess_topologies(path; kwargs...)
-
-Attempt to determine the topology of the files stored in the directory at `path`
-by using `guess_topology` on each.
-
-Similarly to `determine_topologies`, return a triplet `(tops, genomes, failed)`
-where `tops` is a dictionary linking the name of the files to the name of the
-topology (or the topological genome if none), `genomes` contain the genomes
-not part of the archive and `failed` is a dictionary linking the name of the
-structure to the error and backtrace justifying its failure.
-"""
-function guess_topologies(path, options)
-    dircontent = isdir(path) ? collect(enumerate(recursive_readdir(path))) : [(1, path)]
-    ret = Vector{Pair{String,String}}(undef, length(dircontent))
-    newgenomes::Vector{Union{Missing, String}} = fill(missing, length(dircontent))
-    failed::Vector{Union{Missing, Pair{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}}} =
-        fill(missing, length(dircontent))
-    @threads for (i, f) in dircontent
-        # println(name)
-        result::String = try
-            guess_topology(joinpath(path, f), options)
-        catch e
-            if e isa InterruptException ||
-              (e isa TaskFailedException && e.task.result isa InterruptException)
-                rethrow()
-            end
-            failed[i] = (f => (e, catch_backtrace()))
-            "FAILED"
-        end
-        ret[i] = (f => result)
-        if startswith(result, "UNKNOWN")
-            newgenomes[i] = result[9:end]
-        end
-    end
-    newgens = sort!(collect(skipmissing(newgenomes)))
-    return Dict(ret), unique!(newgens), Dict(skipmissing(failed))
-end
-function guess_topologies(path; kwargs...)
-    opts, restore_warns = db_options(; structure=StructureType.Guess, kwargs...)
-    guess_topologies(path, opts)
-    restore_warns && (DOWARN[] = true)
-end
-=#
 
 """
     determine_topology_dataset(path, save, autoclean, options::Options)

@@ -26,7 +26,7 @@ end
 
 
 """
-    check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, collisions, r=nothing) where {D,T}
+    check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,T}, collisions, r=nothing)
 
 Check that the net is identical to that rotated by `r` (if it is not `nothing`) then
 translated by `t`. `collisions` is the list of `CollisionNode`s in the net.
@@ -36,8 +36,7 @@ Otherwise, return `nothing`.
 
 See also: [`possible_translations`](@ref), [`find_all_valid_translations`](@ref)
 """
-function check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,<:Rational{<:Integer}}, 
-                              collisions, r=nothing) where {D,T}
+function check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,T}, collisions, r=nothing) where {D,T}
     U = soft_widen(T)
     n = length(c.pos)
     vmap = Vector{Int}(undef, n)
@@ -108,7 +107,7 @@ end
 
 
 """
-    find_all_valid_translations(c::CrystalNet{D}) where D
+    find_all_valid_translations(c::CrystalNet{D}, collisions) where D
 
 Return a `D`-tuple of list of tuples `(i_max_den, max_den, t)` (see
 [`possible_translations`](@ref) for interpretation) where the `n`-th list contains all
@@ -137,9 +136,9 @@ allows reducing the net to its minimal cell.
 """
 function minimal_volume_matrix end
 
-function minimal_volume_matrix(translations::Tuple{T}) where T
+function minimal_volume_matrix(translations::Tuple{Vector{Tuple{Int,Int,SVector{1,T}}}}) where T
     nz0 = translations[1]
-    denmax = 1//1
+    denmax = 1
     imax = 0
     for j in 1:length(nz0)
         _, den, _ = nz0[j]
@@ -157,7 +156,7 @@ function minimal_volume_matrix(translations::Tuple{T}) where T
     append!(nz0, _nz0)
 
     n = length(nz0)
-    detmin = 1//1
+    detmin = one(T)
     best = 0
     @inbounds for i in 1:n
         d = nz0[i][3][1]
@@ -175,9 +174,9 @@ function minimal_volume_matrix(translations::Tuple{T}) where T
     return ret
 end
 
-function minimal_volume_matrix(translations::Tuple{T,T}) where T
+function minimal_volume_matrix(translations::NTuple{2, Vector{Tuple{Int,Int,SVector{2,T}}}}) where T
     nz0, nz1 = translations
-    denmax = [1//1, 1//1]
+    denmax = [1, 1]
     imax = [0, 0]
     for j in 1:length(nz1)
         i, den, _ = nz1[j]
@@ -199,7 +198,7 @@ function minimal_volume_matrix(translations::Tuple{T,T}) where T
     # TODO optimize
     all = vcat(nz0, nz1)
     n = length(all)
-    detmin = 1//1
+    detmin = one(T)
     best = (0, 0)
     @inbounds for i in 1:n-1
         for j in i+1:n
@@ -220,10 +219,10 @@ function minimal_volume_matrix(translations::Tuple{T,T}) where T
     return ret
 end
 
-function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
+function minimal_volume_matrix(translations::NTuple{3, Vector{Tuple{Int,Int,SVector{3,T}}}}) where T
     nz0, nz1, nz2 = translations
 
-    denmax = [1//1, 1//1, 1//1]
+    denmax = [1, 1, 1]
     imax = [0, 0, 0]
     for j in 1:length(nz2)
         i, den, _ = nz2[j]
@@ -245,7 +244,7 @@ function minimal_volume_matrix(translations::Tuple{T,T,T}) where T
     # TODO optimize
     all = vcat(nz0, nz1, nz2)
     n = length(all)
-    detmin = 1//1
+    detmin = one(T)
     best = (0, 0, 0)
     @inbounds for i in 1:n-2
         for j in i+1:n-1
@@ -328,7 +327,7 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
         I_kept = I_kept[reorder]
     end
 
-    sortedcol = [SVector{D,Rational{U}}(poscol[i]) for i in I_kept]
+    sortedcol = SVector{D,Rational{U}}[SVector{D,Rational{U}}(poscol[i]) for i in I_kept]
 
     vmap = Vector{Int}(undef, n)
     for (i, pos) in enumerate(poscol)
@@ -370,12 +369,11 @@ topologicallly invariant.
 """
 function minimize(net::CrystalNet, collisions::Vector{CollisionNode})
     translations = find_all_valid_translations(net, collisions)
-    if !all(isempty.(translations))
-        mat = minimal_volume_matrix(translations)
-        net, collisions = reduce_with_matrix(net, mat, collisions)
-        @toggleassert all(isempty.(find_all_valid_translations(net, collisions)))
-    end
-    return net, collisions
+    all(isempty.(translations)) && return net, collisions
+    mat = minimal_volume_matrix(translations)
+    _net, collisions = reduce_with_matrix(net, mat, collisions)
+    @toggleassert all(isempty.(find_all_valid_translations(_net, collisions)))
+    return _net, collisions
 end
 
 
@@ -806,7 +804,7 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
     candidates = Dict{Int,Vector{SMatrix{3,3,U,9}}}()
     isempty(initial_candidates) && return candidates
     # the two next variables are accessed concurrently, must be locked before read/write
-    current_cats::SizedVector{3,Int} = SizedVector{3,Int}(fill(length(category_map), 3))
+    current_cats::SVector{3,Int} = SVector{3,Int}((length(category_map), length(category_map), length(category_map)))
     current_ordertype::Int = 1
     # ordertype designates the kind of ordering of the category of the three edges:
     # ordertype == 1 means c1 == c2 == c3 where ci is the category of edge i
@@ -902,7 +900,7 @@ function find_candidates_onlyneighbors(net::CrystalNet2D{T}, candidates_v, categ
 
     candidates = Dict{Int,Vector{SMatrix{2,2,U,4}}}()
     isempty(initial_candidates) && return candidates
-    current_cats::SizedVector{2,Int} = SizedVector{2,Int}(fill(length(category_map), 2))
+    current_cats::SVector{2,Int} = SVector{2,Int}((length(category_map), length(category_map)))
     current_ordertype::Int = 1
     fastlock = SpinLock()
 
@@ -1096,8 +1094,8 @@ end
 Return a unique topological key for the net, which is a topological invariant of the net
 (i.e. it does not depend on its initial representation).
 """
-function topological_key(net::CrystalNet)
-    isempty(net.pos) && return PeriodicGraph{0}()
+function topological_key(net::CrystalNet{D}) where D
+    isempty(net.pos) && return PeriodicGraph{D}()
     newnet, collisions = collision_nodes(net)
     if collisions isa Nothing
         net.graph.width[] = -2 # internal error code

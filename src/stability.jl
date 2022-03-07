@@ -184,8 +184,8 @@ function _order_collision(subgraph, subnodes)
             xi, xj = xj, xi
         end
     else
-        neighl = neighbors(subgraph, xl)
-        if length(neighl) == 1 && only(neighl) == xi
+        neighls = neighbors(subgraph, xl)
+        if length(neighls) == 1 && neighls[1] == xi
             xi, xj = xj, xi
         end
     end
@@ -245,14 +245,15 @@ function collision_utils(collisions::Vector{CollisionNode}, num_withcolliding::I
     m = length(collisions)
     num_nocolliding = num_withcolliding - m
     n = num_nocolliding + sum(length, collisions)
+    new_collisions = collisions
 
     if rev_vmap isa Vector{Int}
         colliding_nodes = rev_vmap[(num_nocolliding+1):num_withcolliding]
-        collisions = [CollisionNode(collisions[i], rev_vmap) for i in sortperm(colliding_nodes)]
+        new_collisions = [CollisionNode(collisions[i], rev_vmap) for i in sortperm(colliding_nodes)]
         # The order of collisions and is made independent of the initial representation
     end
 
-    return n, m, num_withcolliding, num_nocolliding, collisions
+    return n, m, num_withcolliding, num_nocolliding, new_collisions
 end
 
 function collision_utils(collisions::Vector{CollisionNode}, vmap::Vector{Int})

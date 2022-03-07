@@ -173,6 +173,6 @@ function normal_basis_rational(list::AbstractVector{<:StaticVector{1,<:Rational{
     nzl = [x[] for x in list if !iszero(x[])]
     den = lcm(denominator.(nzl))
     S = widen(T)
-    num = minimum(abs(S(den*x)) for x in nzl)
-    return SMatrix{1,1,Rational{S}}(num // den)
+    num = minimum(S[abs(S(den*x)) for x in nzl])
+    return SMatrix{1,1,Rational{S}}((num // den,))
 end
