@@ -90,7 +90,7 @@ CrystalNets.HALL_SYMBOLS
 CrystalNets.shrink_collisions
 CrystalNets.order_collision
 CrystalNets.expand_collisions
-CrystalNets.CollisionNode(graph, node::UnitRange, rev_vmap=nothing)
+CrystalNets.CollisionNode(graph::PeriodicGraph, node::UnitRange{Int}, vmap=nothing)
 CrystalNets.collision_nodes
 ```
 

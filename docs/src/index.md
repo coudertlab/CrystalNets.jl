@@ -92,7 +92,7 @@ Standard: fff
 
 ## Full installation
 
-!!! WIP
+!!! wip
     The following is a work-in-progress and will be available soon.
 
 To obtain an executable, `CrystalNets.jl` can be statically compiled.
