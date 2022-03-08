@@ -1,15 +1,16 @@
-using Documenter, Literate
+using Documenter
 using CrystalNets
 
-# from LiveServer documentation
-const src = joinpath(@__DIR__, "src")
-const lit = joinpath(@__DIR__, "lit")
-for (root, _, files) ∈ walkdir(lit), file ∈ files
-    splitext(file)[2] == ".jl" || continue
-    ipath = joinpath(root, file)
-    opath = splitdir(replace(ipath, lit=>src))[1]
-    Literate.markdown(ipath, opath)
-end
+# from LiveServer + Literate documentation
+# using Literate
+# const src = joinpath(@__DIR__, "src")
+# const lit = joinpath(@__DIR__, "lit")
+# for (root, _, files) ∈ walkdir(lit), file ∈ files
+#     splitext(file)[2] == ".jl" || continue
+#     ipath = joinpath(root, file)
+#     opath = splitdir(replace(ipath, lit=>src))[1]
+#     Literate.markdown(ipath, opath)
+# end
 
 DocMeta.setdocmeta!(CrystalNets, :DocTestSetup, quote
     using CrystalNets
