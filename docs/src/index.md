@@ -92,6 +92,9 @@ Standard: fff
 
 ## Full installation
 
+!!! WIP
+    The following is a work-in-progress and will be available soon.
+
 To obtain an executable, `CrystalNets.jl` can be statically compiled.
 To do so, run the following julia script after changing the `INSTALLATION_PATH` variable to the location where the `CrystalNets.jl` executable will be installed.
 Note that this requires the [PackageCompiler](https://github.com/JuliaLang/PackageCompiler.jl/) module.
