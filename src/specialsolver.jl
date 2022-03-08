@@ -4,6 +4,7 @@ include("Modulos.jl")
 using .Modulos
 import Base.GMP: MPZ
 
+using Base: OneTo
 import LinearAlgebra: BlasInt, checknonsingular, LU, tril!, triu!, ipiv2perm,
                       lu, lu!, ldiv!, Factorization, issuccess
 using SparseArrays
@@ -11,6 +12,22 @@ import SparseArrays: getcolptr
 
 using BigRationals
 
+
+function compat_lu(::Val{Tf}, B, maxvec, info) where Tf
+    @static if VERSION < v"1.8-"
+        LU{Tf,SparseMatrixCSC{Tf,Int}}(B, Vector{BlasInt}(1:maxvec), convert(BlasInt, info))
+    else
+        LU{Tf,SparseMatrixCSC{Tf,Int},OneTo{Int}}(Tf.(B), 1:maxvec, info)
+    end
+end
+
+function compat_lu_convert(::Val{Tf}, B, maxvec, info) where Tf
+    @static if VERSION < v"1.8-"
+        LU{Tf,SparseMatrixCSC{Tf,Int}}(Tf.(B), Vector{BlasInt}(1:maxvec), convert(BlasInt, info))
+    else
+        LU{Tf,SparseMatrixCSC{Tf,Int},OneTo{Int}}(Tf.(B), 1:maxvec, info)
+    end
+end
 
 function rational_lu!(B::SparseMatrixCSC, col_offset::Vector{Int}, check=true)
     Tf = eltype(B)
@@ -23,7 +40,7 @@ function rational_lu!(B::SparseMatrixCSC, col_offset::Vector{Int}, check=true)
             piv = nonzeros(B)[ipiv]
             if iszero(piv)
                 check && checknonsingular(k-1, Val(false)) # TODO update with Pivot
-                return LU{Tf,SparseMatrixCSC{Tf,Int}}(B, collect(1:minmn), convert(BlasInt, k-1))
+                return compat_lu(Val(Tf), B, minmn, k-1)
             end
             Bkkinv = inv(piv)
             @simd for i in ipiv+1:getcolptr(B)[k+1]-1
@@ -48,7 +65,7 @@ function rational_lu!(B::SparseMatrixCSC, col_offset::Vector{Int}, check=true)
         end
     end
     check && checknonsingular(info, Val(false))
-    return LU{Tf,SparseMatrixCSC{Tf,Int}}(B, Vector{BlasInt}(1:minmn), convert(BlasInt, info))
+    return compat_lu(Val(Tf), B, minmn, info)
 end
 
 # function lu!(B::SparseMatrixCSC{<:Rational}, ::Val{Pivot} = Val(false);
@@ -66,7 +83,7 @@ function rational_lu!(B::SparseMatrixCSC{BigRational}, col_offset::Vector{Int}, 
             piv = nonzeros(B)[ipiv]
             if iszero(piv)
                 check && checknonsingular(k-1, Val(false)) # TODO update with Pivot
-                return LU{Tf,SparseMatrixCSC{Tf,Int}}(Tf.(B), Vector{BlasInt}(1:minmn), convert(BlasInt, k-1))
+                return compat_lu_convert(Val(Tf), B, minmn, k-1)
             end
             BigRationals.MPQ.inv!(Bkkinv, piv)
             @simd for i in ipiv+1:getcolptr(B)[k+1]-1
@@ -94,7 +111,7 @@ function rational_lu!(B::SparseMatrixCSC{BigRational}, col_offset::Vector{Int}, 
         end
     end
     check && checknonsingular(info, Val(false))
-    return LU{Tf,SparseMatrixCSC{Tf,Int}}(Tf.(B), Vector{BlasInt}(1:minmn), convert(BlasInt, info))
+    return compat_lu_convert(Tf, B, minmn, info)
 end
 
 # function lu(A::SparseMatrixCSC{<:Rational}, pivot::Union{Val{false}, Val{true}} = Val(false); check::Bool = true)
@@ -111,13 +128,13 @@ function rational_lu(A::SparseMatrixCSC, check::Bool=true, ::Type{Ti}=BigRationa
     #     indices = sortperm(J)
     #     I = I[indices]; J = J[indices]; V = V[indices]
     # end
-    isempty(J) && return LU{Tf,SparseMatrixCSC{Tf,Int}}(Tf.(A), Int[], convert(BlasInt, 0))
+    isempty(J) && return compat_lu_convert(Val(Tf), A, 0, 0)
     m, n = size(A)
     minmn = min(m, n)
     if J[1] != 1 || I[1] != 1
         check && checknonsingular(1, Val(false)) # TODO update with Pivot
         # return LU{eltype(A), typeof(A)}(A, collect(1:minmn), convert(BlasInt, 1))
-        return LU{Tf,SparseMatrixCSC{Tf,Int}}(Tf.(A), collect(1:minmn), convert(BlasInt, 1))
+        return compat_lu_convert(Val(Tf), A, minmn, 1)
     end
 
     col_offset = zeros(Int, minmn) # for each col, index of the pivot element
@@ -208,7 +225,7 @@ function backward_substitution!(U::SparseMatrixCSC, b)
     nothing
 end
 
-function linsolve!(F::LU{<:Any,<:AbstractSparseMatrix}, B::Matrix)
+function linsolve!(F::LU, B::Matrix)
     TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(F)))
     BB = similar(B, TFB, size(B))
     copyto!(BB, B)
@@ -310,7 +327,7 @@ function _inner_dixon_p!(indices::Vector{Int}, Z::Matrix{Rational{T}}, h::BigInt
     return true
 end
 
-function dixon_p(::Val{N}, A::SparseMatrixCSC{Int,Int}, C::LU{Modulo{p,Int32},SparseMatrixCSC{Modulo{p,Int32},Int},Vector{Int}}, Y::Matrix{Int}) where {N,p}
+function dixon_p(::Val{N}, A::SparseMatrixCSC{Int,Int}, C::LU{Modulo{p,Int32}}, Y::Matrix{Int}) where {N,p}
     λs = [norm(x) for x in eachcol(A)]
     append!(λs, [norm(x) for x in eachcol(Y)])
     partialsort!(λs, N)
@@ -363,6 +380,22 @@ function dixon_p(::Val{N}, A::SparseMatrixCSC{Int,Int}, C::LU{Modulo{p,Int32},Sp
     # Rational{Int64} is not enough for tep for instance.
 end
 
+@static if VERSION < v"1.8-"
+    const typeofB = Union{
+        LU{Modulo{2147483647,Int32},SparseMatrixCSC{Modulo{2147483647,Int32},Int}},
+        LU{Modulo{2147483629,Int32},SparseMatrixCSC{Modulo{2147483629,Int32},Int}},
+        LU{Modulo{2147483587,Int32},SparseMatrixCSC{Modulo{2147483587,Int32},Int}}
+    }
+else
+    const typeofB = Union{
+        LU{Modulo{2147483647,Int32},SparseMatrixCSC{Modulo{2147483647,Int32},Int},OneTo{Int}},
+        LU{Modulo{2147483629,Int32},SparseMatrixCSC{Modulo{2147483629,Int32},Int},OneTo{Int}},
+        LU{Modulo{2147483587,Int32},SparseMatrixCSC{Modulo{2147483587,Int32},Int},OneTo{Int}}
+    }
+end
+
+const typeofZ = Union{Matrix{Rational{Int64}},Matrix{Rational{Int128}},Matrix{Rational{BigInt}}}
+
 """
     dixon_solve(::Val{N}, A, Y) where N
 
@@ -373,13 +406,7 @@ Return `X` as a matrix of `Rational{Int128}`.
 """
 function dixon_solve(::Val{N}, A::SparseMatrixCSC{Int,Int}, Y::Matrix{Int}) where N
     # @show time_ns()
-    typeofB = Union{
-        LU{Modulo{2147483647,Int32},SparseMatrixCSC{Modulo{2147483647,Int32},Int}},
-        LU{Modulo{2147483629,Int32},SparseMatrixCSC{Modulo{2147483629,Int32},Int}},
-        LU{Modulo{2147483587,Int32},SparseMatrixCSC{Modulo{2147483587,Int32},Int}}
-    }
     B::typeofB = rational_lu(A, false, Modulo{2147483647,Int32})
-    typeofZ = Union{Matrix{Rational{Int64}},Matrix{Rational{Int128}},Matrix{Rational{BigInt}}}
     if issuccess(B)
         Z = dixon_p(Val(N), A, B, Y)'
     else

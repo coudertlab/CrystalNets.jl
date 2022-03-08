@@ -522,9 +522,16 @@ function _precompile_()
         precompile(Tuple{typeof(CrystalNets.forward_substitution!), SparseMatrixCSC{Ti,Int}, Matrix{Ti}})
         precompile(Tuple{typeof(CrystalNets.backward_substitution!), SparseMatrixCSC{Ti,Int}, Matrix{Ti}})
     end
-    precompile(Tuple{typeof(CrystalNets.linsolve!), LU{Rational{BigInt},SparseMatrixCSC{Rational{BigInt},Int},Vector{Int}}, Matrix{Rational{BigInt}}})
-    for P in primes
-        precompile(Tuple{typeof(CrystalNets.linsolve!), LU{modulo{P},SparseMatrixCSC{modulo{P},Int},Vector{Int}}, Matrix{Int}})
+    @static if VERSION < v"1.8-"
+        precompile(Tuple{typeof(CrystalNets.linsolve!), LU{Rational{BigInt},SparseMatrixCSC{Rational{BigInt},Int}}, Matrix{Rational{BigInt}}})
+        for P in primes
+            precompile(Tuple{typeof(CrystalNets.linsolve!), LU{modulo{P},SparseMatrixCSC{modulo{P},Int}}, Matrix{Int}})
+        end
+    else
+        precompile(Tuple{typeof(CrystalNets.linsolve!), LU{Rational{BigInt},SparseMatrixCSC{Rational{BigInt},Int},Base.OneTo{Int}}, Matrix{Rational{BigInt}}})
+        for P in primes
+            precompile(Tuple{typeof(CrystalNets.linsolve!), LU{modulo{P},SparseMatrixCSC{modulo{P},Int},Base.OneTo{Int}}, Matrix{Int}})
+        end
     end
     for T in (Int64, Int128, BigInt)
         precompile(Tuple{typeof(CrystalNets.copyuntil), Int, Matrix{Rational{T}}, Type{Rational{T}}})
@@ -533,7 +540,11 @@ function _precompile_()
     for N in 1:3
         precompile(Tuple{typeof(CrystalNets.rational_solve), Val{N}, SparseMatrixCSC{Int,Int}, Matrix{Int}})
         for P in primes
-            precompile(Tuple{typeof(CrystalNets.dixon_p), Val{N}, SparseMatrixCSC{Int,Int}, LU{modulo{P},SparseMatrixCSC{modulo{P},Int},Vector{Int}}, Matrix{Int}})
+            @static if VERSION < v"1.8-"
+                precompile(Tuple{typeof(CrystalNets.dixon_p), Val{N}, SparseMatrixCSC{Int,Int}, LU{modulo{P},SparseMatrixCSC{modulo{P},Int}}, Matrix{Int}})
+            else
+                precompile(Tuple{typeof(CrystalNets.dixon_p), Val{N}, SparseMatrixCSC{Int,Int}, LU{modulo{P},SparseMatrixCSC{modulo{P},Int},Base.OneTo{Int}}, Matrix{Int}})
+            end
         end
         precompile(Tuple{typeof(CrystalNets.dixon_solve), Val{N}, SparseMatrixCSC{Int,Int}, Matrix{Int}})
     end

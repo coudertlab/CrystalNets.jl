@@ -36,6 +36,9 @@ end
 
 @testset "Archive" begin
     @info "Checking that all known topologies are recognized (this can take a few minutes)."
+    if Threads.nthreads() == 1
+        @info "Use multiple threads to reduce this time"
+    end
     tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)])
     reverse_archive = collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
     Threads.@threads for (genome, id) in reverse_archive
