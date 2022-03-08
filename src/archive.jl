@@ -156,7 +156,7 @@ replaced by the new default one.
 !!! warning
     The previous default archive cannot be recovered afterwards, so make sure to
     keep a copy if necessary. The default archive is the set of ".arc" files located
-    at $arc_location.
+    at `joinpath(dirname(dirname(pathof(CrystalNets))), "archives")`.
 """
 function clean_default_archive!(custom_arc=nothing; validate=true, refresh=true, name="new")
     rm(arc_location; recursive=true)
