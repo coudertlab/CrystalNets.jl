@@ -96,6 +96,15 @@ SingleNodes: bpq
 
 ```@meta
 DocTestSetup = nothing
+DocTestSetup = begin
+    using CrystalNets
+    import CrystalNets: Options, Clustering, Bonding, StructureType
+    const PeriodicGraphs = CrystalNets.PeriodicGraphs
+    using .PeriodicGraphs
+
+    CrystalNets.toggle_export(false)
+    CrystalNets.toggle_warning(false)
+end
 DocTestFilters = nothing
 ```
 
