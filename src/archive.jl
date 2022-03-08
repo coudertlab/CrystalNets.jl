@@ -100,7 +100,7 @@ function validate_archive(custom_arc)::Dict{String,String}
                 arc = Dict{String,String}()
                 Threads.@threads for (key, id) in collect(parsed)
                     genome::String = try
-                        topological_genome(PeriodicGraph(key))
+                        string(topological_genome(CrystalNet(PeriodicGraph(key))).genome)
                     catch e
                         if e isa InterruptException ||
                           (e isa TaskFailedException && e.task.result isa InterruptException)
@@ -182,9 +182,9 @@ Set the current archive as the new default archive.
     This archive will be kept and used for subsequent runs of CrystalNets.jl, even
     if you restart your Julia session.
 """
-function set_default_archive!()
+function set_default_archive!(name="new")
     global CRYSTAL_NETS_ARCHIVE
-    export_arc(arc_location)
+    export_arc(joinpath(arc_location, name*".arc"))
 end
 
 """

@@ -13,9 +13,6 @@ function _finddirs()
     return joinpath(root, "test", "cif"), root
 end
 
-const known_unstable_nets = ("sxt",) # special case for these known unstable nets
-# llw-z is unstable but part of those handled by CrystalNets
-
 function capture_out(name)
     result = open(name, "w") do out
         redirect_stderr(devnull) do
@@ -42,12 +39,8 @@ end
     tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)])
     reverse_archive = collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
     Threads.@threads for (genome, id) in reverse_archive
-        if id ∈ known_unstable_nets
-            @test_broken !startswith(topological_genome(PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE[id])), "unstable")
-            continue
-        end
         tests[id] = try
-            recognize_topology(topological_genome(PeriodicGraph(genome))) == id
+            topological_genome(CrystalNet(PeriodicGraph(genome))).name == id
         catch
             false
         end
@@ -73,7 +66,7 @@ end
             r = randperm(n)
             offsets = [SVector{3,Int}([rand(-3:3) for _ in 1:3]) for _ in 1:n]
             graph = swap_axes!(offset_representatives!(graph[r], offsets), randperm(3))
-            tests[target] &= recognize_topology(topological_genome(graph)) == target
+            tests[target] &= topological_genome(CrystalNet(graph)).name == target
         end
     end
     for (id, b) in tests
@@ -84,8 +77,9 @@ end
     end
 
     cifs, crystalnetsdir = _finddirs()
-    @test recognize_topology(topological_genome(CrystalNet(
-        redirect_stderr(devnull) do; parse_chemfile(joinpath(cifs, "Moganite.cif")) end))) == "mog"
+    @test topological_genome(CrystalNet(redirect_stderr(devnull) do;
+            parse_chemfile(joinpath(cifs, "Moganite.cif"))
+          end)).name == "mog"
 end
 
 #=
