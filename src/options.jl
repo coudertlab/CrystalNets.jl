@@ -161,7 +161,7 @@ split into new finite clusters using heuristics.
 - `Standard`: make each metallic atom its own vertex and do not bond those together if they
   share a common non-metallic neighbour.
 - `PE`: stands for Points of Extension. Keep points of extension for organic clusters,
-  remove metallic centres and bond their surrounding points of extension
+  remove metallic centres and bond their surrounding points of extension.
 - `PEM`: stands for Points of Extension and Metals. Keep points of extension for organic
   clusters and each metal centre as a separate vertex.
 """

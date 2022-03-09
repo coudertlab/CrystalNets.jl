@@ -912,7 +912,12 @@ function _precompile_()
     # precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String, Bool})
     # precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String})
 
-    # precompile(Tuple{typeof(CrystalNets.), })
+    # executable.jl
+    precompile(Tuple{typeof(CrystalNets.parse_commandline), Vector{String}})
+    precompile(Tuple{typeof(CrystalNets.main), Vector{String}})
+    precompile(Tuple{typeof(CrystalNets.main), Vector{SubString{String}}})
+    precompile(Tuple{typeof(CrystalNets.main), String})
+    precompile(Tuple{typeof(CrystalNets.julia_main)})
 end
 
 _precompile_()

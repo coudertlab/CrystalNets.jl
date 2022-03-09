@@ -85,7 +85,7 @@ end
           end)).name == "mog"
 end
 
-#=
+
 @testset "Executable" begin
     cifs, crystalnetsdir = _finddirs()
     safeARGS = deepcopy(ARGS)
@@ -93,7 +93,7 @@ end
     out = tempname()
     empty!(ARGS)
 
-    push!(ARGS, "-g", "3   1 2  0 0 0   1 2  0 0 1   1 2  0 1 0   1 2  1 0 0")
+    push!(ARGS, "-k", "3   1 2  0 0 0   1 2  0 0 1   1 2  0 1 0   1 2  1 0 0")
     result, written = capture_out(out)
     @test result == 0
     @test written == ["dia"]
@@ -107,7 +107,7 @@ end
 
     empty!(ARGS)
     path = joinpath(cifs, "ABW.cif")
-    push!(ARGS, "-a", CrystalNets.arc_location*"rcsr.arc", path)
+    push!(ARGS, "-a", joinpath(CrystalNets.arc_location, "rcsr.arc"), path)
     result, written = capture_out(out)
     @test result == 0
     @test written == ["sra"]
@@ -122,7 +122,7 @@ end
 
     empty!(ARGS)
     path = joinpath(cifs, "RRO.cif")
-    push!(ARGS, "-a", CrystalNets.arc_location*"rcsr.arc", path)
+    push!(ARGS, "-a", joinpath(CrystalNets.arc_location, "rcsr.arc"), path)
     result, written = capture_out(out)
     @test result == 1
     @test startswith(only(written), "UNKNOWN")
@@ -130,42 +130,49 @@ end
 
     empty!(ARGS)
     path = joinpath(cifs, "HKUST-1.cif")
-    push!(ARGS, "-c", "mof", path)
+    push!(ARGS, "-s", "mof", path)
     result, written = capture_out(out)
     @test result == 0
-    @test written == ["tbo"]
+    @test written == ["AllNodes, SingleNodes: tbo"]
 
     empty!(ARGS)
     path = joinpath(cifs, "HKUST-1_sym.cif")
-    push!(ARGS, "-c", "mof", path)
+    push!(ARGS, "-s", "mof", path)
     result, written = capture_out(out)
     @test result == 0
-    @test written == ["tbo"]
+    @test written == ["AllNodes, SingleNodes: tbo"]
 
     empty!(ARGS)
     path = joinpath(cifs, "Diamond.cif")
     push!(ARGS, "-c", "atom", path)
     result, written = capture_out(out)
     @test result == 0
+    @test written == ["EachVertex: dia"]
+
+    empty!(ARGS)
+    path = joinpath(cifs, "Diamond.cif")
+    push!(ARGS, path)
+    result, written = capture_out(out)
+    @test result == 0
     @test written == ["dia"]
 
     empty!(ARGS)
     path = joinpath(cifs, "ALPO-3.10.7.163.001.cif")
-    push!(ARGS, "-c", "guess", "-b", "input", path)
+    push!(ARGS, "-s", "guess", "-b", "input", path)
     result, written = capture_out(out)
     @test result == 0
-    @test written == ["gme, GME"]
+    @test written == ["AllNodes, SingleNodes: gme, GME"]
 
     empty!(ARGS)
     path = joinpath(cifs, "ALPO-3.10.7.163.001.cif")
-    push!(ARGS, "-c", "guess", "-b", "chemfiles", path)
+    push!(ARGS, "-s", "guess", "-b", "guess", path)
     result, written = capture_out(out)
     @test result == 0
-    @test written == ["gme, GME"]
+    @test written == ["AllNodes, SingleNodes: gme, GME"]
 
     empty!(ARGS)
     path = joinpath(cifs, "ALPO-3.1.1.37.001.cif")
-    push!(ARGS, "-c", "guess", "-b", "input", path)
+    push!(ARGS, "-s", "guess", "-b", "input", path)
     result, written = capture_out(out)
     @test result == 1 # Unknown topology with the input bonds
 
@@ -173,8 +180,8 @@ end
     path = joinpath(cifs, "ALPO-3.1.1.37.001.cif")
     push!(ARGS, "-b", "auto", path)
     result, written = capture_out(out)
-    @test result == 0
-    @test written == ["afi, AFI"]
+    @test_broken result == 0
+    @test_broken written == ["afi, AFI"]
 
     # Test automatic removal of solvent residues and sites with multiple atoms
     empty!(ARGS)
@@ -198,8 +205,8 @@ end
     @test startswith(popfirst!(written), "usage: CrystalNets")
     @test !isempty(popfirst!(written))
     @test occursin("CRYSTAL_FILE", popfirst!(written))
-    @test occursin("Form B", popfirst!(written))
-    @test occursin("Form C", popfirst!(written))
+    # @test occursin("Form B", popfirst!(written))
+    # @test occursin("Form C", popfirst!(written))
     @test isempty(popfirst!(written))
     @test isempty(popfirst!(written))
     @test popfirst!(written) == "Automatic recognition of crystal net topologies."
@@ -210,7 +217,7 @@ end
         CrystalNets._reset_archive!()
     end
 end
-=#
+
 
 @testset "Unstable nets" begin
     for n in 2:4

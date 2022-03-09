@@ -166,9 +166,10 @@ end
 
 Compute the topology of the structure described in the file located at `path`.
 This is essentially equivalent to calling
-`recognize_topology(topological_genome(UnderlyingNets(parse_chemfile(path, options))))`.
-In the case where the structure is not made of interpenetrating nets, return the name of
-the only net.
+`topological_genome(UnderlyingNets(parse_chemfile(path, options)))`.
+
+In the case where the structure is not made of interpenetrating nets, return the topology
+of the only net.
 """
 function determine_topology(path, options::Options)
     genomes::Vector{Tuple{Vector{Int},TopologyResult}} =
