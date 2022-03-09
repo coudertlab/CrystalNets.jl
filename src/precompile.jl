@@ -356,7 +356,7 @@ end
 function _precompile_()
     ccall(:jl_generating_output, Cint, ()) == 1 || return nothing
 
-    _precompile_dependencies()
+    # _precompile_dependencies()
 
     inttypes = (Int8, Int16, Int32, Int64, Int128, BigInt)
     primes = (2147483647, 2147483629, 2147483587)
@@ -470,7 +470,7 @@ function _precompile_()
         precompile(Tuple{typeof(CrystalNets.soft_widen), T})
         precompile(Tuple{typeof(CrystalNets.soft_widen), Rational{T}})
         for D in 1:3
-            precompile(Tuple{typeof(CrystalNets.issingular), smat{N,T,D*D}})
+            precompile(Tuple{typeof(CrystalNets.issingular), smat{D,T,D*D}})
             precompile(Tuple{typeof(CrystalNets.angle), pos{D,T}, pos{D, T}})
             precompile(Tuple{typeof(CrystalNets.dihedral), pos{D,T},pos{D,T},pos{D,T}})
         end
@@ -535,7 +535,7 @@ function _precompile_()
     end
     for T in (Int64, Int128, BigInt)
         precompile(Tuple{typeof(CrystalNets.copyuntil), Int, Matrix{Rational{T}}, Type{Rational{T}}})
-        precompile(Tuple{typeof(CrystalNets._inner_dixon_p!), Vector{Int}, Matrix{Rational{T}, BigInt, Matrix{BigInt}, BigInt, BigInt}})
+        precompile(Tuple{typeof(CrystalNets._inner_dixon_p!), Vector{Int}, Matrix{Rational{T}}, BigInt, Matrix{BigInt}, BigInt, BigInt})
     end
     for N in 1:3
         precompile(Tuple{typeof(CrystalNets.rational_solve), Val{N}, SparseMatrixCSC{Int,Int}, Matrix{Int}})
@@ -853,7 +853,7 @@ function _precompile_()
             precompile(Tuple{typeof(CrystalNets.minimal_volume_matrix), NTuple{D, Vector{Tuple{Int,Int,pos{D,T}}}}})
             precompile(Tuple{typeof(CrystalNets.reduce_with_matrix), cnet{D,T}, smat{D,T,D*D}, Vector{collision}})
             precompile(Tuple{typeof(CrystalNets.minimize), cnet{D,T}, Vector{collision}})
-            precompile(Tuple{typeof(CrystalNets.findfirstbasis), ppos[D,T]})
+            precompile(Tuple{typeof(CrystalNets.findfirstbasis), ppos{D,T}})
             precompile(Tuple{typeof(CrystalNets.findbasis), Vector{Tuple{Int,Int,pos{D,T}}}})
             precompile(Tuple{typeof(CrystalNets.candidate_key), cnet{D,T}, Int, smat{D,T,D*D}, Vector{Tuple{Int,Int,pos{D,T}}}})
         end
@@ -870,7 +870,7 @@ function _precompile_()
         precompile(Tuple{typeof(CrystalNets.extract_through_symmetry), Dict{Int,Vector{smat{3,CrystalNets.soft_widen(T),9}}}, Vector{Vector{Int}}, Vector{smat{3,Int,9}}})
         for D in 1:3
             precompile(Tuple{typeof(CrystalNets.find_candidates), cnet{D,T}, Vector{collision}})
-            precompile(Tuple{typeof(CrystalNets.topological_key{D,T}), Vector{collision}})
+            precompile(Tuple{typeof(CrystalNets.topological_key), cnet{D,T}, Vector{collision}})
             precompile(Tuple{typeof(CrystalNets.topological_key), cnet{D,T}})
         end
     end
@@ -901,18 +901,23 @@ function _precompile_()
     precompile(Tuple{typeof(CrystalNets.determine_topology), String})
     precompile(Tuple{typeof(CrystalNets.guess_topology), String, opts})
     precompile(Tuple{typeof(CrystalNets.guess_topology), String})
-    precompile(Tuple{typeof(CrystalNets.determine_topology_dataset), String, Bool, Bool, opts})
-    precompile(Tuple{typeof(CrystalNets.determine_topology_dataset), String, Bool, Bool})
-    precompile(Tuple{typeof(CrystalNets.determine_topology_dataset), String, Bool})
-    precompile(Tuple{typeof(CrystalNets.determine_topology_dataset), String})
-    precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String, Bool, Bool, opts})
-    precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String, Bool, Bool})
-    precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String, Bool})
-    precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String})
+
+    # The following are not precompiled because execution time always dominates compilation time
+    # precompile(Tuple{typeof(CrystalNets.determine_topology_dataset), String, Bool, Bool, opts})
+    # precompile(Tuple{typeof(CrystalNets.determine_topology_dataset), String, Bool, Bool})
+    # precompile(Tuple{typeof(CrystalNets.determine_topology_dataset), String, Bool})
+    # precompile(Tuple{typeof(CrystalNets.determine_topology_dataset), String})
+    # precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String, Bool, Bool, opts})
+    # precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String, Bool, Bool})
+    # precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String, Bool})
+    # precompile(Tuple{typeof(CrystalNets.guess_topology_dataset), String})
 
     # precompile(Tuple{typeof(CrystalNets.), })
 end
 
+_precompile_()
+
+#=
 if ccall(:jl_generating_output, Cint, ()) == 1 # precompilation
     tw = DOWARN[]; toggle_warning(false)
     te = DOEXPORT[]; toggle_export(false)
@@ -933,9 +938,8 @@ if ccall(:jl_generating_output, Cint, ()) == 1 # precompilation
                                           Clustering.SingleNodes,
                                           Clustering.Standard],
                              throw_error=true)
-    
+
     toggle_warning(tw)
     toggle_export(te)
 end
-
-#_precompile_()
+=#
