@@ -36,7 +36,7 @@ function parse_commandline(args)
                          epilog = """\n\n\n\nSTRUCTURE options:\n\n
                          \ua0\ua0\ua0* mof: consider the input as a MOF. Identify organic and inorganic clusters using heuristics.\n\n
                          \ua0\ua0\ua0* zeolite: attempt to force each O atom two have exactly 2 non-O neighbours.\n\n
-                         \ua0\ua0\ua0* cluster: like mof but metallic atoms are not given a larger radius for bond detection.
+                         \ua0\ua0\ua0* cluster: like mof but metallic atoms are not given a larger radius for bond detection.\n\n
                          \ua0\ua0\ua0* guess: discard the input residues and try structure mode "cluster". If it fails, fall back to "auto".\n\n
                          \ua0\ua0\ua0* auto: no specific structure. Default option.\n\n
                          \n\n

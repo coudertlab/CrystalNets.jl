@@ -104,8 +104,12 @@ using CrystalNets
 
 const root = dirname(dirname(pathof(CrystalNets)))
 
-create_app(root, INSTALLATION_PATH; precompile_statements_file=abspath(root, "src", "precompile.jl"))
+create_app(root, INSTALLATION_PATH;
+           precompile_statements_file=abspath(root, "src", "precompile.jl"),
+           filter_stdlibs=true)
 ```
+
+Compilation can take between fifteen minutes and an hour, depending on your hardware and the version of Julia.
 
 The executable will be located in the "bin" subdirectory of the specified `INSTALLATION_PATH`, under the name "CrystalNets".
 
@@ -117,3 +121,7 @@ dia
 ```
 
 Run `CrystalNets --help` for the list of options available to the executable.
+
+!!! tip
+    In terms of performance, the compiled executable is the best option if you only want to identify a few structures from time to time. For intensive workloads with many structures to identify, it is best to use `CrystalNets.jl` as a Julia module through the
+    [`determine_topology_dataset`](@ref) and [`guess_topology_dataset`](@ref) functions. The module is also the best option to perform more advanced analyses on the net in Julia, or to use the [`Options`](@ref) unavailable to the executable.
