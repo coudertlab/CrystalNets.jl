@@ -30,8 +30,12 @@ const minimal_logger = Logging.ConsoleLogger(; meta_formatter=no_metadata_metafm
 macro ifwarn(ex)
     return quote
         if (DOWARN[]::Bool)
-            with_logger(minimal_logger) do
+            @static if VERSION < v"1.7-"
                 $(esc(ex))
+            else
+                with_logger(minimal_logger) do
+                    $(esc(ex))
+                end
             end
         end
     end
@@ -280,7 +284,11 @@ const element_categories = Symbol[ # populated using PeriodicTable.jl
 
 
 function string_atomtype(t::Symbol)
-    replace(string(t), "Pc" => 'P', "Ss" => 'S')
+    @static if VERSION < v"1.7-"
+        replace(replace(string(t), "Pc" => 'P'), "Ss" => 'S')
+    else
+        replace(string(t), "Pc" => 'P', "Ss" => 'S')
+    end
 end
 
 function representative_atom(t::Symbol, default::Int=0)
