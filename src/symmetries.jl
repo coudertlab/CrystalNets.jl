@@ -105,7 +105,7 @@ function find_hall_number(hallsymbol, hm, it)
             end
         end
         hall == 0 || return hall
-        @ifwarn @warn "Hall symbol provided but not recognised: $hallsymbol"
+        @ifwarn @warn lazy"Hall symbol provided but not recognised: $hallsymbol"
     end
     if hm != ""
         hm = hm[1]*lowercase(@view hm[2:end])
@@ -115,7 +115,7 @@ function find_hall_number(hallsymbol, hm, it)
         hall = get(SPACE_GROUP_FULL, dense_hm, 0)
         hall == 0 || return hall
         @ifwarn begin
-            @warn "H-M symbol provided but not recognised : $hm"
+            @warn lazy"H-M symbol provided but not recognised : $hm"
             keysHM = collect(keys(SPACE_GROUP_HM))
             suggestions = keysHM[findall(startswith(dense_hm), keysHM)]
             keysFULL = collect(keys(SPACE_GROUP_FULL))
@@ -128,7 +128,7 @@ function find_hall_number(hallsymbol, hm, it)
     end
     if it != 0
         if it < 1 || it > 230
-            @ifwarn @error "International Table number provided is outside of the allowed range (1-230) : $it"
+            @ifwarn @error lazy"International Table number provided is outside of the allowed range (1-230) : $it"
             return 1
         end
         return SPACE_GROUP_IT[it]

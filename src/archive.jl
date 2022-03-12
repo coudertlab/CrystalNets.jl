@@ -287,7 +287,7 @@ The input `id` and `genome` are not modified by this operation.
 """
 function add_to_current_archive!(id::AbstractString, genome::AbstractString)
     if !isnumeric(first(genome))
-        throw(ArgumentError("""
+        throw(ArgumentError(lazy"""
             This genome ("$genome") does not look like a genome. Are you sure you did not mix `id` and `genome`?
 
             If you really want to associate this id with this genome, use `CrystalNets._update_archive!(id, genome)`
@@ -297,14 +297,14 @@ function add_to_current_archive!(id::AbstractString, genome::AbstractString)
     for (x,y) in CRYSTAL_NETS_ARCHIVE
         if x == genome
             y == id && return
-            throw(ArgumentError("""
+            throw(ArgumentError(lazy"""
                 This genome is already registered under the name "$y".
 
                 If you really want to change the name associated with it, use `CrystalNets._update_archive!(id, genome)`
                 """))
         end
         if y == id
-            throw(ArgumentError("""
+            throw(ArgumentError(lazy"""
                 The name $id already corresponds to a different genome: "$x"
 
                 If you really want to store another genome with the same name, use `CrystalNets._update_archive!(id, genome)`

@@ -47,10 +47,10 @@ function find_refid(eqs)
         end
         immediate_continue && continue
         if not_at_the_end
-            error("Unknown end of line marker for symmetry equivalent {$eq}")
+            error(lazy"Unknown end of line marker for symmetry equivalent {$eq}")
         end
         if length(refid) != 3 || refid[end] == ""
-            error("Input string {$eq} is not a valid symmetry equivalent")
+            error(lazy"Input string {$eq} is not a valid symmetry equivalent")
         end
         return tuple(lowercase(refid[1]), lowercase(refid[2]), lowercase(refid[3]))
     end
@@ -123,7 +123,7 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                 if !isnothing(curr_val)
                     sign = isnothing(curr_sign) ? 1 : 2*curr_sign - 1
                     @ifwarn if !iszero(ofs[i])
-                        @warn "Existing offset already existing for position $i in {$s}"
+                        @warn lazy"Existing offset already existing for position $i in {$s}"
                     end
                     ofs[i] += sign * Rational{Int}(curr_val)
                     curr_val = nothing
@@ -136,13 +136,13 @@ function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "
                 elseif x.kind === Tokenize.Tokens.MINUS
                     curr_sign = false
                 elseif k === Tokenize.Tokens.COMMA || k === Tokenize.Tokens.SEMICOLON
-                    i > 2 && error("Too many dimensions specified for symmetry equivalent {$s}")
-                    something_written || error("{$s} is not a symmetry equivalent (no dependency expressed in position $i)")
+                    i > 2 && error(lazy"Too many dimensions specified for symmetry equivalent {$s}")
+                    something_written || error(lazy"{$s} is not a symmetry equivalent (no dependency expressed in position $i)")
                     something_written = false
                     i += 1
                 else
-                    k !== Tokenize.Tokens.ENDMARKER && error("Unknown end of line marker for symmetry equivalent {$s}")
-                    i != 3 && error("Input string \"$s\" is not a valid symmetry equivalent")
+                    k !== Tokenize.Tokens.ENDMARKER && error(lazy"Unknown end of line marker for symmetry equivalent {$s}")
+                    i != 3 && error(lazy"Input string \"$s\" is not a valid symmetry equivalent")
                 end
             end
         end
@@ -242,7 +242,7 @@ end
 
 function Cell(mat::StaticArray{Tuple{3,3},BigFloat})
     if !all(isfinite, mat) || iszero(det(mat))
-        @ifwarn @error "Suspicious unit cell of matrix $(Float64.(mat)). Is the input really periodic? Using a cubic unit cell instead."
+        @ifwarn @error lazy"Suspicious unit cell of matrix $(Float64.(mat)). Is the input really periodic? Using a cubic unit cell instead."
         return Cell()
     end
     return Cell(Cell(), mat)
@@ -1007,7 +1007,7 @@ function _collect_net!(ret::Vector{<:CrystalNet{D}}, encountered, idx, c, cluste
     j = get!(encountered, c.graph, idx)
     if j == idx
         export_default(Crystal{Nothing}(c.cell, types, c.pos[vmap], graph, c.options),
-            "subnet_$clustering", c.options.name, c.options.export_subnets)
+            lazy"subnet_$clustering", c.options.name, c.options.export_subnets)
         ret[idx] = try
             CrystalNet{D}(c.cell, types, graph, c.options)
         catch e
@@ -1043,7 +1043,7 @@ function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
             _collect_net!(ret, encountered, idx, allnodes_to_singlenodes(c), clustering)
         else
             _collect_net!(ret, encountered, idx, c, clustering)
-            export_default(c, "clusters_$clustering", c.options.name, c.options.export_clusters)
+            export_default(c, lazy"clusters_$clustering", c.options.name, c.options.export_clusters)
         end
         idx += 1
     end
@@ -1425,7 +1425,7 @@ Base.get(x::TopologyResult, c::_Clustering, default) = get(Returns(default), x, 
 
 function Base.getindex(x::TopologyResult, c::_Clustering)
     if x.attributions[Int(c)] == 0
-        throw(ArgumentError("No stored topology result for clustering $c"))
+        throw(ArgumentError(lazy"No stored topology result for clustering $c"))
     end
     return x.results[x.attributions[Int(c)]]
 end

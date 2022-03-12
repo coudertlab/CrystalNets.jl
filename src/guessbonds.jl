@@ -57,7 +57,7 @@ function guess_bonds(pos, types, mat, options)
             radii[i] = vdwradii[t]*(1 + options.wider_metallic_bonds*(ismetal[t]|ismetalloid[t])*0.5)
         else
             radii[i] = 0.0
-            @ifwarn @warn "Unrecognized atom type \"$t\" will be considered a dummy atom."
+            @ifwarn @warn lazy"Unrecognized atom type \"$t\" will be considered a dummy atom."
         end
     end
     cutoff = 3*(options.cutoff_coeff^3.1) * max(maximum(radii), 0.833)

@@ -72,7 +72,7 @@ function clustering_from_num(x::Integer)
     elseif x == 8
         return Clustering.PEM
     end
-    throw(ArgumentError("No clustering from number $x"))
+    throw(ArgumentError(lazy"No clustering from number $x"))
 end
 
 function clustering_from_symb(x::Symbol)
@@ -93,7 +93,7 @@ function clustering_from_symb(x::Symbol)
     elseif x === :PEM
         return Clustering.PEM
     end
-    throw(ArgumentError("No clustering from symbol $x"))
+    throw(ArgumentError(lazy"No clustering from symbol $x"))
 end
 
 function Base.parse(::Type{_Clustering}, s::AbstractString)
@@ -114,7 +114,7 @@ function Base.parse(::Type{_Clustering}, s::AbstractString)
     elseif s == "PEM"
         return Clustering.PEM
     end
-    throw(ArgumentError("No clustering from string $x"))
+    throw(ArgumentError(lazy"No clustering from string $x"))
 end
 
 """
@@ -246,7 +246,7 @@ struct ClusterKinds
             for x in sbu
                 old = get!(dict, x, i)
                 if old != i
-                    throw(ArgumentError("Element \"$x\" appears in at least two SBU kinds ($old and $i)."))
+                    throw(ArgumentError(lazy"Element \"$x\" appears in at least two SBU kinds ($old and $i)."))
                 end
             end
         end
@@ -261,7 +261,7 @@ function Base.getindex(sbus::ClusterKinds, x::Symbol)
     ret = get(sbus.dict, x, 0)
     ret == 0 || return ret
     num = get(atomic_numbers, x, 0)
-    num == 0 && throw(MissingAtomInformation("unknown atom name: $x."))
+    num == 0 && throw(MissingAtomInformation(lazy"unknown atom name: $x."))
     return sbus[num]
 end
 function getmetal(sbus::ClusterKinds)

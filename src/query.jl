@@ -185,7 +185,7 @@ determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs.
 
 macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
     crystaldef = skipcrystal ? nothing : :(crystal = parse_chemfile(path, $opts))
-    msg = "(found by $msg)"
+    msg = lazy"(found by $msg)"
     ifprintinfo = isempty(msg) ? nothing : :(CrystalNets.@ifwarn @info $msg)
 
     return esc(quote
@@ -425,16 +425,16 @@ function determine_topology_dataset(path, save, autoclean, options::Options)
         end
         mv(resultdir, tmpresultdir)
         Serialization.serialize(resultdir, result)
-        println("Topologies of $path saved at $resultdir")
+        println("Topologies of ", path, " saved at ", resultdir)
         if autoclean
             rm(tmpresultdir; recursive=true)
         else
-            println("Temporary files kept at $tmpresultdir")
+            println("Temporary files kept at ", tmpresultdir)
         end
     elseif autoclean
         rm(resultdir; recursive=true)
     else
-        println("Temporary files kept at $resultdir")
+        println("Temporary files kept at ", resultdir)
     end
     return result
 end
@@ -540,16 +540,16 @@ function guess_topology_dataset(path, save, autoclean, options::Options)
         end
         mv(resultdir, tmpresultdir)
         Serialization.serialize(resultdir, result)
-        println("Guessed topologies of $path saved at $resultdir")
+        println("Guessed topologies of ", path, " saved at ", resultdir)
         if autoclean
             rm(tmpresultdir; recursive=true)
         else
-            println("Temporary files kept at $tmpresultdir")
+            println("Temporary files kept at ", tmpresultdir)
         end
     elseif autoclean
         rm(resultdir; recursive=true)
     else
-        println("Temporary files kept at $resultdir")
+        println("Temporary files kept at ", resultdir)
     end
     return result
 end

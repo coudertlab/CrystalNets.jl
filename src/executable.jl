@@ -200,7 +200,7 @@ function parse_to_str_or_nothing(@nospecialize(x))::Union{Nothing,String,Int}
     str = try
         string(x)
     catch e
-        return parse_error("Unrecognized argument format: $x.")
+        return parse_error(lazy"Unrecognized argument format: $x.")
     end
     return String(strip(str))
 end
@@ -232,7 +232,7 @@ function split_clusterings(s)
     elseif s == "pem"
         Clustering.PEM
     else
-        return parse_error("""Unknown clustering mode: $s. Choose between $usable_clusterings.""")
+        return parse_error(lazy"Unknown clustering mode: $s. Choose between $usable_clusterings.")
     end
 end
 
@@ -349,7 +349,7 @@ function main(args)
                 elseif structure_mode == "auto"
                     StructureType.Auto
                 else
-                    return parse_error("""Unknown structure type: $structure_mode. Choose between $usable_structuretypes.""")
+                    return parse_error(lazy"Unknown structure type: $structure_mode. Choose between $usable_structuretypes.")
                 end
             end
         end
@@ -385,7 +385,7 @@ function main(args)
                 elseif bond_detect == "auto"
                     Bonding.Auto
                 else
-                    return parse_error("""Unknown bond detection mode: $bond_detect. Choose between $usable_bondings.""")
+                    return parse_error(lazy"Unknown bond detection mode: $bond_detect. Choose between $usable_bondings.")
                 end
             end
         end
@@ -406,7 +406,7 @@ function main(args)
         iskey::Bool = parsed_args[:key]
         if iskey && (structure_mode isa String || clustering_mode isa String)
             msg = structure_mode isa String ? "structure type" : "clustering mode"
-            return parse_error("""Cannot consider the input as a topological key while also using a specified $(msg) because keys miss atom type information.""")
+            return parse_error(lazy"Cannot consider the input as a topological key while also using a specified $(msg) because keys miss atom type information.")
         end
 
         @parse_to_str_or_nothing input input_file

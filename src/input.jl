@@ -88,7 +88,7 @@ function parse_cif(file)
                 if complete_lastword == ""
                     k::Int = findprev(isequal('\n'), l, i)
                     n::Int = count("\n", l[1:k])
-                    error("Unknown word \"$(l[i:j])\" at line $(n+1), position $(i-k):$(j-k)")
+                    error(lazy"Unknown word \"$(l[i:j])\" at line $(n+1), position $(i-k):$(j-k)")
                 end
                 all_data[lastword] = complete_lastword*' '*l[i:j]
             end
@@ -107,13 +107,13 @@ function parsestrip(T, s)
     if x isa T
         return x
     end
-    throw(ArgumentError("Invalid CIF file (cannot parse \"$s\" as a $T)."))
+    throw(ArgumentError(lazy"Invalid CIF file (cannot parse \"$s\" as a $T)."))
 end
 parsestrip(s) = parsestrip(BigFloat, s)
 
 function popstring!(parsed, name)
     if !haskey(parsed, name)
-        throw(ArgumentError("Invalid CIF file (cannot find \"_$name\" field)."))
+        throw(ArgumentError(lazy"Invalid CIF file (cannot find \"_$name\" field)."))
     end
     x = pop!(parsed, name)
     if x isa String
@@ -124,7 +124,7 @@ end
 
 function popvecstring!(parsed, name)
     if !haskey(parsed, name)
-        throw(ArgumentError("Invalid CIF file (cannot find \"_$name\" field in loop)."))
+        throw(ArgumentError(lazy"Invalid CIF file (cannot find \"_$name\" field in loop)."))
     end
     x = pop!(parsed, name)
     if x isa String
@@ -184,7 +184,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
             end
         end
         if !removed_identity
-            @ifwarn @warn "The _symmetry_equiv_pos_as_xyz field did not contain the \"$(join(refid, ", "))\" entry."
+            @ifwarn @warn lazy"""The _symmetry_equiv_pos_as_xyz field did not contain the \"$(join(refid, ", "))\" entry."""
         end
     end
 
@@ -211,7 +211,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
             @ifwarn begin
                 lab = labels[i]
                 if lab ∉ alreadywarned
-                    @warn "Atom of label \"$lab\" appears multiple time in the input CIF description."
+                    @warn lazy"Atom of label \"$lab\" appears multiple time in the input CIF description."
                     push!(alreadywarned, lab)
                 end
             end
@@ -245,12 +245,12 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
             if x == 0 || y == 0
                 empty!(bonds)
                 missingatom = x == 0 ? bond_a[i] : bond_b[i]
-                @ifwarn @error "Atom $missingatom, used in a bond, has either zero or multiple placements in the CIF file. This invalidates all bonds from the file, which will thus be discarded."
+                @ifwarn @error lazy"Atom $missingatom, used in a bond, has either zero or multiple placements in the CIF file. This invalidates all bonds from the file, which will thus be discarded."
                 break
             end
             d = 1.001f0*dists[i] # to avoid rounding errors
             if isnan(d) || (d != -Inf32 && (d ≤ 0f0 || isinf(d)))
-                @ifwarn @error "Invalid bond distance of $d between atoms $(bond_a[i]) and $(bond_b[i])"
+                @ifwarn @error lazy"Invalid bond distance of $d between atoms $(bond_a[i]) and $(bond_b[i])"
                 continue
             end
             push!(bonds[x], (y, d))
@@ -587,13 +587,13 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
             if flag && any(>(2.6), lengths)
                 # This warning could be out of a  @ifwarn because it reliably indicates
                 # cases where the input was not properly cleaned
-                @ifwarn @error "Very suspicious connectivity found for $(options.name)."
+                @ifwarn @error lazy"Very suspicious connectivity found for $(options.name)."
                 flag = false
             end
         else
             at = get(atomic_numbers, t, nothing)
             if at === nothing
-                @ifwarn "Unrecognized atom type \"$t\" will be considered a dummy atom."
+                @ifwarn lazy"Unrecognized atom type \"$t\" will be considered a dummy atom."
                 push!(toremove, i)
             elseif ismetal[at::Int]
                 for u in neighbors(graph, i)
@@ -602,14 +602,14 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
                         u.v ∈ toremove && continue
                         Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i]))) > 1.45 && continue
                         @ifwarn if isempty(toremove)
-                            @warn "C suspiciously close to a metal (bond length: $bondlength) will be removed."
+                            @warn lazy"C suspiciously close to a metal (bond length: $bondlength) will be removed."
                         end
                         push!(toremove, u.v)
                     elseif typu == t && u.v > i
                         u.v ∈ toremove && continue
                         Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i]))) > 0.9 && continue
                         @ifwarn if isempty(toremove)
-                            @warn "$t atoms suspiciously close to one another(bond length: $bondlength). One will be removed."
+                            @warn lazy"$t atoms suspiciously close to one another(bond length: $bondlength). One will be removed."
                         end
                         push!(toremove, u.v)
                     end
@@ -797,8 +797,8 @@ function sanity_checks!(graph, pos, types, mat, options)
                 if (order_s, order_d, blength) ∉ alreadywarned
                     push!(alreadywarned, (order_s, order_d, blength))
                     bentmsg = bent_bond ? " and bent" : ""
-                    @ifwarn @warn "Suspiciously large$bentmsg bond found: $blength pm between $order_s and $order_d." *
-                        (removeflag ? " Such bonds are probably spurious and will be deleted." : "")
+                    @ifwarn @warn lazy"""Suspiciously large$bentmsg bond found: $blength pm between $order_s and $order_d. \
+                        $(removeflag ? " Such bonds are probably spurious and will be deleted." : "")"""
                     ret = true
                 end
                 if removeflag

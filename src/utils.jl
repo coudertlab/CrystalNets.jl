@@ -1,5 +1,22 @@
 ## Common utility functions
 
+@static if VERSION < v"1.8-"
+    # copy-pasted from the implementation of @lazy_str in Base
+    macro lazy_str(text)
+        parts = Any[]
+        lastidx = idx = 1
+        while (idx = findnext('$', text, idx)) !== nothing
+            lastidx < idx && push!(parts, text[lastidx:idx-1])
+            idx += 1
+            expr, idx = Meta.parseatom(text, idx; filename=string(__source__.file))
+            push!(parts, esc(expr))
+            lastidx = idx
+        end
+        lastidx <= lastindex(text) && push!(parts, text[lastidx:end])
+        :(string($(parts...)))
+    end
+end
+
 """
     @toggleassert expression
 
@@ -106,15 +123,15 @@ function export_default(c, obj=nothing, name=nothing, path=tempdir(); repeats=no
         _name = tmpexportname(path, (obj isa Nothing ? string(typeof(c)) : obj)*'_', name, ".vtf")
         truepath = replace(joinpath(path, _name), ('\\' => "/"))
         if obj isa Nothing
-            println("Saving file (representing $(typeof(c))) at $truepath")
+            println(lazy"Saving file (representing $(typeof(c))) at $truepath")
         else
-            println("Export of $obj is enabled: saving file at $truepath")
+            println(lazy"Export of $obj is enabled: saving file at $truepath")
         end
         try
             export_vtf(truepath, c, _repeats)
         catch e
             if e isa SystemError
-                @error "Failed to export because of the following error: $e"
+                @error lazy"Failed to export because of the following error: $e"
             else
                 rethrow()
             end
@@ -500,10 +517,10 @@ function nextword(l::String, i::Int)
     end
     if instatus
         if inmultiline
-            error("Invalid syntax: opening multiline field at position $start is not closed")
+            error(lazy"Invalid syntax: opening multiline field at position $start is not closed")
         end
         if inquote
-            error("Invalid syntax: opening quote $quotesymb at position $start is not closed")
+            error(lazy"Invalid syntax: opening quote $quotesymb at position $start is not closed")
         end
     end
     return (start, n, n)

@@ -455,12 +455,22 @@ function _precompile_()
     for S in (Int, Nothing)
         for D in 1:3
             precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph{D}, String, String, String}, (S,))
+            @static if VERSION > v"1.8-"
+                precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph{D}, Base.LazyString, String, String}, (S,))
+            end
             for T in inttypes
                 precompile_kwarg(Tuple{typeof(export_default), cnet{D, T}, String, String, String}, (S,))
+                @static if VERSION > v"1.8-"
+                    precompile_kwarg(Tuple{typeof(export_default), cnet{D, T}, Base.LazyString, String, String}, (S,))
+                end
             end
         end
         precompile_kwarg(Tuple{typeof(export_default), cryst, String, String, String}, (S,))
         precompile_kwarg(Tuple{typeof(export_default), crystclust, String, String, String}, (S,))
+        @static if VERSION > v"1.8-"
+            precompile_kwarg(Tuple{typeof(export_default), cryst, Base.LazyString, String, String}, (S,))
+            precompile_kwarg(Tuple{typeof(export_default), crystclust, Base.LazyString, String, String}, (S,))
+        end
     end
     # precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph2D, String, String, String}, (kwargs,))
     # precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph3D, String, String, String}, (kwargs,))

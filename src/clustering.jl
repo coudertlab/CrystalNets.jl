@@ -904,16 +904,16 @@ function find_sbus(crystal, kinds=default_sbus)
         class = kinds[atom_name]
         if class == 0 # atom not identified
             if atom_name === Symbol("")
-                throw(MissingAtomInformation("""
+                throw(MissingAtomInformation(lazy"""
                 the input is a periodic graph with no atom information, it cannot be recognized as a MOF.
                 """))
             elseif atom_name === Symbol("_")
-                throw(MissingAtomInformation("""
+                throw(MissingAtomInformation(lazy"""
                 the input file format does not contain enough information on the atoms to distinguish the organic and inorganic SBUs.
                 Please use a file format containing at least the atom types and in order to use MOF recognition.
                 """))
             else
-                throw(MissingAtomInformation("unhandled atom type: $(element_categories[atomic_numbers[atom_name]]) (for atom $atom_name)."))
+                throw(MissingAtomInformation(lazy"unhandled atom type: $(element_categories[atomic_numbers[atom_name]]) (for atom $atom_name)."))
             end
         end
         classes[i] = class
@@ -1663,7 +1663,7 @@ end
 function regroup_toremove(cryst, tomerge, toremove_list, msg)
     if isempty(toremove_list)
         ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, cryst.types, cryst.pos, cryst.graph, Options(cryst.options; _pos=cryst.pos)))
-        export_default(ret, "clusters_$msg", cryst.options.name, cryst.options.export_clusters)
+        export_default(ret, lazy"clusters_$msg", cryst.options.name, cryst.options.export_clusters)
         return ret
     end
     toremove_all = reduce(vcat, toremove_list)
@@ -1779,7 +1779,7 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
 
 
     ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, types, pos, graph, Options(cryst.options; _pos=pos)))
-    export_default(ret, "clusters_$msg", cryst.options.name, cryst.options.export_clusters)
+    export_default(ret, lazy"clusters_$msg", cryst.options.name, cryst.options.export_clusters)
     return ret
 end
 
@@ -1894,7 +1894,7 @@ function regroup_vmap(cryst, vmap, isolate, msg)
     if !isempty(periodicsbus)
         # Abandon. This can happen for example if a single-C SBU has been split previously
         trimmed_c = trimmed_crystal(cryst)
-        export_default(trimmed_c, "clusters_$msg", trimmed_c.options.name, trimmed_c.options.export_clusters)
+        export_default(trimmed_c, lazy"clusters_$msg", trimmed_c.options.name, trimmed_c.options.export_clusters)
         return trimmed_c
     end
     edgs = PeriodicEdge3D[]
@@ -1976,7 +1976,7 @@ function regroup_vmap(cryst, vmap, isolate, msg)
         types[i] = Symbol(join(last.(newname)))
     end
     ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, types, pos, graph, Options(cryst.options; _pos=pos)))
-    export_default(ret, "clusters_$msg", cryst.options.name, cryst.options.export_clusters)
+    export_default(ret, lazy"clusters_$msg", cryst.options.name, cryst.options.export_clusters)
     return ret
 end
 
@@ -2001,7 +2001,7 @@ function allnodes_to_singlenodes(cryst::Crystal{Nothing})
     clustername = only(cryst.options.clusterings) == Clustering.Standard ? "standard" : "singlenodes"
     if !any(organics)
         c = trimmed_crystal(cryst)
-        export_default(c, "clusters_$clustername", c.options.name, c.options.export_clusters)
+        export_default(c, lazy"clusters_$clustername", c.options.name, c.options.export_clusters)
         return c
     end
     vmap = zeros(Int, n)
