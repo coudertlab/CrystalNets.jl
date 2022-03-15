@@ -440,8 +440,9 @@ function determine_topology_dataset(path, save, autoclean, options::Options)
 end
 function determine_topology_dataset(path, save=true, autoclean=true; kwargs...)
     opts, restore_warns = db_options(; kwargs...)
-    determine_topology_dataset(path, save, autoclean, opts)
+    ret = determine_topology_dataset(path, save, autoclean, opts)
     restore_warns && (DOWARN[] = true)
+    ret
 end
 
 
@@ -555,6 +556,7 @@ function guess_topology_dataset(path, save, autoclean, options::Options)
 end
 function guess_topology_dataset(path, save=true, autoclean=true; kwargs...)
     opts, restore_warns = db_options(; structure=StructureType.Guess, kwargs...)
-    guess_topology_dataset(path, save, autoclean, opts)
+    ret = guess_topology_dataset(path, save, autoclean, opts)
     restore_warns && (DOWARN[] = true)
+    ret
 end
