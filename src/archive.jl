@@ -97,23 +97,24 @@ function validate_archive(custom_arc)::Dict{String,String}
                     end
                     @info "Keys will be converted to the topological genome used by CrystalNets. This may take a while."
                 end
-                arc = Dict{String,String}()
+                arc_per_thread = [Pair{String,String}[] for _ in 1:nthreads()]
                 Threads.@threads for (key, id) in collect(parsed)
                     genome::String = try
                         string(topological_genome(CrystalNet(PeriodicGraph(key))).genome)
                     catch e
-                        if e isa InterruptException ||
-                          (e isa TaskFailedException && e.task.result isa InterruptException)
-                            rethrow()
-                        end
+                        isinterrupt(e) && rethrow()
                         println(stderr, "Failed for net "*id*" with error:")
                         Base.display_error(stderr, e, catch_backtrace())
                         println(stderr)
                         ""
                     end
                     if !isempty(genome)
-                        arc[genome] = id
+                        push!(arc_per_thread[threadid()], (genome => id))
                     end
+                end
+                arc = Dict{String,String}(pop!(arc_per_thread))
+                for _arc in arc_per_thread
+                    merge!(arc, Dict{String,String}(_arc))
                 end
             end
         catch e
@@ -351,10 +352,7 @@ function make_archive(path, destination, verbose=false)
         end
         if flag
             e = flagerror[]
-            if e isa InterruptException ||
-              (e isa TaskFailedException && e.task.result isa InterruptException)
-                rethrow()
-            end
+            isinterrupt(e) && rethrow()
             if e isa Vector{Tuple{Vector{Int},String}}
                 for (vmap, instability) in e
                     println(stderr, "The component of file ", f, " containing atoms ",

@@ -1011,9 +1011,7 @@ function _collect_net!(ret::Vector{<:CrystalNet{D}}, encountered, idx, c, cluste
         ret[idx] = try
             CrystalNet{D}(c.cell, types, graph, c.options)
         catch e
-            if e isa InterruptException || (e isa TaskFailedException && e.task.result isa InterruptException) || c.options.throw_error
-                rethrow()
-            end
+            (c.options.throw_error || isinterrupt(e)) && rethrow()
             CrystalNet{D}(c.cell, Options(c.options; error=(string(e)::String)))
         end
     else
@@ -1190,10 +1188,11 @@ end
 macro tryinttype(T)
     tmin = :(typemin($T))
     tmax = :(typemax($T))
+    S = :(double_widen($T))
     return esc(quote
         if (($tmin <= m) & (M <= $tmax))
-            net = CrystalNet{D,Rational{$T}}(cell, types, graph,
-                        Rational{$T}.(placement), options)
+            net = CrystalNet{D,Rational{$S}}(cell, types, graph,
+                        Rational{$S}.(placement), options)
             return net
         end
     end)

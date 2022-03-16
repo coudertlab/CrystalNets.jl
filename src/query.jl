@@ -28,13 +28,14 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
             shrunk_net, _collisions = minimize(shrunk_net, collisions)
             flag = false
         catch e
-            net.options.throw_error && rethrow()
-            if T == Rational{BigInt} || !(e isa OverflowError || e isa InexactError)
+            isinterrupt(e) && rethrow()
+            if T == Rational{BigInt} || !isoverfloworinexact(e)
+                net.options.throw_error && rethrow()
                 return TopologicalGenome(string(e)::String)
             end
         end
         if flag # not in the catch to avoid a StackOverflow of errors in case something goes wrong
-            newnet = CrystalNet{D,widen(soft_widen(T))}(net; ignore_types=false)
+            newnet = CrystalNet{D,widen(T)}(net; ignore_types=false)
             return topological_genome(newnet)
         end
         _collisions isa Nothing && return TopologicalGenome(shrunk_net.graph, nothing, true)
@@ -58,11 +59,13 @@ function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNo
         ne(g) == 0 && return TopologicalGenome(net.options.error)
         return TopologicalGenome(g, recognize_topology(g), unstable)
     catch e
-        if T == Rational{BigInt} || !(e isa OverflowError || e isa InexactError)
+        isinterrupt(e) && rethrow()
+        if T == Rational{BigInt} || !isoverfloworinexact(e)
+            net.options.throw_error && rethrow()
             return TopologicalGenome(string(e)::String)
         end
     end
-    return topological_genome(CrystalNet{D,widen(soft_widen(T))}(net), collisions)
+    return topological_genome(CrystalNet{D,widen(T)}(net), collisions)
 end
 
 """
@@ -386,10 +389,7 @@ function determine_topology_dataset(path, save, autoclean, options::Options)
         genomes::Vector{Tuple{Vector{Int},TopologyResult}} = try
             topological_genome(UnderlyingNets(parse_chemfile(f, options)))
         catch e
-            if e isa InterruptException ||
-              (e isa TaskFailedException && e.task.result isa InterruptException)
-                rethrow()
-            end
+            (options.throw_error || isinterrupt(e)) && rethrow()
             [(Int[], TopologyResult(string(e)))]
         end
         if isempty(genomes)
@@ -510,10 +510,7 @@ function guess_topology_dataset(path, save, autoclean, options::Options)
         genome::TopologicalGenome = try
             guess_topology(f, options)
         catch e
-            if e isa InterruptException ||
-              (e isa TaskFailedException && e.task.result isa InterruptException)
-                rethrow()
-            end
+            (options.throw_error || isinterrupt(e)) && rethrow()
             TopologicalGenome(escape_string(string(e)::String))
         end
         open(joinpath(resultdir, string(threadid())), "a") do results

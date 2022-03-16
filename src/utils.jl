@@ -318,24 +318,23 @@ function representative_atom(t::Symbol, default::Int=0)
 end
 
 """
-    soft_widen(::Type)
+    double_widen(::Type)
 
 Internal function used to selectively widen small integer and rational types.
 This is useful to avoid overflow without sacrificing too much efficiency by
 always having to resolve to very large types.
 """
-soft_widen(::Type{T}) where {T} = T
-soft_widen(::Type{Int32}) = Int64
-soft_widen(::Type{Int16}) = Int32
-soft_widen(::Type{Int8}) = Int16
-soft_widen(::Type{Rational{T}}) where {T} = Rational{soft_widen(T)}
+double_widen(::Type{T}) where {T} = T
+double_widen(::Type{Int64}) = Int128
+double_widen(::Type{Int32}) = Int64
+double_widen(::Type{Int16}) = Int64
+double_widen(::Type{Int8}) = Int32
+double_widen(::Type{Rational{T}}) where {T} = Rational{double_widen(T)}
 
 """
     issingular(x::SMatrix{N,N,T}) where {N,T<:Rational}
 
-Test whether a NxN matrix is singular. The input matrix must have a wide enough
-type to avoid overflows. If an overflow happens however, it is detected and results
-in an error (rather than silently corrupting the result).
+Test whether a NxN matrix is singular.
 """
 function issingular(x::SMatrix{N,N,T}) where {N,T<:Rational}
     try
@@ -350,19 +349,13 @@ function issingular(x::SMatrix{3,3,T,9})::Bool where T<:Rational
 @inbounds begin
     (i, j, k) = iszero(x[1,1]) ? (iszero(x[1,2]) ? (3,1,2)  : (2,1,3)) : (1,2,3)
     iszero(x[1,i]) && return true
-    U = widen(T)
-    x1i = U(x[1,i])
+    x1i = x[1,i]
     factj = (x[1,j] // x1i)
     factk = (x[1,k] // x1i)
     y11 = x[2,j] - factj * x[2,i]
     y12 = x[3,j] - factj * x[3,i]
     y21 = x[2,k] - factk * x[2,i]
     y22 = x[3,k] - factk * x[3,i]
-    try
-        return y11 * y22 == y12 * y21
-    catch e
-        e isa OverflowError || rethrow()
-    end
     return widemul(y11, y22) == widemul(y12, y21)
     # This can overflow so the input matrix should already have a wide enough type
 end
@@ -374,14 +367,8 @@ function issingular(x::SMatrix{2,2,T,4})::Bool where T<:Rational
         (iszero(x[1,2]) || iszero(x[2,1])) && return true
         return false
     end
-    U = widen(T)
-    x12 = x[1,2] // U(x[1,1])
-    try
-        return x[2,2] == x[2,1] * x12
-    catch e
-        e isa OverflowError || rethrow()
-    end
-    widemul(x[2,1], x12)
+    x12 = x[1,2] // x[1,1]
+    return x[2,2] == widemul(x[2,1], x12)
     # This can overflow so the input matrix should already have a wide enough type
 end
 end
@@ -405,7 +392,7 @@ function isrank3(x::Matrix{T}) where T<:Rational
     i = 1
     @inbounds while i < n
         u2 = cols[i]
-        widen(u2[k]//u1[k])*u1 == u2 || break
+        (u2[k]//u1[k])*u1 == u2 || break
         i+=1
     end
     i == n && return false
@@ -431,7 +418,7 @@ function isrank2(x::Matrix{T}) where T<:Rational
     i = 1
     @inbounds while i < n
         u2 = cols[i]
-        widen(u2[k]//u1[k])*u1 == u2 || break
+        (u2[k]//u1[k])*u1 == u2 || break
         i+=1
     end
     i == n && return false
@@ -535,3 +522,15 @@ function dihedral(p1, p2, p3)
     return isnan(β) ? 0.0 : β
 end
 
+
+function isinterrupt(@nospecialize(e))
+    return e isa InterruptException || (e isa TaskFailedException && e.task.result isa InterruptException)
+end
+function isoverfloworinexact(@nospecialize(e))
+    (e isa OverflowError || e isa InexactError) && return true
+    if e isa TaskFailedException
+        result = e.task.result
+        return result isa OverflowError || result isa InexactError
+    end
+    return false
+end

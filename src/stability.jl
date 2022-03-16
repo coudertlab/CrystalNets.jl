@@ -494,7 +494,7 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     @toggleassert idx == n+1
 
     newgraph = net.graph[vmap]
-    newpos = [soft_widen(T).(net.pos[i]) for i in vmap]
+    newpos = net.pos[vmap]
     ofs = newpos[1]
     offsets = Vector{SVector{D,Int}}(undef, n)
     for (i, x) in enumerate(newpos)
@@ -504,7 +504,7 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     offset_representatives!(newgraph, .-offsets)
     # net.pos[1] should always be [0,0,0]
 
-    newnet = CrystalNet{D,soft_widen(T)}(net.cell, net.types[vmap], newpos, newgraph, net.options)
+    newnet = CrystalNet{D,T}(net.cell, net.types[vmap], newpos, newgraph, net.options)
     newnodes = [CollisionNode(newnet.graph, node) for node in collisions]
     return shrink_collisions(newnet, collisions), newnodes
 end

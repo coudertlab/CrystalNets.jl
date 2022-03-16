@@ -37,13 +37,12 @@ Otherwise, return `nothing`.
 See also: [`possible_translations`](@ref), [`find_all_valid_translations`](@ref)
 """
 function check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,T}, collisions, r=nothing) where {D,T}
-    U = soft_widen(T)
     n = length(c.pos)
     vmap = Vector{Int}(undef, n)
     offsets = Vector{SVector{D,Int}}(undef, n)
     for k in 1:n
         curr_pos = c.pos[k]
-        transl = U.(isnothing(r) ? curr_pos : (r * curr_pos)) .+ t
+        transl = (isnothing(r) ? curr_pos : (r * curr_pos)) .+ t
         ofs = floor.(Int, transl)
         x = transl .- ofs
         (i, j) = x < curr_pos ? (1, k) : (k, length(c.types)+1)
@@ -94,7 +93,7 @@ function possible_translations(c::CrystalNet{D,T}) where {D,T}
     sortedpos = copy(c.pos)
     origin = popfirst!(sortedpos)
     @toggleassert iszero(origin)
-    sort!(SVector{D,soft_widen(widen(widen(T)))}.(sortedpos), by=norm)
+    sort!(sortedpos, by=norm)
     for t in sortedpos
         @toggleassert t == back_to_unit.(t)
         max_den, i_max_den = findmax(denominator.(t))
@@ -275,7 +274,6 @@ Given the net and the output of `minimal_volume_matrix` computed on the valid tr
 of the net, return the new net representing the initial net in the computed unit cell.
 """
 function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where {D,T}
-    U = widen(T)
     lengths = degree(c.graph)
     if D == 3
         cell = Cell(c.cell, c.cell.mat * mat)
@@ -284,11 +282,9 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
         _mat[1:D,1:D] .= mat
         cell = Cell(c.cell, c.cell.mat * _mat)
     end
-    imat = soft_widen(T).(inv(mat)) # The inverse should only have integer coefficients
-    @toggleassert all(isinteger, imat)
-    @toggleassert all(all(x -> 0 ≤ x < 1, pos) for pos in c.pos)
+    imat = T.(inv(mat)) # The inverse should only have integer coefficients
 
-    poscol = (U.(imat),) .* c.pos
+    poscol = (imat,) .* c.pos
     n = length(poscol)
     offset = Vector{SVector{D,Int}}(undef, n)
     for (i, pos) in enumerate(poscol)
@@ -327,7 +323,7 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
         I_kept = I_kept[reorder]
     end
 
-    sortedcol = SVector{D,Rational{U}}[SVector{D,Rational{U}}(poscol[i]) for i in I_kept]
+    sortedcol = SVector{D,Rational{T}}[SVector{D,Rational{T}}(poscol[i]) for i in I_kept]
 
     vmap = Vector{Int}(undef, n)
     for (i, pos) in enumerate(poscol)
@@ -354,8 +350,7 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     end
 
     graph = PeriodicGraph{D}(edges)
-    @toggleassert degree(graph) == lengths[I_kept]
-    return CrystalNet{D,Rational{U}}(cell, c.types[I_kept], sortedcol, graph, c.options), newcollisions
+    return CrystalNet{D,Rational{T}}(cell, c.types[I_kept], sortedcol, graph, c.options), newcollisions
 end
 
 
@@ -455,29 +450,29 @@ vertices and their ordered image in the candidate, as well as the key.
 See also: [`find_candidates`](@ref)
 """
 function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
-    V = soft_widen(widen(T))
     n = nv(net.graph)
     h = 2 # next node to assign
     origin = net.pos[u]
-    newpos = Vector{SVector{D,V}}(undef, n) # positions of the kept representatives
-    newpos[1] = zero(SVector{D,V})
-    offsets = Vector{SVector{D,Int}}(undef, n) # offsets of the new representatives with
+    newpos = Vector{SVector{D,T}}(undef, n) # positions of the kept representatives
+    newpos[1] = zero(SVector{D,T})
+    offsets = Vector{SVector{D,Int32}}(undef, n) # offsets of the new representatives with
     # respect to the original one, in the original basis
-    offsets[1] = zero(SVector{D,Int})
+    offsets[1] = zero(SVector{D,Int32})
     vmap = Vector{Int}(undef, n) # bijection from the old to the new node number
     vmap[1] = u
     rev_vmap = zeros(Int, n) # inverse of vmap
     rev_vmap[u] = 1
     flag_bestedgs = false # marks whether the current list of edges is lexicographically
     # below the best known one. If not by the end of the algorithm, return false
-    edgs = Tuple{Int,Int,SVector{D,V}}[]
-    mat = V.(inv(widen(V).(basis)))
+    edgs = Tuple{Int,Int,SVector{D,T}}[]
+    bigbasis = T == Rational{BigInt} ? basis : widen(T).(basis)
+    mat = T == Rational{BigInt} ? inv(bigbasis) : T.(inv(bigbasis))
     for t in 1:n # t is the node being processed
         neighs = neighbors(net.graph, vmap[t])
         ofst = offsets[t]
-        pairs = Vector{Tuple{SVector{D,V},Int}}(undef, length(neighs))
+        pairs = Vector{Tuple{SVector{D,T},Int}}(undef, length(neighs))
         for (i,x) in enumerate(neighs)
-            pairs[i] = (V.(mat*(net.pos[x.v] .+ x.ofs .- origin .+ ofst)), x.v)
+            pairs[i] = ((mat*(net.pos[x.v] .+ x.ofs .- origin .+ ofst)), x.v)
         end
         # (x,i) ∈ pairs means that vertex i (in the old numerotation) has position x in the new basis
         order = unique(last.(sort(pairs)))
@@ -489,7 +484,6 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
                                                     (inv_order[a] == inv_order[b] && x < y) end)
         # pairs is sorted such that different nodes first appear in increasing order of their position
         # but different representatives of the same node are contiguous and also sorted by position.
-        bigbasis = widen(V).(basis)
         for (coordinate, v) in pairs
             idx = rev_vmap[v]
             if idx == 0 # New node to which h is assigned
@@ -497,7 +491,7 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
                 vmap[h] = v
                 rev_vmap[v] = h
                 newpos[h] = coordinate
-                offsets[h] = SVector{D,Int}(bigbasis * coordinate .+ origin .- net.pos[v])
+                offsets[h] = SVector{D,Int32}(bigbasis * coordinate .+ origin .- net.pos[v])
                 push!(edgs, (t, h, zero(SVector{D,T})))
                 h += 1
             else
@@ -508,7 +502,7 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
             if !flag_bestedgs
                 j = length(edgs)
                 c = cmp(minimal_edgs[j], edgs[j])
-                c < 0 && return (Int[], Tuple{Int,Int,SVector{D,V}}[]) # early stop
+                c < 0 && return (Int[], Tuple{Int,Int,SVector{D,T}}[]) # early stop
                 c > 0 && (flag_bestedgs = true)
             end
         end
@@ -516,7 +510,7 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
     @toggleassert allunique(edgs)
     if !flag_bestedgs # the current list of edges is equal to minimal_edgs
         @toggleassert minimal_edgs == edgs
-        return (Int[], Tuple{Int,Int,SVector{D,V}}[])
+        return (Int[], Tuple{Int,Int,SVector{D,T}}[])
     end
     return vmap, edgs
 end
@@ -655,7 +649,6 @@ See also: [`candidate_key`](@ref)
 """
 function find_candidates(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}) where {D,T}
     L = D*D
-    U = soft_widen(T)
     if D == 3
         rotations, vmaps, _ = find_symmetries(net, collisions)
         @toggleassert length(rotations) == length(vmaps)
@@ -671,7 +664,7 @@ function find_candidates(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}
         end
     end
     @toggleassert sort.(categories) == sort.(first(partition_by_coordination_sequence(net.graph)))
-    candidates = Dict{Int,Vector{SMatrix{D,D,U,L}}}()
+    candidates = Dict{Int,Vector{SMatrix{D,D,T,L}}}()
     for reprs in unique_reprs
         # First, we try to look for triplet of edges all starting from the same vertex within a category
         degree(net.graph, first(reprs)) <= D && continue
@@ -698,10 +691,10 @@ function find_candidates(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}
     if D == 3
         return extract_through_symmetry(candidates, vmaps, rotations), category_map
     else
-        flattened_candidates = Pair{Int,SMatrix{D,D,U,L}}[]
+        flattened_candidates = Pair{Int,SMatrix{D,D,T,L}}[]
         for (i, mats) in candidates
             for mat in mats
-                push!(flattened_candidates, i => SMatrix{D,D,U,L}(mat))
+                push!(flattened_candidates, i => SMatrix{D,D,T,L}(mat))
             end
         end
         return flattened_candidates, category_map
@@ -757,15 +750,14 @@ returned list (for instance, if all outgoing edges of a vertex are coplanar with
 """
 function find_initial_candidates(net::CrystalNet{D,T}, candidates_v, category_map) where {D,T}
     @toggleassert 1 ≤ D ≤ 3
-    U = soft_widen(T)
     deg = degree(net.graph, first(candidates_v)) # The degree is the same for all vertices of the same category
     n = length(candidates_v)
-    _initial_candidates = Vector{Pair{Int,Tuple{Matrix{U},Vector{Int}}}}(undef, n)
+    _initial_candidates = Vector{Pair{Int,Tuple{Matrix{T},Vector{Int}}}}(undef, n)
     valid_initial_candidates = falses(n)
 
     @threads for i in 1:n
         v = candidates_v[i]
-        a = Matrix{U}(undef, D, deg)
+        a = Matrix{T}(undef, D, deg)
         cats = Vector{Int}(undef, deg)
         posi = net.pos[v]
         for (j, x) in enumerate(neighbors(net.graph, v))
@@ -799,9 +791,8 @@ function find_candidates_onlyneighbors end
 
 
 function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, category_map) where T
-    U = soft_widen(T)
     initial_candidates = find_initial_candidates(net, candidates_v, category_map)
-    candidates = Dict{Int,Vector{SMatrix{3,3,U,9}}}()
+    candidates = Dict{Int,Vector{SMatrix{3,3,T,9}}}()
     isempty(initial_candidates) && return candidates
     # the two next variables are accessed concurrently, must be locked before read/write
     current_cats::SVector{3,Int} = SVector{3,Int}((length(category_map), length(category_map), length(category_map)))
@@ -815,13 +806,13 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
 
     @threads for (v, (mat, cats)) in initial_candidates
         _, n = size(mat)
-        matv = SMatrix{3,3,U,9}[] # the list of bases making a candidate with origin v
+        matv = SMatrix{3,3,T,9}[] # the list of bases making a candidate with origin v
         lock(fastlock) # needed even for read-only to avoid data race
         ordertype = current_ordertype
         mincats = copy(current_cats)
         unlock(fastlock)
         for _i in 1:(n-2), _j in (_i+1):(n-1), _k in (_j+1):n
-            m = SMatrix{3,3,U,9}(mat[:,[_i,_j,_k]])
+            m = SMatrix{3,3,T,9}(mat[:,[_i,_j,_k]])
             issingular(m) && continue
             orders = SVector{3,Int}[]
             subcats = cats[SVector{3,Int}(_i, _j, _k)]
@@ -895,10 +886,9 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
 end
 
 function find_candidates_onlyneighbors(net::CrystalNet2D{T}, candidates_v, category_map) where T
-    U = soft_widen(T)
     initial_candidates = find_initial_candidates(net, candidates_v, category_map)
 
-    candidates = Dict{Int,Vector{SMatrix{2,2,U,4}}}()
+    candidates = Dict{Int,Vector{SMatrix{2,2,T,4}}}()
     isempty(initial_candidates) && return candidates
     current_cats::SVector{2,Int} = SVector{2,Int}((length(category_map), length(category_map)))
     current_ordertype::Int = 1
@@ -906,13 +896,13 @@ function find_candidates_onlyneighbors(net::CrystalNet2D{T}, candidates_v, categ
 
     @threads for (v, (mat, cats)) in initial_candidates
         _, n = size(mat)
-        matv = SMatrix{2,2,U,4}[]
+        matv = SMatrix{2,2,T,4}[]
         lock(fastlock)
         ordertype = current_ordertype
         mincats = copy(current_cats)
         unlock(fastlock)
         for _i in 1:(n-1), _j in (_i+1):n
-            m = SMatrix{2,2,U,4}(mat[:,[_i,_j]])
+            m = SMatrix{2,2,T,4}(mat[:,[_i,_j]])
             issingular(m) && continue
             orders = SVector{2,Int}[]
             subcats = cats[SVector{2,Int}(_i, _j)]
@@ -961,10 +951,9 @@ function find_candidates_onlyneighbors(net::CrystalNet2D{T}, candidates_v, categ
 end
 
 function find_candidates_onlyneighbors(net::CrystalNet1D{T}, candidates_v, category_map) where T
-    U = soft_widen(T)
     initial_candidates = find_initial_candidates(net, candidates_v, category_map)
 
-    candidates = Dict{Int,Vector{SMatrix{1,1,U,1}}}()
+    candidates = Dict{Int,Vector{SMatrix{1,1,T,1}}}()
     isempty(initial_candidates) && return candidates
     current_cat::Int = length(category_map)
     current_ordertype::Int = 1
@@ -972,7 +961,7 @@ function find_candidates_onlyneighbors(net::CrystalNet1D{T}, candidates_v, categ
 
     @threads for (v, (mat, cats)) in initial_candidates
         n = length(mat)
-        matv = SMatrix{1,1,U,1}[]
+        matv = SMatrix{1,1,T,1}[]
         lock(fastlock)
         ordertype = current_ordertype
         mincat = current_cat
@@ -1017,8 +1006,7 @@ Return candidates in the same form as [`find_candidates_onlyneighbors`](@ref) ex
 only two edges start from `u` and one does not.
 """
 function find_candidates_fallback(net::CrystalNet3D{T}, reprs, othercats, category_map) where T
-    U = soft_widen(T)
-    candidates = Dict{Int,Vector{SMatrix{3,3,U,9}}}(u => [] for u in reprs)
+    candidates = Dict{Int,Vector{SMatrix{3,3,T,9}}}(u => [] for u in reprs)
     n = length(category_map)
     mincats = SizedVector{3,Int}(fill(n, 3))
     current_cats = SizedVector{3,Int}(fill(0, 3))
@@ -1047,7 +1035,7 @@ function find_candidates_fallback(net::CrystalNet3D{T}, reprs, othercats, catego
                         posv = net.pos[v]
                         for x3 in neighbors(net.graph, v)
                             vec3 = net.pos[x3.v] .+ x3.ofs .- posv
-                            mat = SMatrix{3,3,U,9}(hcat(vec1, vec2, vec3))
+                            mat = SMatrix{3,3,T,9}(hcat(vec1, vec2, vec3))
                             issingular(mat) && continue
                             current_cats[3] = category_map[x3.v]
                             current_cats > mincats && continue
@@ -1084,7 +1072,7 @@ function find_candidates_fallback(net::CrystalNet3D{T}, reprs, othercats, catego
          end
     end
     @toggleassert all(isempty, values(candidates))
-    return Dict{Int,Vector{SMatrix{3,3,U,9}}}()
+    return Dict{Int,Vector{SMatrix{3,3,T,9}}}()
 end
 
 

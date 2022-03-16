@@ -146,7 +146,7 @@ function _precompile_dependencies()
     precompile(Tuple{Type{Dict{Symbol, Any}},Base.Iterators.Pairs{Symbol, Any, Tuple{Symbol, Symbol}, NamedTuple{(:help, :action), Tuple{String, Symbol}}}})
     precompile(Tuple{Type{Dict{Symbol, Any}},Base.Iterators.Pairs{Symbol, String, Tuple{Symbol, Symbol}, NamedTuple{(:help, :metavar), Tuple{String, String}}}})
     precompile(Tuple{Type{Tuple{Tuple{Vector{Tuple{Int, Int}}, Vector{Tuple{Int, Int}}}, Tuple{Vector{Tuple{Int, Int}}, Vector{Tuple{Int, Int}}}, Tuple{Vector{Tuple{Int, Int}}, Vector{Tuple{Int, Int}}}}},Vector{Tuple{Vector{Any}, Vector{Any}}}})
-    for T in (Int8, Int16, Int32, Int64, Int128)
+    for T in (Int32, Int64, Int128)
         precompile(Tuple{Type{SubArray},IndexLinear,Matrix{Rational{T}},Tuple{Base.Slice{Base.OneTo{Int}}, Int},Tuple{Bool}})
         precompile(Tuple{typeof(Base.Broadcast.materialize),Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{2}, Nothing, Type{Rational{T}}, Tuple{Matrix{Rational{Int}}}}})
     end
@@ -232,7 +232,7 @@ function _precompile_dependencies()
 
     precompile(Tuple{Type{Size},Type{SubArray{Int, 1, Matrix{Int}, Tuple{Int, Base.Slice{Base.OneTo{Int}}}, true}}})
     precompile(Tuple{typeof(<),SVector{3, Int},SizedVector{3, Int, 1}})
-    for T in (Int8, Int16, Int32, Int64, Int128)
+    for T in (Int32, Int64, Int128, BigInt)
         precompile(Tuple{Type{Vector{Tuple{Int, Int, SVector{3, Rational{T}}}}},Vector{Any}})
         precompile(Tuple{Type{SVector{3, Int}},Tuple{Rational{T}, Rational{T}, Rational{T}}})
         precompile(Tuple{Type{Dict{Int, Vector{SMatrix{3, 3, Rational{T}, 9}}}}})
@@ -245,7 +245,7 @@ function _precompile_dependencies()
         precompile(Tuple{typeof(LinearAlgebra.generic_matmatmul!),Matrix{Rational{widen(T)}},Char,Char,SizedMatrix{3, 3, Rational{widen(T)}, 2},Matrix{Rational{T}},LinearAlgebra.MulAddMul{true, true, Bool, Bool}})
         precompile(Tuple{typeof(LinearAlgebra.dot),SubArray{BigFloat, 1, SMatrix{3, 3, BigFloat, 9}, Tuple{Base.Slice{SOneTo{3}}, T}, true},SubArray{BigFloat, 1, SMatrix{3, 3, BigFloat, 9}, Tuple{Base.Slice{SOneTo{3}}, T}, true}})
         precompile(Tuple{typeof(Base.Broadcast.broadcasted),Base.Broadcast.Style{Tuple},Function,Tuple{Vector{Tuple{Int, Int, SVector{3, Rational{T}}}}, Vector{Tuple{Int, Int, SVector{3, Rational{T}}}}, Vector{Tuple{Int, Int, SVector{3, Rational{T}}}}}})
-        precompile(Tuple{typeof(Base.Broadcast.materialize!),Base.Broadcast.DefaultArrayStyle{1},SubArray{Rational{CrystalNets.soft_widen(T)}, 1, Matrix{Rational{CrystalNets.soft_widen(T)}}, Tuple{Base.Slice{Base.OneTo{Int}}, Int}, true},Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(-), Tuple{Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(+), Tuple{SVector{3, Rational{T}}, SVector{3, Int}}}, SVector{3, Rational{T}}}}})
+        precompile(Tuple{typeof(Base.Broadcast.materialize!),Base.Broadcast.DefaultArrayStyle{1},SubArray{Rational{T}, 1, Matrix{Rational{T}}, Tuple{Base.Slice{Base.OneTo{Int}}, Int}, true},Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(-), Tuple{Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(+), Tuple{SVector{3, Rational{T}}, SVector{3, Int}}}, SVector{3, Rational{T}}}}})
         precompile(Tuple{typeof(Base.Broadcast.materialize),Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(-), Tuple{SVector{3, Rational{T}}, SVector{3, Int}}}})
         precompile(Tuple{typeof(Base.Broadcast.materialize),Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(floor), Tuple{Base.RefValue{Type{Int}}, SVector{3, Rational{T}}}}})
         precompile(Tuple{typeof(append!),Vector{SMatrix{3, 3, Rational{T}, 9}},Vector{SMatrix{3, 3, Rational{T}, 9}}})
@@ -319,9 +319,9 @@ function _precompile_dependencies()
 
         # CrystalNets
     # precompile(Tuple{CrystalNets.var"#730#threadsfor_fun#121"{Tuple{Symbol}, String, Dict{String, String}, Dict{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}}, Dict{String, String}, Vector{String}}})
-    for T in (Bool, Int8, Int16, Int32, Int64, Int128, BigInt)
-        # precompile(Tuple{CrystalNets.var"#670#threadsfor_fun#114"{CrystalNet{Rational{T}}, Vector{Int}, Base.Threads.SpinLock, Vector{Pair{Int, Tuple{Matrix{Rational{CrystalNets.soft_widen(T)}}, Vector{Int}}}}, Int, DataType, Vector{Int}}})
-        # precompile(Tuple{CrystalNets.var"#685#threadsfor_fun#116"{Rational{T}, Dict{Int, Vector{SMatrix{3, 3, Rational{CrystalNets.soft_widen(T)}, 9}}}, Base.Threads.SpinLock, DataType, Vector{Pair{Int, Tuple{Matrix{Rational{CrystalNets.soft_widen(T)}}, Vector{Int}}}}}})
+    for T in (Int32, Int64, Int128, BigInt)
+        # precompile(Tuple{CrystalNets.var"#670#threadsfor_fun#114"{CrystalNet{Rational{T}}, Vector{Int}, Base.Threads.SpinLock, Vector{Pair{Int, Tuple{Matrix{Rational{T}}, Vector{Int}}}}, Int, DataType, Vector{Int}}})
+        # precompile(Tuple{CrystalNets.var"#685#threadsfor_fun#116"{Rational{T}, Dict{Int, Vector{SMatrix{3, 3, Rational{T}, 9}}}, Base.Threads.SpinLock, DataType, Vector{Pair{Int, Tuple{Matrix{Rational{T}}, Vector{Int}}}}}})
 
         precompile(Tuple{Type{CrystalNet{Rational{T}}},CrystalNets.Cell,Vector{Symbol},PeriodicGraph3D,Matrix{Rational{T}}})
         precompile(Tuple{typeof(CrystalNets.isrank3),Matrix{Rational{T}}})
@@ -358,7 +358,7 @@ function _precompile_()
 
     # _precompile_dependencies()
 
-    inttypes = (Int8, Int16, Int32, Int64, Int128, BigInt)
+    inttypes = (Int32, Int64, Int128, BigInt)
     primes = (2147483647, 2147483629, 2147483587)
 
     graph = PeriodicGraph3D
@@ -448,6 +448,10 @@ function _precompile_()
     precompile(Tuple{typeof(CrystalNets.export_arc), String})
 
     # utils.jl
+    for T in (Int8, Int16, Int32, Int64, Int128, BigInt)
+        precompile(Tuple{typeof(CrystalNets.double_widen), Type{T}})
+        precompile(Tuple{typeof(CrystalNets.double_widen), Type{Rational{T}}})
+    end
     precompile(Tuple{typeof(CrystalNets.recursive_readdir!), Vector{String}, String, String})
     precompile(Tuple{typeof(CrystalNets.recursive_readdir), String})
     precompile(Tuple{typeof(CrystalNets.tmpexportname), String, String, String, String})
@@ -477,8 +481,6 @@ function _precompile_()
     precompile(Tuple{typeof(CrystalNets.string_atomtype), Symbol})
     precompile(Tuple{typeof(CrystalNets.representative_atom), Symbol, Int})
     for T in inttypes
-        precompile(Tuple{typeof(CrystalNets.soft_widen), T})
-        precompile(Tuple{typeof(CrystalNets.soft_widen), Rational{T}})
         for D in 1:3
             precompile(Tuple{typeof(CrystalNets.issingular), smat{D,T,D*D}})
             precompile(Tuple{typeof(CrystalNets.angle), pos{D,T}, pos{D, T}})
@@ -489,6 +491,8 @@ function _precompile_()
         precompile(Tuple{typeof(CrystalNets.back_to_unit), Rational{T}})
     end
     precompile(Tuple{typeof(CrystalNets.nextword), String, Int})
+    precompile(Tuple{typeof(CrystalNets.isinterrupt), Any})
+    precompile(Tuple{typeof(CrystalNets.isoverfloworinexact), Any})
 
     # options.jl
     precompile(Tuple{typeof(CrystalNets.clustering_from_num), Int})
@@ -877,7 +881,7 @@ function _precompile_()
     end
     for T in inttypes
         precompile(Tuple{typeof(CrystalNets.find_candidates_fallback), cnet{3,T}, Vector{Int}, Vector{Vector{Int}}, Vector{Int}})
-        precompile(Tuple{typeof(CrystalNets.extract_through_symmetry), Dict{Int,Vector{smat{3,CrystalNets.soft_widen(T),9}}}, Vector{Vector{Int}}, Vector{smat{3,Int,9}}})
+        precompile(Tuple{typeof(CrystalNets.extract_through_symmetry), Dict{Int,Vector{smat{3,T,9}}}, Vector{Vector{Int}}, Vector{smat{3,Int,9}}})
         for D in 1:3
             precompile(Tuple{typeof(CrystalNets.find_candidates), cnet{D,T}, Vector{collision}})
             precompile(Tuple{typeof(CrystalNets.topological_key), cnet{D,T}, Vector{collision}})

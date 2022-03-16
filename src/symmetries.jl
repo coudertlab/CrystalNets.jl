@@ -175,8 +175,6 @@ end
 
 
 function find_symmetries(net::CrystalNet3D{Rational{S}}, collisions) where S
-    T = soft_widen(S)
-    U = soft_widen(T)
     lattice = Matrix{Cdouble}(LinearAlgebra.I, 3, 3) # positions are expressed in this basis
 
     I = sortperm(net.pos)
@@ -216,7 +214,7 @@ function find_symmetries(net::CrystalNet3D{Rational{S}}, collisions) where S
     positions = Matrix{Cdouble}(undef, 3, n)
     den = 1
     for i in 1:n
-        den = lcm(den, lcm((U∘denominator).(uniquepos[i])))
+        den = lcm(den, lcm(denominator.(uniquepos[i])))
         positions[:,i] .= uniquepos[i]
     end
 
@@ -240,7 +238,7 @@ function find_symmetries(net::CrystalNet3D{Rational{S}}, collisions) where S
     floatpos = [float(x) for x in net.pos]
     hasmirror = false # whether a mirror plane exists or not. If so, the graph is achiral
     for i in 2:len
-        rot = SMatrix{3,3,T,9}(transpose(rotations[:,:,i]))
+        rot = SMatrix{3,3,S,9}(transpose(rotations[:,:,i]))
         if det(rot) < 0
             @toggleassert det(rot) == -1
             hasmirror = true
@@ -248,7 +246,7 @@ function find_symmetries(net::CrystalNet3D{Rational{S}}, collisions) where S
         end
         # @toggleassert det(rot) == 1
         tr = SVector{3,Cdouble}(translations[:,i])
-        trans = SVector{3,Rational{S}}(round.(U, den .* tr) .// den)
+        trans = SVector{3,Rational{S}}(round.(S, den .* tr) .// den)
         vmap = check_valid_symmetry(net, trans, collisions, rot)
         if isnothing(vmap)
             trans = SVector{3,Rational{S}}(net.pos[last(findmin([norm(x .- tr) for x in floatpos]))])
