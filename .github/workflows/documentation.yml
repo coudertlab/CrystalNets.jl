@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - doctest
     tags: '*'
   pull_request:
 
