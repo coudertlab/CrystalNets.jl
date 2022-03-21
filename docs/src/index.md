@@ -7,16 +7,18 @@ Its inputs can be chemical files in any format recognized by [chemfiles](https:/
 ## Package installation
 
 The installation follows the usual procedure. Start by downloading and installing [Julia](https://julialang.org/) (v1.6 or higher for `CrystalNets.jl`). Then, either
+
 - open the Julia REPL and enter the package manager by typing `]`, then install `CrystalNets.jl` by entering:
-   ```julia
-   pkg> add CrystalNets
-   ```
+  ```julia
+  pkg> add CrystalNets
+  ```
 - alternatively, you can do it from a shell by executing:
-   ```bash
-   julia -e 'import Pkg; Pkg.add("CrystalNets")
-   ```
+  ```bash
+  julia -e 'import Pkg; Pkg.add("CrystalNets")
+  ```
 
 To use the package, open a REPL and enter
+
 ```julia
 julia> using CrystalNets
 ```
@@ -34,6 +36,7 @@ julia> determine_topology(path)
 #### Known nets
 
 If recognized, this yields the name of the net. For example:
+
 ```julia
 julia> determine_topology("/path/to/diamond.cif")
 Export of input is enabled: saving file at /tmp/input_diamond_0.vtf
@@ -50,6 +53,7 @@ for warnings.
 
 If the net is not recognized, its topological genome is displayed preceded by an "UNKNOWN"
 mention, or "unstable" if the net is unstable:
+
 ```julia
 julia> determine_topology("/path/to/new/material.cif")
 UNKNOWN 2 1 2 -2 0 1 2 0 0 1 2 0 1 2 2 1 0
@@ -65,11 +69,13 @@ In both known and unknown cases, the result is a [`TopologyResult`](@ref).
 If the file contains multiple interpenetrating substructures, the result is a
 `Vector{Tuple{Vector{Int64}, TopologyResult}}`, where each entry is a tuple
 `(vmap, result)` with:
+
 - `vmap`: the list of vertices of the initial graph that were kept for this substructure.
   The initial graph is the one exported in .vtf as `input`. See also
   [`parse_chemfile`](@ref) and [`CrystalNets.Crystal`](@ref) for manipulations on the initial graph.
 - `result`: the [`TopologyResult`](@ref) for this substructure.
 For example:
+
 ```julia
 julia> determine_topology("/path/to/intertwinned/structures.cif")
 2-element Vector{Tuple{Vector{Int64}, TopologyResult}}:
@@ -80,6 +86,7 @@ julia> determine_topology("/path/to/intertwinned/structures.cif")
 #### Using options
 
 [`Options`](@ref CrystalNets.Options) can be added as individual keyword arguments to the call. For instance:
+
 ```julia
 julia> path_to_mof5 = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif", "MOF-5.cif");
 

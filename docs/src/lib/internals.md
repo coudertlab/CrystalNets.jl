@@ -1,4 +1,7 @@
+# Internal types and functions
+
 ## Types
+
 ```@docs
 CrystalNets.Crystal
 CrystalNets.Clusters
@@ -9,6 +12,7 @@ CrystalNets.EquivalentPosition
 ```
 
 ## Core topology functions
+
 ```@docs
 CrystalNets.topological_key
 CrystalNets.CRYSTAL_NETS_ARCHIVE
@@ -27,6 +31,7 @@ CrystalNets.find_candidates_fallback
 ```
 
 ## Input
+
 ```@docs
 CrystalNets.parse_cif
 CrystalNets.CIF(file_path::AbstractString)
@@ -43,6 +48,7 @@ CrystalNets.sanity_checks!
 ```
 
 ## Crystal and CIF handling
+
 ```@docs
 CrystalNets.cell_parameters
 CrystalNets.periodic_distance
@@ -56,12 +62,14 @@ CrystalNets.equilibrium
 ```
 
 ## Bond guessing
+
 ```@docs
 CrystalNets.guess_bonds
 CrystalNets.edges_from_bonds
 ```
 
 ## Clustering algorithm
+
 ```@docs
 CrystalNets.find_sbus
 CrystalNets.regroup_sbus
@@ -77,6 +85,7 @@ CrystalNets.allnodes_to_singlenodes
 ```
 
 ## Symmetry handling
+
 ```@docs
 CrystalNets.SPACE_GROUP_HALL
 CrystalNets.SPACE_GROUP_HM
@@ -86,6 +95,7 @@ CrystalNets.HALL_SYMBOLS
 ```
 
 ## Unstable nets
+
 ```@docs
 CrystalNets.shrink_collisions
 CrystalNets.order_collision
@@ -95,6 +105,7 @@ CrystalNets.collision_nodes
 ```
 
 ## Utils
+
 ```@docs
 CrystalNets.@toggleassert
 CrystalNets.check_dimensionality
