@@ -27,6 +27,7 @@ In addition to the official VMD website, an excellent resource for this is
 The following code, heavily inspired from that website, can be appended to your `.vmdrc` or
 `vmd.rc` file to automatically show VTF files using CPK representations, with big spheres
 and bonds for nets and small ones for the input crystal:
+
 ```perl
 package require pbctools
 
@@ -79,11 +80,13 @@ DocTestFilters = r"saving file at .*\_IM\-19\_[0-9]+\.vtf"
 
 Let's consider IM-19 as an example of crystalline framework we are studying. A CIF file
 for this structure (available from [Chaplais _et. al._](https://doi.org/10.1039/B822163D) on the [CSD](https://dx.doi.org/10.5517/ccry482)) can be accessed at:
+
 ```jldoctest viz
 julia> path_to_im19 = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif", "IM-19.cif");
 ```
 
 Determining its topology yields the following:
+
 ```jldoctest viz
 julia> determine_topology(path_to_im19; bonding=Bonding.Guess, structure=StructureType.MOF)
 [ Info: Initial pass found O and C with invalid number of bonds.
@@ -110,21 +113,25 @@ DocTestFilters = nothing
 
 Although not necessary, we manually specified `bonding=Bonding.Guess` to avoid the
 following warning
-```
+
+```text
 [ Warning: Guessing bonds with custom algorithm (from Chemfiles and VMD). This may take a while for big structures and may be inexact.
 [ Info: To avoid guessing bonds, use a file format that contains the bonds.
 ```
 
 The first line of the output is an information about atoms with initial number of bonds.
 Note that there is no subsequent warning of the form
-```
+
+```text
 [ Warning: After attempted fix, found remaining C with invalid number of bonds.
 ```
+
 which indicates that the problem has been internally resolved. It might be good to
 manually check whether the guessed bonds make sense, as an extra precaution.
 
 To do so, simply open VMD and load the VTF file corresponding to the input. On Ubuntu,
 the following shell command can be used:
+
 ```bash
 vmd /tmp/input_IM-19_0.vtf
 ```
@@ -148,18 +155,21 @@ There are several export options bundled with `CrystalNets.jl`, documented in th
 [`Options`](@ref CrystalNets.Options). Each of them can be given as keyword arguments
 to all functions accepting an `Options` argument, like [`determine_topology`](@ref).
 
-The value of the keyword argument can be either
+The value of the keyword argument can be either:
+
 - a `String` representing the path of the directory in which to put the exported file.
   If empty, this disables the export.
 - a `Bool`: if `true`, equivalent to `tempdir()`; if `false`, disables the export.
 
 The two exports whose default value is defined by [`CrystalNets.toggle_export`](@ref)
 are:
+
 - `export_input` for the parsed structure.
 - `export_subnets` for each subnet, defined after clustering and separated into
   connected components.
 
 Other available export options are disabled by default:
+
 - `export_trimmed` for the trimmed parsed structure. "Trimming" refers to removing all
   atoms that have strictly less than three neighbours and bonding those neighbours
   together, and so iteratively until no atom remains with strictly less than three
