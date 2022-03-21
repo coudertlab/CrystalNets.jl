@@ -99,15 +99,16 @@ function validate_archive(custom_arc)::Dict{String,String}
                 end
                 arc_per_thread = [Pair{String,String}[] for _ in 1:nthreads()]
                 Threads.@threads for (key, id) in collect(parsed)
-                    genome::String = try
-                        string(topological_genome(CrystalNet(PeriodicGraph(key))).genome)
-                    catch e
-                        isinterrupt(e) && rethrow()
-                        println(stderr, "Failed for net "*id*" with error:")
-                        Base.display_error(stderr, e, catch_backtrace())
-                        println(stderr)
-                        ""
+                    _g = topological_genome(CrystalNet(PeriodicGraph(key)))
+                    if _g.unstable || !isempty(_g.error)
+                        if _g.unstable
+                            println(stderr, "Net ", id, " is unstable.")
+                        else
+                            println(stderr, "Failed for net ", id, " with error:", g.error)
+                        end
+                        continue
                     end
+                    genome = string(_g.genome)
                     if !isempty(genome)
                         push!(arc_per_thread[threadid()], (genome => id))
                     end
