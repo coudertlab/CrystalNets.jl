@@ -1,4 +1,7 @@
+# API
+
 ## Main types
+
 ```@docs
 CrystalNet
 UnderlyingNets
@@ -7,6 +10,7 @@ TopologyResult
 ```
 
 ## Main functions
+
 ```@docs
 determine_topology
 determine_topology_dataset
@@ -18,6 +22,7 @@ recognize_topology
 ```
 
 ## Options
+
 ```@docs
 CrystalNets.Options
 StructureType
@@ -26,7 +31,16 @@ Clustering
 ClusterKinds
 ```
 
+## Other utilities
+
+```@docs
+CrystalNets.toggle_warning
+CrystalNets.toggle_export
+CrystalNets.export_default
+```
+
 ## Archive
+
 ```@docs
 REVERSE_CRYSTAL_NETS_ARCHIVE
 CrystalNets.parse_arc
@@ -39,11 +53,4 @@ refresh_current_archive!
 add_to_current_archive!
 make_archive
 CrystalNets.export_arc
-```
-
-## Other utilities
-```@docs
-CrystalNets.toggle_warning
-CrystalNets.toggle_export
-CrystalNets.export_default
 ```
