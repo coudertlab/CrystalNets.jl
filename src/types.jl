@@ -398,7 +398,7 @@ function periodic_distance(u, mat, ortho=nothing, safemin=nothing)
     if ortho === nothing || safemin === nothing
         _, ortho, safemin = prepare_periodic_distance_computations(mat)
     end
-    periodic_distance!(similar(u), u, mat, ortho::Bool, safemin::Bool)
+    periodic_distance!(similar(u), u, mat, ortho::Bool, safemin::Float64)
 end
 
 

@@ -593,7 +593,7 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
         else
             at = get(atomic_numbers, t, nothing)
             if at === nothing
-                @ifwarn lazy"Unrecognized atom type \"$t\" will be considered a dummy atom."
+                @ifwarn @error lazy"Unrecognized atom type \"$t\" will be considered a dummy atom."
                 push!(toremove, i)
             elseif ismetal[at::Int]
                 for u in neighbors(graph, i)
