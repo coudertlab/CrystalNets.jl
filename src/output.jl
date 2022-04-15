@@ -94,12 +94,12 @@ function export_vtf(file, __c::Union{Crystal,CrystalNet}, repeatedges=6, colorna
         end
         println(f)
 
-        _a, _b, _c, α, β, γ = cell_parameters(c.cell)
-        println(f, "pbc $_a $_b $_c $α $β $γ\n")
+        ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(c.cell)
+        println(f, "pbc $_a $_b $_c $_α $_β $_γ\n")
 
         println(f, "ordered")
         for x in invcorres
-            coord = c.cell.mat * (widen.(c.pos[x.v]) .+ x.ofs)
+            coord = mat * (widen.(c.pos[x.v]) .+ x.ofs)
             join(f, round.(Float64.(coord); digits=15), ' ')
             println(f)
         end
@@ -135,16 +135,17 @@ function export_cif(file, __c::Union{Crystal, CIF})
         end
 
         #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
-        _a, _b, _c, α, β, γ = Float64.(cell_parameters(c.cell::Cell))
+        ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(c.cell::Cell)
+        _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
 
         println(f, """
 
         _cell_length_a\t\t$_a
         _cell_length_b\t\t$_b
         _cell_length_c\t\t$_c
-        _cell_angle_alpha\t\t$α
-        _cell_angle_beta\t\t$β
-        _cell_angle_gamma\t\t$γ
+        _cell_angle_alpha\t\t$_α
+        _cell_angle_beta\t\t$_β
+        _cell_angle_gamma\t\t$_γ
 
         _symmetry_space_group_name_H-M\t'P 1'
         _symmetry_Int_Tables_number\t1
@@ -223,11 +224,12 @@ function export_cgd(file, c::Crystal)
         margin = 1
         println(f, "\tNAME\t", last(splitdir(file)))
         #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
-        _a, _b, _c, α, β, γ = Float64.(cell_parameters(c.cell))
+        ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(c.cell)
+        _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
         print(f, "\tGROUP\t\"")
         print(f, RAW_SYMMETRY_DATA[c.cell.hall][4])
         println("\"")
-        println(f, "\tCELL\t", _a, ' ', _b, ' ', _c, ' ', α, ' ', β, ' ', γ, ' ')
+        println(f, "\tCELL\t", _a, ' ', _b, ' ', _c, ' ', _α, ' ', _β, ' ', _γ, ' ')
         println(f, "\tATOM")
         to_revisit = Int[]
         for i in 1:length(c.types)
@@ -284,14 +286,14 @@ function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir()
     #     Chemfiles.set_property!(residues[i], "chainid", string(i))
     #     Chemfiles.add_residue!(frame, residues[i])
     # end
-    _a, _b, _c, α, β, γ = cell_parameters(crystal.cell)
-    Chemfiles.set_cell!(frame, Chemfiles.UnitCell(Float64[_a, _b, _c], Float64[α, β, γ]))
+    ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(c.cell)
+    Chemfiles.set_cell!(frame, Chemfiles.UnitCell(Float64[_a, _b, _c], Float64[_α, _β, _γ]))
     recenter::SVector{3,Float64} = minimum(reduce(hcat, crystal.pos); dims=2)
     for i in 1:length(crystal.types)
         # resid = crystal.clusters.attributions[i]
         atom = Chemfiles.Atom(string(crystal.clusters.classes[crystal.clusters.attributions[i]]))
         Chemfiles.set_type!(atom, string_atomtype(crystal.types[i]))
-        Chemfiles.add_atom!(frame, atom, collect(Float64.(crystal.cell.mat * (crystal.pos[i] .- recenter))))
+        Chemfiles.add_atom!(frame, atom, collect(Float64.(mat * (crystal.pos[i] .- recenter))))
         # Chemfiles.add_atom!(residues[resid], i)
     end
     for e in edges(crystal.graph)

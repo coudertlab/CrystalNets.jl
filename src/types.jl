@@ -226,15 +226,22 @@ function cell_parameters(mat::AbstractMatrix)
     α = acosd(_b'_c/(b*c))
     β = acosd(_c'_a/(c*a))
     γ = acosd(_a'_b/(a*b))
-    return a, b, c, α, β, γ
+    return (a, b, c), (α, β, γ)
 end
 
 """
     cell_parameters(cell::Cell)
 
-The sextuplet of cell parameters `(a, b, c, α, β, γ)`.
+Return `((lengths, angles), mat)` where `mat` is the matrix of the cell in upper triangular
+format, `lengths` is the triplet `(a, b, c)` of lengths of the three axes, and `angles` is
+the triplet `(α, β, γ)` of angles between them.
 """
-cell_parameters(cell::Cell) = cell_parameters(cell.mat)
+function cell_parameters(cell::Cell)
+    lengths, angles = cell_parameters(cell.mat)
+    normalized_mat = istriu(cell.mat) ? cell.mat :
+        Cell(cell.hall, lengths, angles, cell.equivalents).mat
+    return (lengths, angles), normalized_mat
+end
 
 function Cell(cell::Cell, mat::StaticArray{Tuple{3,3},BigFloat})
     return Cell(cell.hall, mat, cell.equivalents)
@@ -249,14 +256,16 @@ function Cell(mat::StaticArray{Tuple{3,3},BigFloat})
 end
 
 function Base.show(io::IO, cell::Cell)
-    a, b, c, α, β, γ = Float64.(cell_parameters(cell))
-    print(io, Cell, "($(cell.hall), ($a, $b, $c), ($α, $β, $γ))")
+    ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(cell)
+    _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
+    print(io, Cell, "($(cell.hall), ($_a, $_b, $_c), ($_α, $_β, $_γ))")
 end
 function Base.show(io::IO, ::MIME"text/plain", cell::Cell)
-    a, b, c, α, β, γ = Float64.(cell_parameters(cell))
+    ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(cell)
+    _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
     hall_symbol, crystal_system = HALL_SYMBOLS[cell.hall]
     print(io, Cell, " with Hall symbol $hall_symbol ($crystal_system) and parameters ")
-    print(io, "a=$a, b=$b, c=$c, α=$α, β=$β, γ=$γ")
+    print(io, "a=$_a, b=$_b, c=$_c, α=$_α, β=$_β, γ=$_γ")
 end
 
 ## CIF
@@ -347,7 +356,7 @@ function sortprune_bondlist!(bondlist::Vector{Tuple{Int,Float32}})
 end
 
 function prepare_periodic_distance_computations(mat)
-    a, b, c, α, β, γ = cell_parameters(mat)
+    (a, b, c), (α, β, γ) = cell_parameters(mat)
     ortho = all(x -> isapprox(Float16(x), 90; rtol=0.02), (α, β, γ))
     _a, _b, _c = eachcol(mat)
     safemin = min(Float64(dot(cross(_b, _c), _a)/(b*c)),
