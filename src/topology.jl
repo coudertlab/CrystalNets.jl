@@ -274,7 +274,6 @@ Given the net and the output of `minimal_volume_matrix` computed on the valid tr
 of the net, return the new net representing the initial net in the computed unit cell.
 """
 function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where {D,T}
-    lengths = degree(c.graph)
     if D == 3
         cell = Cell(c.cell, c.cell.mat * mat)
     else
@@ -282,8 +281,8 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
         _mat[1:D,1:D] .= mat
         cell = Cell(c.cell, c.cell.mat * _mat)
     end
-    imat = T.(inv(mat)) # The inverse should only have integer coefficients
 
+    imat = T.(inv(mat)) # The inverse should only have integer coefficients
     poscol = (imat,) .* c.pos
     n = length(poscol)
     offset = Vector{SVector{D,Int}}(undef, n)
@@ -293,11 +292,11 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
         poscol[i] = pos .- ofs
     end
     I_sort = sort(1:n; by=i->(poscol[i], hash_position(offset[i])))
-    i = popfirst!(I_sort)
-    @toggleassert iszero(offset[i])
-    I_kept = Int[i]
-    last_sortedcol = poscol[i]
-    
+    _i = popfirst!(I_sort)
+    @toggleassert iszero(offset[_i])
+    I_kept = Int[_i]
+    last_sortedcol = poscol[_i]
+
     for i in I_sort
         x = poscol[i]
         if x != last_sortedcol
@@ -355,9 +354,10 @@ end
 
 
 """
-    minimize(net::CrystalNet, collisions::Vector{CollisionNode})
+    minimize(net::CrystalNet, [collisions::Vector{CollisionNode}])
 
 Return a CrystalNet representing the same net as the input, but in a unit cell.
+If `collisions` is given, also return the corresponding collisions after minimization.
 
 The computed unit cell may depend on the representation of the input, i.e. it is not
 topologicallly invariant.
@@ -370,7 +370,7 @@ function minimize(net::CrystalNet, collisions::Vector{CollisionNode})
     @toggleassert all(isempty.(find_all_valid_translations(_net, collisions)))
     return _net, collisions
 end
-
+minimize(net::CrystalNet) = minimize(net, CollisionNode[])[1]
 
 
 function findfirstbasis(offsets)

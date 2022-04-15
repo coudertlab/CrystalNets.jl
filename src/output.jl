@@ -27,7 +27,7 @@ function export_vtf(file, __c::Union{Crystal,CrystalNet}, repeatedges=6, colorna
         numencounteredtypes = 0
         println(f, """
         ###############################
-        # written by PeriodicGraphs.jl
+        # written by CrystalNets.jl
         ###############################
         """)
 
