@@ -1,8 +1,8 @@
 ## Handling of the topological archive internally used to recognize topologies.
-import Pkg
+using Pkg.Artifacts
 
-const CRYSTAL_NETS_VERSION = VersionNumber(Pkg.TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["version"])
-const arc_location = normpath(joinpath(dirname(@__DIR__), "archives"))
+const CRYSTAL_NETS_VERSION = v"0.0.8"
+const arc_location = artifact"archives"
 
 """
     const CRYSTAL_NETS_ARCHIVE::Dict{String,String}

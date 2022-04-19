@@ -4,7 +4,7 @@
 Module for automatic recognition of crystal net topologies.
 To use as an executable, run the source file in a shell:
 ```bash
-julia --project=$(normpath(@__DIR__, "..")) $(@__FILE__)
+julia --project=/path/to/CrystalNets/ /path/to/CrystalNets/src/CrystalNets.jl
 ```
 Otherwise, as a module, to try to recognize the net underlying a crystal given in a
 chemical file format called FILE, the entry point is the following execution:

@@ -128,6 +128,6 @@ end
 
 
 
-if abspath(PROGRAM_FILE) == @__FILE__
+@static if abspath(PROGRAM_FILE) == @__FILE__
     export_space_group_table()
 end

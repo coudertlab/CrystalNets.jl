@@ -213,7 +213,7 @@ end
 
     empty!(ARGS)
     append!(ARGS, safeARGS)
-    if splitdir(@__DIR__) != "test" # if used with include("runtests.jl")
+    if basename(@__DIR__) != "test" # if used with include("runtests.jl")
         CrystalNets._reset_archive!()
     end
 end
