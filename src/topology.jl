@@ -8,7 +8,7 @@ Check that the dimensionality of the net (i.e. the number of independent axes al
 it is periodic) is equal to `D`, or throw a DimensionMismatch otherwise.
 """
 function check_dimensionality(c::CrystalNet{D}) where {D}
-    edgs = [c.pos[dst(e)] .+ PeriodicGraphs.ofs(e) .- c.pos[src(e)] for e in edges(c.graph)]
+    edgs = [c.pge.pos[dst(e)] .+ PeriodicGraphs.ofs(e) .- c.pge.pos[src(e)] for e in edges(c.pge.g)]
     sort!(edgs)
     unique!(edgs)
     mat = reduce(hcat, edgs)
@@ -26,55 +26,6 @@ end
 
 
 """
-    check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,T}, collisions, r=nothing)
-
-Check that the net is identical to that rotated by `r` (if it is not `nothing`) then
-translated by `t`. `collisions` is the list of `CollisionNode`s in the net.
-
-If so, return the vmap between the initial vertices and their translated images.
-Otherwise, return `nothing`.
-
-See also: [`possible_translations`](@ref), [`find_all_valid_translations`](@ref)
-"""
-function check_valid_symmetry(c::CrystalNet{D,T}, t::SVector{D,T}, collisions, r=nothing) where {D,T}
-    n = length(c.pos)
-    vmap = Vector{Int}(undef, n)
-    offsets = Vector{SVector{D,Int}}(undef, n)
-    for k in 1:n
-        curr_pos = c.pos[k]
-        transl = (isnothing(r) ? curr_pos : (r * curr_pos)) .+ t
-        ofs = floor.(Int, transl)
-        x = transl .- ofs
-        (i, j) = x < curr_pos ? (1, k) : (k, length(c.types)+1)
-        while j - i > 1
-            m = (j+i)>>1
-            if cmp(x, c.pos[m]) < 0
-                j = m
-            else
-                i = m
-            end
-        end
-        (c.pos[i] == x && c.types[i] == c.types[k]) || return nothing
-        vmap[k] = i
-        offsets[k] = ofs
-    end
-    for e in edges(c.graph)
-        src = vmap[e.src]
-        dst = vmap[e.dst.v]
-        newofs = (isnothing(r) ? e.dst.ofs : r * e.dst.ofs) .+ offsets[e.dst.v] .- offsets[e.src]
-        has_edge(c.graph, PeriodicGraphs.unsafe_edge{D}(src, dst, newofs)) || return nothing
-    end
-    m = n - length(collisions)
-    for (i, node) in enumerate(collisions)
-        j = vmap[m+i]
-        m + i == j && continue
-        j ≤ m && return nothing # a non-collision node is mapped to a collision node
-        collisions[j-m] == CollisionNode(node, vmap) || return nothing
-    end
-    return vmap
-end
-
-"""
     possible_translations(c::CrystalNet)
 
 Return a list of tuples `(nz, i_max_den, max_den, t)` where
@@ -86,11 +37,11 @@ Return a list of tuples `(nz, i_max_den, max_den, t)` where
 The list is guaranteed to contain all the possible valid translations but may contain some
 invalid translations.
 
-See also: [`check_valid_symmetry`](@ref), [`find_all_valid_translations`](@ref)
+See also: [`find_all_valid_translations`](@ref), `PeriodicGraphEmbeddings.check_valid_symmetry`
 """
 function possible_translations(c::CrystalNet{D,T}) where {D,T}
     ts = Tuple{Int, Int, Int, SVector{D,T}}[]
-    sortedpos = copy(c.pos)
+    sortedpos = copy(c.pge.pos)
     origin = popfirst!(sortedpos)
     @toggleassert iszero(origin)
     sort!(sortedpos, by=norm)
@@ -114,12 +65,13 @@ valid translations of the net having exactly `n-1` zeros.
 
 A translation is valid if it maps exactly each vertex to a vertex and each edge to an edge.
 
-See also: [`check_valid_symmetry`](@ref), [`possible_translations`](@ref)
+See also: [`possible_translations`](@ref), `PeriodicGraphEmbeddings.check_valid_symmetry`
 """
 function find_all_valid_translations(shrunk_net::CrystalNet{D,T}, collisions) where {D,T}
     ret = NTuple{D, Vector{Tuple{Int, Int, SVector{D,T}}}}(ntuple(_->[], Val(D)))
+    check_symmetry = check_symmetry_with_collisions(collisions)
     for (nz, i_max_den, max_den, t) in possible_translations(shrunk_net)
-        vmap = check_valid_symmetry(shrunk_net, t, collisions)
+        vmap = check_symmetry(shrunk_net.pge, t, nothing, shrunk_net.types)
         if vmap isa Vector{Int}
             push!(ret[nz+1], (i_max_den, max_den, t))
         end
@@ -275,15 +227,15 @@ of the net, return the new net representing the initial net in the computed unit
 """
 function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where {D,T}
     if D == 3
-        cell = Cell(c.cell, c.cell.mat * mat)
+        cell = Cell(c.pge.cell, c.pge.cell.mat * mat)
     else
         _mat = SizedMatrix{3,3,BigFloat}(LinearAlgebra.I)
         _mat[1:D,1:D] .= mat
-        cell = Cell(c.cell, c.cell.mat * _mat)
+        cell = Cell(c.pge.cell, c.pge.cell.mat * _mat)
     end
 
     imat = T.(inv(mat)) # The inverse should only have integer coefficients
-    poscol = (imat,) .* c.pos
+    poscol = (imat,) .* c.pge.pos
     n = length(poscol)
     offset = Vector{SVector{D,Int}}(undef, n)
     for (i, pos) in enumerate(poscol)
@@ -334,7 +286,7 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     edges = PeriodicEdge{D}[]
     for i in 1:length(I_kept)
         ofs_i = offset[I_kept[i]]
-        for neigh in neighbors(c.graph, I_kept[i])
+        for neigh in neighbors(c.pge.g, I_kept[i])
             ofs_x = offset[neigh.v]
             push!(edges, (i, vmap[neigh.v], ofs_x - ofs_i .+ imat*neigh.ofs))
         end
@@ -450,9 +402,9 @@ vertices and their ordered image in the candidate, as well as the key.
 See also: [`find_candidates`](@ref)
 """
 function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
-    n = nv(net.graph)
+    n = nv(net.pge.g)
     h = 2 # next node to assign
-    origin = net.pos[u]
+    origin = net.pge.pos[u]
     newpos = Vector{SVector{D,T}}(undef, n) # positions of the kept representatives
     newpos[1] = zero(SVector{D,T})
     offsets = Vector{SVector{D,Int32}}(undef, n) # offsets of the new representatives with
@@ -468,11 +420,11 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
     bigbasis = T == Rational{BigInt} ? basis : widen(T).(basis)
     mat = T == Rational{BigInt} ? inv(bigbasis) : T.(inv(bigbasis))
     for t in 1:n # t is the node being processed
-        neighs = neighbors(net.graph, vmap[t])
+        neighs = neighbors(net.pge.g, vmap[t])
         ofst = offsets[t]
         pairs = Vector{Tuple{SVector{D,T},Int}}(undef, length(neighs))
         for (i,x) in enumerate(neighs)
-            pairs[i] = ((mat*(net.pos[x.v] .+ x.ofs .- origin .+ ofst)), x.v)
+            pairs[i] = ((mat*(net.pge.pos[x.v] .+ x.ofs .- origin .+ ofst)), x.v)
         end
         # (x,i) ∈ pairs means that vertex i (in the old numerotation) has position x in the new basis
         order = unique(last.(sort(pairs)))
@@ -491,7 +443,7 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
                 vmap[h] = v
                 rev_vmap[v] = h
                 newpos[h] = coordinate
-                offsets[h] = SVector{D,Int32}(bigbasis * coordinate .+ origin .- net.pos[v])
+                offsets[h] = SVector{D,Int32}(bigbasis * coordinate .+ origin .- net.pge.pos[v])
                 push!(edgs, (t, h, zero(SVector{D,T})))
                 h += 1
             else
@@ -635,6 +587,39 @@ function partition_by_coordination_sequence(graph, vmaps=nothing)
 end
 
 
+function check_symmetry_with_collisions(collisions)
+    function check_symmetry(pge::PeriodicGraphEmbedding{D,T}, t::SVector{D,T}, r, vtypes) where {D,T}
+        vmap = check_valid_symmetry(pge, t, r, vtypes, true)
+        vmap isa Nothing && return nothing
+        n = length(pge.pos)
+        m = n - length(collisions)
+        for (i, node) in enumerate(collisions)
+            j = vmap[m+i].v
+            m + i == j && continue
+            j ≤ m && return nothing # a non-collision node is mapped to a collision node
+            collisions[j-m] == CollisionNode(node, [x.v for x in vmap]) || return nothing
+        end
+        return vmap
+    end
+    check_symmetry
+end
+
+struct OnlyVIterator{D}
+    c::SubArray{PeriodicVertex{D},1,Matrix{PeriodicVertex{D}},Tuple{Base.Slice{Base.OneTo{Int}},Int},true}
+end
+Base.iterate(x::OnlyVIterator, state=1) = state > length(x.c) ? nothing : x.c[state].v
+Base.length(x::OnlyVIterator) = length(x.c)
+Base.eltype(::Type{OnlyVIterator{D}}) where {D} = Int
+struct EachcolVIterator{D}
+    m::Matrix{PeriodicVertex{D}}
+end
+function Base.iterate(x::EachcolVIterator, state=1)
+    state > size(x.m, 2) && return nothing
+    OnlyVIterator(@inbounds @view x.m[:,state])
+end
+Base.length(x::EachcolVIterator) = size(x.m, 2)
+Base.eltype(::Type{EachcolVIterator{D}}) where {D} = OnlyVIterator{D}
+
 """
     find_candidates(net::CrystalNet{D}, collisions::Vector{CollisionNode}) where D
 
@@ -650,24 +635,24 @@ See also: [`candidate_key`](@ref)
 function find_candidates(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}) where {D,T}
     L = D*D
     if D == 3
-        rotations, vmaps, _ = find_symmetries(net, collisions)
-        @toggleassert length(rotations) == length(vmaps)
-        categories, unique_reprs = partition_by_coordination_sequence(net.graph, vmaps)
+        check_symmetry = check_symmetry_with_collisions(collisions)
+        symmetries = find_symmetries(net.pge, net.types, check_symmetry)
+        categories, unique_reprs = partition_by_coordination_sequence(net.pge.g, EachcolVIterator(symmetries.vmaps))
     else
-        categories, unique_reprs = partition_by_coordination_sequence(net.graph)
+        categories, unique_reprs = partition_by_coordination_sequence(net.pge.g)
     end
 
-    category_map = Vector{Int}(undef, nv(net.graph))
+    category_map = Vector{Int}(undef, nv(net.pge.g))
     for (i, cat) in enumerate(categories)
         for j in cat
             category_map[j] = i
         end
     end
-    @toggleassert sort.(categories) == sort.(first(partition_by_coordination_sequence(net.graph)))
+    # @toggleassert sort.(categories) == sort.(first(partition_by_coordination_sequence(net.pge.g)))
     candidates = Dict{Int,Vector{SMatrix{D,D,T,L}}}()
     for reprs in unique_reprs
         # First, we try to look for triplet of edges all starting from the same vertex within a category
-        degree(net.graph, first(reprs)) <= D && continue
+        degree(net.pge.g, first(reprs)) <= D && continue
         candidates = find_candidates_onlyneighbors(net, reprs, category_map)
         !isempty(candidates) && break
     end
@@ -689,7 +674,7 @@ function find_candidates(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}
         error("Internal error: no candidate found.")
     end
     if D == 3
-        return extract_through_symmetry(candidates, vmaps, rotations), category_map
+        return extract_through_symmetry(candidates, symmetries), category_map
     else
         flattened_candidates = Pair{Int,SMatrix{D,D,T,L}}[]
         for (i, mats) in candidates
@@ -703,16 +688,16 @@ end
 
 
 """
-    extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}, vmaps, rotations) where T
+    extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}, symmetries::AbstractSymmetryGroup) where T
 
 Given the candidates and the list of symmetries of the net, return the flattened list of
 candidates after removing candidates that are symmetric images of the kept ones.
 """
-function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}, vmaps, rotations) where T
+function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}, symmetries::AbstractSymmetryGroup) where T
     unique_candidates = Pair{Int,SMatrix{3,3,T,9}}[]
     for (i, mats) in candidates
-        @toggleassert i == minimum(vmap[i] for vmap in vmaps)
-        indices = [j for j in 1:length(vmaps) if vmaps[j][i] == i] # vmap for which i is a fixpoint
+        @toggleassert i == symmetries(i)
+        indices = [j for (j,symm) in enumerate(symmetries) if symm(i) == i] # vmap for which i is a fixpoint
         min_mats = Set{SVector{9,T}}()
         for mat in mats
             # At this point, `i => mat` is a potential candidate, and so are all its
@@ -722,7 +707,7 @@ function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}
             # the lexicographically smallest, since they are all equivalent to `i => mat`.
             min_mat = SVector{9,T}(mat) # flattened to allow lexicographic comparison
             for j in indices
-                new_mat = SVector{9,T}(rotations[j] * mat)
+                new_mat = SVector{9,T}(symmetries.rotations[j] * mat)
                 if new_mat < min_mat
                     min_mat = new_mat
                 end
@@ -750,7 +735,7 @@ returned list (for instance, if all outgoing edges of a vertex are coplanar with
 """
 function find_initial_candidates(net::CrystalNet{D,T}, candidates_v, category_map) where {D,T}
     @toggleassert 1 ≤ D ≤ 3
-    deg = degree(net.graph, first(candidates_v)) # The degree is the same for all vertices of the same category
+    deg = degree(net.pge.g, first(candidates_v)) # The degree is the same for all vertices of the same category
     n = length(candidates_v)
     _initial_candidates = Vector{Pair{Int,Tuple{Matrix{T},Vector{Int}}}}(undef, n)
     valid_initial_candidates = falses(n)
@@ -759,9 +744,9 @@ function find_initial_candidates(net::CrystalNet{D,T}, candidates_v, category_ma
         v = candidates_v[i]
         a = Matrix{T}(undef, D, deg)
         cats = Vector{Int}(undef, deg)
-        posi = net.pos[v]
-        for (j, x) in enumerate(neighbors(net.graph, v))
-            a[:,j] .= net.pos[x.v] .+ x.ofs .- posi
+        posi = net.pge.pos[v]
+        for (j, x) in enumerate(neighbors(net.pge.g, v))
+            a[:,j] .= net.pge.pos[x.v] .+ x.ofs .- posi
             cats[j] = category_map[x.v]
         end
         if (D == 3 && isrank3(a)) || (D == 2 && isrank2(a)) || (D == 1 && ((@toggleassert a[:,1] != 0); true))
@@ -1013,8 +998,8 @@ function find_candidates_fallback(net::CrystalNet3D{T}, reprs, othercats, catego
     for cat in othercats
         for u in reprs
             mats = SMatrix{3,3,T,9}[]
-            posu = net.pos[u]
-            neighu = neighbors(net.graph, u)
+            posu = net.pge.pos[u]
+            neighu = neighbors(net.pge.g, u)
             for (j1, _x1) in enumerate(neighu)
                 category_map[_x1.v] > mincats[1] && category_map[_x1.v] > mincats[2] && continue
                 for j2 in j1+1:length(neighu)
@@ -1027,14 +1012,14 @@ function find_candidates_fallback(net::CrystalNet3D{T}, reprs, othercats, catego
                     current_cats[1] > mincats[1] && continue
                     current_cats[2] = category_map[x2.v]
                     current_cats[1] == mincats[1] && current_cats[2] > mincats[2] && continue
-                    vec1 = net.pos[x1.v] .+ x1.ofs .- posu
-                    vec2 = net.pos[x2.v] .+ x2.ofs .- posu
+                    vec1 = net.pge.pos[x1.v] .+ x1.ofs .- posu
+                    vec2 = net.pge.pos[x2.v] .+ x2.ofs .- posu
                     j = iszero(vec1[1]) ? iszero(vec1[2]) ? 3 : 2 : 1
                     vec1[j] * vec2 == vec2[j] * vec1 && continue # colinear
                     for v in cat
-                        posv = net.pos[v]
-                        for x3 in neighbors(net.graph, v)
-                            vec3 = net.pos[x3.v] .+ x3.ofs .- posv
+                        posv = net.pge.pos[v]
+                        for x3 in neighbors(net.pge.g, v)
+                            vec3 = net.pge.pos[x3.v] .+ x3.ofs .- posv
                             mat = SMatrix{3,3,T,9}(hcat(vec1, vec2, vec3))
                             issingular(mat) && continue
                             current_cats[3] = category_map[x3.v]
@@ -1083,11 +1068,11 @@ Return a unique topological key for the net, which is a topological invariant of
 (i.e. it does not depend on its initial representation).
 """
 function topological_key(net::CrystalNet{D}) where D
-    isempty(net.pos) && return PeriodicGraph{D}()
+    isempty(net.pge.pos) && return PeriodicGraph{D}()
     newnet, collisions = collision_nodes(net)
     if collisions isa Nothing
-        net.graph.width[] = -2 # internal error code
-        return net.graph
+        net.pge.g.width[] = -2 # internal error code
+        return net.pge.g
     end
     return topological_key(newnet, collisions::Vector{CollisionNode})
 end
@@ -1095,7 +1080,7 @@ end
 function topological_key(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}) where {D,T}
     candidates, category_map = find_candidates(net, collisions)
     v, minimal_basis = popfirst!(candidates)
-    n = nv(net.graph)
+    n = nv(net.pge.g)
     _edgs = [(n + 1, 0, zero(SVector{D,T}))]
     minimal_vmap, minimal_edgs = candidate_key(net, v, minimal_basis, _edgs)
     for (v, basis) in candidates

@@ -1,7 +1,5 @@
 ## Functions related to unstable nets (some vertices have the same equilibrium placement)
 
-
-
 """
     CollisionNode
 
@@ -37,11 +35,11 @@ function shrink_collisions(net::CrystalNet{D,T}, collisions::Vector{UnitRange{In
 
     collision_vmap = collect(1:length(net.types))
     for (i, node) in enumerate(collisions)
-        @toggleassert all(==(net.pos[first(node)]), @view net.pos[node])
+        @toggleassert all(==(net.pge.pos[first(node)]), @view net.pge.pos[node])
         collision_vmap[node] .= first_colliding + i - 1
     end
     edgs = PeriodicEdge{D}[]
-    for e in edges(net.graph)
+    for e in edges(net.pge.g)
         src = collision_vmap[e.src]
         dst = collision_vmap[e.dst.v]
         if src < first_colliding || dst < first_colliding
@@ -52,12 +50,12 @@ function shrink_collisions(net::CrystalNet{D,T}, collisions::Vector{UnitRange{In
 
     @toggleassert nv(newgraph) == n
 
-    newpos = net.pos[1:first_colliding]
-    append!(newpos, net.pos[first(collisions[i])] for i in 2:m)
+    newpos = net.pge.pos[1:first_colliding]
+    append!(newpos, net.pge.pos[first(collisions[i])] for i in 2:m)
     newtypes = net.types[1:first_colliding-1]
     append!(newtypes, :* for i in 1:m) # type of collision nodes will be Symbol('*')
 
-    return CrystalNet{D,T}(net.cell, newtypes, newpos, newgraph, net.options)
+    return CrystalNet{D,T}(net.pge.cell, newtypes, newpos, newgraph, net.options)
 end
 
 
@@ -396,8 +394,8 @@ end
 
 
 function collect_collisions(net::CrystalNet)
-    sortedpos = issorted(net.pos) ? net.pos : sort(net.pos)
-    @toggleassert all(pos -> all(x -> 0 ≤ x < 1, pos), net.pos)
+    sortedpos = issorted(net.pge.pos) ? net.pge.pos : sort(net.pge.pos)
+    @toggleassert all(pos -> all(x -> 0 ≤ x < 1, pos), net.pge.pos)
     collision_sites = Vector{Int}[]
     collision_vertices = Int[]
     flag_collision = false
@@ -450,7 +448,7 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
         uniquenlist = true
         for u in site
             this_nlist = PeriodicVertex{D}[]
-            for x in neighbors(net.graph, u)
+            for x in neighbors(net.pge.g, u)
                 get!(known_neighbors, x.v, x.ofs) == x.ofs || return net, nothing # condition B
                 x.v ∈ site && continue
                 x.v ∈ collision_vertices_set && return net, nothing # condition A
@@ -493,8 +491,8 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     end
     @toggleassert idx == n+1
 
-    newgraph = net.graph[vmap]
-    newpos = net.pos[vmap]
+    newgraph = net.pge.g[vmap]
+    newpos = net.pge.pos[vmap]
     ofs = newpos[1]
     offsets = Vector{SVector{D,Int}}(undef, n)
     for (i, x) in enumerate(newpos)
@@ -502,9 +500,9 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
         newpos[i] = x .- ofs .- offsets[i]
     end
     offset_representatives!(newgraph, .-offsets)
-    # net.pos[1] should always be [0,0,0]
+    # net.pge.pos[1] should always be [0,0,0]
 
-    newnet = CrystalNet{D,T}(net.cell, net.types[vmap], newpos, newgraph, net.options)
-    newnodes = [CollisionNode(newnet.graph, node) for node in collisions]
+    newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, net.options)
+    newnodes = [CollisionNode(newnet.pge.g, node) for node in collisions]
     return shrink_collisions(newnet, collisions), newnodes
 end

@@ -136,15 +136,14 @@ end
 Repeatedly remove monovalent atoms from the crystal until none is left.
 """
 function trim_monovalent(crystal::Crystal{T}) where T
-    graph = deepcopy(crystal.graph)
+    graph = deepcopy(crystal.pge.g)
     vmap = _trim_monovalent!(graph)
     types = crystal.types[vmap]
-    pos = crystal.pos[vmap]
+    pge = PeriodicGraphEmbedding3D(graph, crystal.pge.pos[vmap], crystal.pge.cell)
     if T === Nothing
-        return Crystal{Nothing}(crystal.cell, types, pos, graph, crystal.options)
+        return Crystal{Nothing}(pge, types, crystal.options)
     else
-        clusters = crystal.clusters[vmap]
-        return Crystal{Clusters}(crystal.cell, types, clusters, pos, graph, crystal.options)
+        return Crystal{Clusters}(pge, types, crystal.clusters[vmap], crystal.options)
     end
 end
 
@@ -897,7 +896,7 @@ clustering algorithm.
 """
 function find_sbus(crystal, kinds=default_sbus)
     separate_metals = crystal.options.separate_metals::Bool
-    n = nv(crystal.graph)
+    n = nv(crystal.pge.g)
     classes = Vector{Int}(undef, n)
     for i in 1:n
         atom_name = crystal.types[i]
@@ -923,15 +922,15 @@ function find_sbus(crystal, kinds=default_sbus)
     temporary_classes_set = Set{Int}(temporary_classes)
     nclasses::Int = length(kinds)
     last_class = nclasses
-    graph = crystal.graph
+    graph = crystal.pge.g
     organickind = kinds[:C]
 
     if crystal.options.detect_organiccycles
-        organiccycle = detect_organiccycles(classes, graph, crystal.pos,
-                                    crystal.cell.mat, organickind, temporary_classes_set)
+        organiccycle = detect_organiccycles(classes, graph, crystal.pge.pos,
+                                    crystal.pge.cell.mat, organickind, temporary_classes_set)
         same_SBU = group_cycle(organiccycle, crystal.types, graph)
         if !isempty(same_SBU)
-            graph = PeriodicGraph(crystal.graph) # make a modificable copy
+            graph = PeriodicGraph(crystal.pge.g) # make a modificable copy
             for cycle in same_SBU
                 # Each atom in an aromatic cycle is bonded to the other atoms of the
                 # same cycle. The newly-formed clique is assigned a new class.
@@ -1169,7 +1168,6 @@ function find_sbus(crystal, kinds=default_sbus)
         end
 
         periodicsbus = newperiodicsbus
-        # export_default(Crystal{Nothing}(crystal.cell, Symbol.(classes), crystal.pos, graph, crystal.options))
     end
 
     return sbus
@@ -1243,14 +1241,14 @@ end
 
 function split_O_vertices(c)
     toremove = Int[]
-    graph = deepcopy(c.graph)
+    graph = deepcopy(c.pge.g)
     for (k, t) in enumerate(c.types)
         (t === :O && degree(graph, k) > 2) || continue
         _split_this_sbu!(toremove, graph, k, c.types, :O, nothing)
     end
     vmap = rem_vertices!(graph, toremove)
-    pos = c.pos[vmap]
-    return Crystal{Nothing}(c.cell, c.types[vmap], pos, graph, Options(c.options; _pos=pos))
+    pge = PeriodicGraphEmbedding3D(graph, c.pge.pos[vmap], c.pge.cell)
+    return Crystal{Nothing}(pge, c.types[vmap], Options(c.options; _pos=pge.pos))
 end
 
 
@@ -1313,18 +1311,18 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters)
         if crystal.options.split_O_vertex
             return split_O_vertices(crystal)
         end
-        return Crystal{Nothing}(crystal; _pos=crystal.pos)
+        return Crystal{Nothing}(crystal; _pos=crystal.pge.pos)
     end
     edgs = PeriodicEdge3D[]
-    for s in vertices(crystal.graph)
+    for s in vertices(crystal.pge.g)
         atts = clusters.attributions[s]
-        neigh0 = neighbors(crystal.graph, s)
+        neigh0 = neighbors(crystal.pge.g, s)
         @toggleassert length(neigh0) ≥ 2
         typisnotC = crystal.types[s] !== :C
         for x in neigh0
             d = x.v
             if crystal.options.bond_adjacent_sbus && crystal.types[d] === :C && typisnotC
-                neighs = neighbors(crystal.graph, d)
+                neighs = neighbors(crystal.pge.g, d)
                 if length(neighs) > 2
                     for y in neighs
                         atty = clusters.attributions[y.v]
@@ -1350,7 +1348,7 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters)
     graph = PeriodicGraph3D(n, edgs)
     export_default(crystal, "trimmed", crystal.options.name, crystal.options.export_trimmed)
     if ne(graph) == 0
-        return Crystal{Nothing}(crystal.cell, Symbol[], SVector{3,Float64}[], graph,
+        return Crystal{Nothing}(PeriodicGraphEmbedding{3,Float64}(crystal.pge.cell), Symbol[],
                                  Options(crystal.options; _pos=SVector{3,Float64}[]))
     end
     if !isempty(crystal.options.export_attributions)
@@ -1359,12 +1357,12 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters)
         println("Attributions of atoms into SBUs represented represented at ", replace(path, ('\\'=>'/')))
     end
 
-    sbus = clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.graph, crystal.types, crystal.options.split_O_vertex)]
+    sbus = clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.pge.g, crystal.types, crystal.options.split_O_vertex)]
     n = length(sbus)
     pos = Vector{SVector{3,Float64}}(undef, n)
     types = Vector{Symbol}(undef, n)
     for (i, sbu) in enumerate(sbus)
-        pos[i] = mean(crystal.pos[x.v] .+ x.ofs for x in sbu)
+        pos[i] = mean(crystal.pge.pos[x.v] .+ x.ofs for x in sbu)
         name = sort!([crystal.types[x.v] for x in sbu])
         push!(name, Symbol(""))
         newname = Tuple{Int,String}[]
@@ -1383,7 +1381,7 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters)
         sort!(newname; by=first, rev=true)
         types[i] = length(sbu) == 1 ? crystal.types[first(sbu).v] : Symbol(join(last.(newname)))
     end
-    ret = Crystal{Nothing}(crystal.cell, types, pos, graph, Options(crystal.options; _pos=pos))
+    ret = Crystal{Nothing}(crystal.pge.cell, types, pos, graph, Options(crystal.options; _pos=pos))
     return ret
 end
 
@@ -1401,7 +1399,7 @@ function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Tupl
             return true, T === Clusters ? c.clusters : Clusters(length(c.types))
         end
         newc = Crystal{Nothing}(c; clusterings=[Clustering.Auto], export_attributions=false, export_input=false)
-        if nv(_collapse_clusters(newc, clusters).graph) <= 1
+        if nv(_collapse_clusters(newc, clusters).pge.g) <= 1
             return true, T === Clusters ? c.clusters : Clusters(length(c.types))
         end
         return false, clusters
@@ -1662,12 +1660,12 @@ end
 
 function regroup_toremove(cryst, tomerge, toremove_list, msg)
     if isempty(toremove_list)
-        ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, cryst.types, cryst.pos, cryst.graph, Options(cryst.options; _pos=cryst.pos)))
+        ret = trimmed_crystal(Crystal{Nothing}(cryst.pge, cryst.types, Options(cryst.options; _pos=cryst.pge.pos)))
         export_default(ret, lazy"clusters_$msg", cryst.options.name, cryst.options.export_clusters)
         return ret
     end
     toremove_all = reduce(vcat, toremove_list)
-    previous_graph = PeriodicGraph(cryst.graph)
+    previous_graph = PeriodicGraph(cryst.pge.g)
     for v in tomerge
         neighs = neighbors(previous_graph, v)
         for (i, x) in enumerate(neighs)
@@ -1677,9 +1675,9 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
             end
         end
     end
-    graph = PeriodicGraph(cryst.graph)
+    graph = PeriodicGraph(cryst.pge.g)
     vmap = rem_vertices!(graph, toremove_all)
-    rev_vmap = zeros(Int, nv(cryst.graph))
+    rev_vmap = zeros(Int, nv(cryst.pge.g))
     for (i,j) in enumerate(vmap)
         rev_vmap[j] = i
     end
@@ -1687,7 +1685,7 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
     n = length(cryst.types)
     toremove = falses(n)
     toremove[toremove_all] .= true
-    mat = Float64.(cryst.cell.mat)
+    mat = Float64.(cryst.pge.cell.mat)
 
     new_edgs = Dict{PeriodicEdge3D,Bool}()
     for Q in toremove_list
@@ -1707,7 +1705,7 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
             num_targets = length(neighs)
             # @show neighs
             visited_coplanar4 = Set{SVector{4,Int}}()
-            keep_edges = edges_of_convex_hull(neighs, num_targets, mat, cryst.pos, toremove, visited_coplanar4)
+            keep_edges = edges_of_convex_hull(neighs, num_targets, mat, cryst.pge.pos, toremove, visited_coplanar4)
             update_new_edgs!(new_edgs, neighs, keep_edges, toremove, rev_vmap)
             #=
             for metal in metalneighs
@@ -1722,7 +1720,7 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
                     neighs2 = PeriodicVertex3D[]
                     metalneighs2 = PeriodicVertex3D[]
                     encounteredflags = Union{Nothing,SVector{3,Int}}[]
-                    for y in neighbors(cryst.graph, x.v)
+                    for y in neighbors(cryst.pge.g, x.v)
                         y == parent && continue
                         newvertex = PeriodicVertex3D(y.v, y.ofs .+ x.ofs)
                         newvertex ∈ encountered && continue
@@ -1762,7 +1760,7 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
                     end
                 end
                 # u == 1 && @show metal, copyneighs
-                keep_edges = edges_of_convex_hull(copyneighs, num_targets, mat, cryst.pos, toremove,
+                keep_edges = edges_of_convex_hull(copyneighs, num_targets, mat, cryst.pge.pos, toremove,
                                                   copy(visited_coplanar4), keep_edges)
                 update_new_edgs!(new_edgs, copyneighs, keep_edges, toremove, rev_vmap)
             end
@@ -1773,12 +1771,12 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
         _b && add_edge!(graph, e)
     end
 
-    pos = cryst.pos[vmap]
-    #remove_triangles!(graph, pos, nothing, Float64.(cryst.cell.mat), new_edgs)
+    pge = PeriodicGraphEmbedding(graph, cryst.pos[vmap], cryst.pge.cell)
+    #remove_triangles!(graph, pge.pos, nothing, Float64.(cryst.pge.cell.mat), new_edgs)
     types = cryst.types[vmap]
 
 
-    ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, types, pos, graph, Options(cryst.options; _pos=pos)))
+    ret = trimmed_crystal(Crystal{Nothing}(pge, types, Options(cryst.options; _pos=pge.pos)))
     export_default(ret, lazy"clusters_$msg", cryst.options.name, cryst.options.export_clusters)
     return ret
 end
@@ -1803,7 +1801,7 @@ function pem_to_pe(cryst::Crystal{Nothing})
         metal_identified = _metal_identified isa Bool ? _metal_identified : begin
             # in this case, it depends on whether there exists a metallic neighbor
             flag = false
-            for x in neighbors(cryst.graph, i)
+            for x in neighbors(cryst.pge.g, i)
                 if metallic[x.v]
                     flag = true
                     break
@@ -1848,7 +1846,7 @@ function pem_to_pe(cryst::Crystal{Nothing})
         Q = [PeriodicVertex3D(i)]
         for u in Q
             surrounded = true
-            for x in neighbors(cryst.graph, u.v)
+            for x in neighbors(cryst.pge.g, u.v)
                 ofs = u.ofs .+ x.ofs
                 if !metallic[x.v]
                     push!(neighs, PeriodicVertex(x.v, ofs))
@@ -1872,7 +1870,7 @@ function pem_to_pe(cryst::Crystal{Nothing})
         isempty(neighs) && continue
         surroundedflag = false
         for v in metal_surrounded_list
-            for x in neighbors(cryst.graph, v)
+            for x in neighbors(cryst.pge.g, v)
                 if metal_surrounded[x.v]
                     surroundedflag = true
                     break
@@ -1890,7 +1888,7 @@ end
 
 
 function regroup_vmap(cryst, vmap, isolate, msg)
-    clusters, periodicsbus = regroup_sbus(cryst.graph, vmap, isolate)
+    clusters, periodicsbus = regroup_sbus(cryst.pge.g, vmap, isolate)
     if !isempty(periodicsbus)
         # Abandon. This can happen for example if a single-C SBU has been split previously
         trimmed_c = trimmed_crystal(cryst)
@@ -1898,9 +1896,9 @@ function regroup_vmap(cryst, vmap, isolate, msg)
         return trimmed_c
     end
     edgs = PeriodicEdge3D[]
-    for s in vertices(cryst.graph)
+    for s in vertices(cryst.pge.g)
         atts = clusters.attributions[s]
-        for x in neighbors(cryst.graph, s)
+        for x in neighbors(cryst.pge.g, s)
             d = x.v
             attd = clusters.attributions[d]
             newofs = x.ofs .+ clusters.offsets[s] .- clusters.offsets[d]
@@ -1953,8 +1951,8 @@ function regroup_vmap(cryst, vmap, isolate, msg)
         end
         lengths = [sum(last, comp) for comp in compo]
         total_length = sum(lengths)
-        #pos[i] = cryst.pos[first(sbu).v] .+ first(sbu).ofs
-        pos[i] = sum((cryst.pos[x.v] .+ x.ofs) .* (lengths[k]/total_length) for (k,x) in enumerate(sbu))
+        #pos[i] = cryst.pge.pos[first(sbu).v] .+ first(sbu).ofs
+        pos[i] = sum((cryst.pge.pos[x.v] .+ x.ofs) .* (lengths[k]/total_length) for (k,x) in enumerate(sbu))
 
         name = reduce(vcat, compo)
         sort!(name; by=first)
@@ -1975,7 +1973,7 @@ function regroup_vmap(cryst, vmap, isolate, msg)
         sort!(newname; by=first, rev=true)
         types[i] = Symbol(join(last.(newname)))
     end
-    ret = trimmed_crystal(Crystal{Nothing}(cryst.cell, types, pos, graph, Options(cryst.options; _pos=pos)))
+    ret = trimmed_crystal(Crystal{Nothing}(cryst.pge.cell, types, pos, graph, Options(cryst.options; _pos=pos)))
     export_default(ret, lazy"clusters_$msg", cryst.options.name, cryst.options.export_clusters)
     return ret
 end
@@ -2019,7 +2017,7 @@ function allnodes_to_singlenodes(cryst::Crystal{Nothing})
         Q = [PeriodicVertex3D(i)]
         periodic = false
         for u in Q
-            for x in neighbors(cryst.graph, u.v)
+            for x in neighbors(cryst.pge.g, u.v)
                 if organics[x.v]
                     @toggleassert vmap[x.v] == 0
                     ofs = u.ofs .+ x.ofs

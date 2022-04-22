@@ -41,26 +41,33 @@ end
     end
     tests = Dict{String,Bool}([x=>false for x in values(CrystalNets.CRYSTAL_NETS_ARCHIVE)])
     reverse_archive = collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
+    failurelock = ReentrantLock()
+    successes = zeros(Int, Threads.nthreads())
     Threads.@threads for (genome, id) in reverse_archive
-        tests[id] = try
+        test = try
             topological_genome(CrystalNet(PeriodicGraph(genome))).name == id
-        catch
+        catch e
+            CrystalNets.isinterrupt(e) && rethrow()
             false
         end
-    end
-    for (id, b) in tests
-        if !b
-            @info "Failed for $id (Archive)"
+        if test
+            successes[Threads.threadid()] += 1
+        else
+            lock(failurelock) do
+                # The following will throw as non-boolean, hence printing the failing test
+                @test "$id failed (Archive)"
+            end
         end
-        @test b
     end
+    Test.get_testset().n_passed += sum(successes)
 end
 
 @testset "Module" begin
     targets = ["pcu", "afy, AFY", "apc, APC", "bam", "bcf", "cdp", "cnd", "ecb", "fiv",
     "ftd", "ftj", "ins", "kgt", "mot", "moz", "muh", "pbz", "qom", "sig",
     "sma", "sod-f", "sod-h", "utj", "utp"]
-    tests = Dict{String,Bool}([x=>true for x in targets])
+    failurelock = ReentrantLock()
+    successes = zeros(Int, Threads.nthreads())
     Threads.@threads for target in targets
         @info "Testing $target"
         graph = PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE[target])
@@ -69,16 +76,18 @@ end
             r = randperm(n)
             offsets = [SVector{3,Int}([rand(-3:3) for _ in 1:3]) for _ in 1:n]
             graph = swap_axes!(offset_representatives!(graph[r], offsets), randperm(3))
-            tests[target] &= topological_genome(CrystalNet(graph)).name == target
+            if topological_genome(CrystalNet(graph)).name == target
+                successes[Threads.threadid()] += 1
+            else
+                lock(failurelock) do
+                    # The following will throw as non-boolean, hence printing the failing test
+                    @test "$target failed (Module) with g = $(string(graph))"
+                end
+            end
         end
-    end
-    for (id, b) in tests
-        if !b
-            @show "Failed for $id (Module)"
-        end
-        @test b
     end
 
+    Test.get_testset().n_passed += sum(successes)
     cifs, crystalnetsdir = _finddirs()
     @test topological_genome(CrystalNet(redirect_stderr(devnull) do;
             parse_chemfile(joinpath(cifs, "Moganite.cif"))
