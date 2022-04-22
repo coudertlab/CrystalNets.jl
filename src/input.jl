@@ -967,7 +967,7 @@ function parse_as_cif(cif::CIF, options::Options, name::String)
     end
     n -= length(ignored)
 
-    cell = Cell(cif.cell.mat)
+    cell = cell_with_warning(cif.cell.mat)
     return finalize_checks(cell, pos, types, Int[], bonds, guessed_bonds, options, name)
 end
 
@@ -984,7 +984,7 @@ function parse_as_chemfile(frame::Chemfiles.Frame, options::Options, name::Strin
     end
 
     _pos = collect(eachcol(Chemfiles.positions(frame)))
-    cell = Cell(SMatrix{3,3,BigFloat,9}(Chemfiles.matrix(Chemfiles.UnitCell(frame)))')
+    cell = cell_with_warning(SMatrix{3,3,BigFloat,9}(Chemfiles.matrix(Chemfiles.UnitCell(frame)))')
 
     pos::Vector{SVector{3,Float64}} = Ref(inv(cell.mat)) .* _pos
     mat = Float64.(cell.mat)

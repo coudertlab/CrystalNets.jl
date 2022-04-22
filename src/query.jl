@@ -6,20 +6,19 @@
 Compute the topological genome of a net. The topological genome is an invariant
 if the net, meaning that it does not depend on its representation. It is also
 the string representation of a D-periodic graph such that
-`PeriodicGraph{D}(topological_genome(net))` is isomorphic to `net.graph` (except
+`PeriodicGraph{D}(topological_genome(net))` is isomorphic to `net.pge.g` (except
 possibly if the `ignore_types` option is unset).
 
 !!! info
     Options must be passed directly within `net`.
 """
 function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
-    isempty(net.pos) && return TopologicalGenome(net.options.error)
+    isempty(net.types) && return TopologicalGenome(net.options.error)
     if net.options.ignore_types
-        net = CrystalNet{D,T}(net.cell, fill(Symbol(""), length(net.types)), net.pos,
-                              net.graph, net.options)
+        net = CrystalNet{D,T}(net.pge, fill(Symbol(""), length(net.types)), net.options)
     end
     shrunk_net, _collisions = collision_nodes(net)
-    _collisions isa Nothing && return TopologicalGenome(net.graph, nothing, true)
+    _collisions isa Nothing && return TopologicalGenome(net.pge.g, nothing, true)
     collisions::Vector{CollisionNode} = _collisions
 
     if !net.options.skip_minimize
@@ -38,7 +37,7 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
             newnet = CrystalNet{D,widen(T)}(net; ignore_types=false)
             return topological_genome(newnet)
         end
-        _collisions isa Nothing && return TopologicalGenome(shrunk_net.graph, nothing, true)
+        _collisions isa Nothing && return TopologicalGenome(shrunk_net.pge.g, nothing, true)
         collisions = _collisions
     end
 
@@ -137,7 +136,7 @@ function topological_genome(group::UnderlyingNets)
         subret = Vector{Tuple{_Clustering,Union{_Clustering,TopologicalGenome}}}(undef, length(net))
         for (j, subnet) in enumerate(net)
             clust = only(subnet.options.clusterings)
-            refclust = get!(encountered, subnet.graph, clust)
+            refclust = get!(encountered, subnet.pge.g, clust)
             subret[j] = (clust, refclust == clust ? topological_genome(subnet) : refclust)
         end
         push!(ret, (id, TopologyResult(subret)))
@@ -198,8 +197,8 @@ macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
     for (_, nets) in subnets
         for net in nets
             net isa CrystalNet || continue
-            sig = get(encountered_graphs, net.graph, net.graph)
-            if haskey(encountered_genomes, net.graph)
+            sig = get(encountered_graphs, net.pge.g, net.pge.g)
+            if haskey(encountered_genomes, net.pge.g)
                 unstable, counter = encountered_genomes[sig]
                 encountered_genomes[sig] = (unstable, counter + 1)
             else
@@ -271,10 +270,10 @@ function guess_topology(path, defopts::Options)
     # @ifvalidgenomereturn Options(defopts; ignore_low_occupancy=true) "removing atoms with occupancy < 0.5"
     if :Al ∈ atoms && (:P ∈ atoms || :Pc ∈ atoms) # ALPO datastructure
         # flag = false
-        # for i in vertices(crystal.graph)
+        # for i in vertices(crystal.pge.g)
         #     crystal.types[i] === :O || continue
         #     currt = :O
-        #     for x in neighbors(crystal.graph, i)
+        #     for x in neighbors(crystal.pge.g, i)
         #         t = crystal.types[x.v]
         #         if (t === :P) | (t === :Al)
         #             if currt === :O

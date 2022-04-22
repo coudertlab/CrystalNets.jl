@@ -17,7 +17,7 @@ end
 function export_vtf(file, __c::Union{Crystal,CrystalNet}, repeatedges=6, colorname=false)
     mkpath(splitdir(file)[1])
     n = length(__c.types)
-    @toggleassert length(__c.pos) == n
+    @toggleassert length(__c.pge.pos) == n
     c = __c isa CrystalNet ? CrystalNet3D(__c) : __c
     open(file, write=true) do f
         invcorres = [PeriodicVertex3D(i) for i in 1:n]
@@ -58,7 +58,7 @@ function export_vtf(file, __c::Union{Crystal,CrystalNet}, repeatedges=6, colorna
             jmax = j - 1
             for i in 1:jmax
                 vertex = invcorres[i]
-                for x in neighbors(c.graph, vertex.v)
+                for x in neighbors(c.pge.g, vertex.v)
                     y = PeriodicVertex3D(x.v, x.ofs .+ vertex.ofs)
                     if get!(corres, y, j) == j
                         j += 1
@@ -84,7 +84,7 @@ function export_vtf(file, __c::Union{Crystal,CrystalNet}, repeatedges=6, colorna
         println(f)
 
         for (i,x) in enumerate(invcorres)
-            for neigh in neighbors(c.graph, x.v)
+            for neigh in neighbors(c.pge.g, x.v)
                 j = get(corres, PeriodicVertex3D(neigh.v, neigh.ofs .+ x.ofs), nothing)
                 isnothing(j) && continue
                 if i < j
@@ -94,12 +94,12 @@ function export_vtf(file, __c::Union{Crystal,CrystalNet}, repeatedges=6, colorna
         end
         println(f)
 
-        ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(c.cell)
+        ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(c.pge.cell)
         println(f, "pbc $_a $_b $_c $_α $_β $_γ\n")
 
         println(f, "ordered")
         for x in invcorres
-            coord = mat * (widen.(c.pos[x.v]) .+ x.ofs)
+            coord = mat * (widen.(c.pge.pos[x.v]) .+ x.ofs)
             join(f, round.(Float64.(coord); digits=15), ' ')
             println(f)
         end
@@ -134,8 +134,9 @@ function export_cif(file, __c::Union{Crystal, CIF})
             end
         end
 
-        #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
-        ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(c.cell::Cell)
+        cell::Cell = c isa CIF ? c.cell : c.pge.cell
+        #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pge.pos[:,1] != [0,0,0] ? 1.2 : 1.0
+        ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(cell)
         _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
 
         println(f, """
@@ -157,7 +158,7 @@ function export_cif(file, __c::Union{Crystal, CIF})
         _symmetry_equiv_pos_as_xyz
         x,y,z""")
 
-        for eq in (c.cell::Cell).equivalents
+        for eq in cell.equivalents
             println(f, eq)
         end
         println(f)
@@ -170,12 +171,12 @@ function export_cif(file, __c::Union{Crystal, CIF})
                 ["atom_site_label", "atom_site_type_symbol",
                  "atom_site_fract_x", "atom_site_fract_y", "atom_site_fract_z"])
         labels = String[string_atomtype(c.types[c isa CIF ? c.ids[i] : i]::Symbol)*string(i) for i in 1:n]
-        pos = string.(round.(c isa CIF ? c.pos::Matrix{Float64} : reduce(hcat, c.pos)::Matrix{Float64}; sigdigits=6))
+        pos = string.(round.(c isa CIF ? c.pos::Matrix{Float64} : reduce(hcat, c.pge.pos)::Matrix{Float64}; sigdigits=6))
         append!(loops[n][2], [labels, string_atomtype.((c.types[x])::Symbol for x in (c isa CIF ? c.ids : collect(1:n))::Vector{Int}),
                 pos[1,:], pos[2,:], pos[3,:]])
 
         if c isa Union{Crystal{Clusters}, Crystal{Nothing}}
-            bonds = edges((c.graph)::PeriodicGraph3D)
+            bonds = edges((c isa CIF ? c.graph : c.pge.g)::PeriodicGraph3D)
             src = String[]
             dst = String[]
             mult = Int[]
@@ -223,26 +224,26 @@ function export_cgd(file, c::Crystal)
         println(f, "CRYSTAL\n")
         margin = 1
         println(f, "\tNAME\t", last(splitdir(file)))
-        #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pos[:,1] != [0,0,0] ? 1.2 : 1.0
-        ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(c.cell)
+        #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pge.pos[:,1] != [0,0,0] ? 1.2 : 1.0
+        ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(c.pge.cell)
         _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
         print(f, "\tGROUP\t\"")
-        print(f, RAW_SYMMETRY_DATA[c.cell.hall][4])
+        print(f, RAW_SYMMETRY_DATA[c.pge.cell.hall][4])
         println("\"")
         println(f, "\tCELL\t", _a, ' ', _b, ' ', _c, ' ', _α, ' ', _β, ' ', _γ, ' ')
         println(f, "\tATOM")
         to_revisit = Int[]
         for i in 1:length(c.types)
             push!(to_revisit, i)
-            pos = c.pos[i]
-            println(f, "\t\t", i, ' ', degree(c.graph, i), ' ', pos[1], ' ',
+            pos = c.pge.pos[i]
+            println(f, "\t\t", i, ' ', degree(c.pge.g, i), ' ', pos[1], ' ',
                     pos[2], ' ', pos[3])
         end
         println(f, "\tEDGE")
         for i in to_revisit
-            for e in neighbors(c.graph, i)
+            for e in neighbors(c.pge.g, i)
                 e.v < i && continue
-                dest = c.pos[e.v] .+ e.ofs
+                dest = c.pge.pos[e.v] .+ e.ofs
                 println(f, "\t\t", i, '\t', dest[1], ' ', dest[2], ' ', dest[3])
             end
         end
@@ -274,7 +275,7 @@ function export_cgd(file, g::PeriodicGraph)
         println(f, "END\n")
     #end
 end
-export_cgd(file, c::CrystalNet) = export_cgd(file, change_dimension(PeriodicGraph3D, c.graph))
+export_cgd(file, c::CrystalNet) = export_cgd(file, change_dimension(PeriodicGraph3D, c.pge.g))
 
 
 function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tempname()))
@@ -286,17 +287,17 @@ function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir()
     #     Chemfiles.set_property!(residues[i], "chainid", string(i))
     #     Chemfiles.add_residue!(frame, residues[i])
     # end
-    ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(c.cell)
+    ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(c.pge.cell)
     Chemfiles.set_cell!(frame, Chemfiles.UnitCell(Float64[_a, _b, _c], Float64[_α, _β, _γ]))
-    recenter::SVector{3,Float64} = minimum(reduce(hcat, crystal.pos); dims=2)
+    recenter::SVector{3,Float64} = minimum(reduce(hcat, crystal.pge.pos); dims=2)
     for i in 1:length(crystal.types)
         # resid = crystal.clusters.attributions[i]
         atom = Chemfiles.Atom(string(crystal.clusters.classes[crystal.clusters.attributions[i]]))
         Chemfiles.set_type!(atom, string_atomtype(crystal.types[i]))
-        Chemfiles.add_atom!(frame, atom, collect(Float64.(mat * (crystal.pos[i] .- recenter))))
+        Chemfiles.add_atom!(frame, atom, collect(Float64.(mat * (crystal.pge.pos[i] .- recenter))))
         # Chemfiles.add_atom!(residues[resid], i)
     end
-    for e in edges(crystal.graph)
+    for e in edges(crystal.pge.g)
         iszero(PeriodicGraphs.ofs(e)) || continue
         Chemfiles.add_bond!(frame, src(e)-1, dst(e)-1)
     end

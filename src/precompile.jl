@@ -509,19 +509,6 @@ function _precompile_()
     precompile(Tuple{Type{CrystalNets.Options}})
     precompile(Tuple{Type{CrystalNets.Options}, CrystalNets.Options})
 
-    # symmetries.jl
-    precompile(Tuple{typeof(CrystalNets.joinletters), NTuple{11,Cchar}})
-    precompile(Tuple{typeof(CrystalNets.joinletters), NTuple{17,Cchar}})
-    precompile(Tuple{typeof(CrystalNets.joinletters), NTuple{6,Cchar}})
-    precompile(Tuple{typeof(CrystalNets.joinletters), NTuple{7,Cchar}})
-    precompile(Tuple{typeof(getproperty), CrystalNets.SpglibDataset, Symbol})
-    precompile(Tuple{typeof(CrystalNets.find_hall_number), String, String, String})
-    precompile(Tuple{typeof(CrystalNets.get_symmetry_equivalents), Int})
-    for T in inttypes
-        precompile(Tuple{typeof(CrystalNets.get_spglib_dataset), cnet{3,T}})
-        precompile(Tuple{typeof(CrystalNets.find_symmetries), cnet{3,T}, collisions})
-    end
-
     # specialsolver.jl
     for Ti in (BigRational, (modulo{P} for P in primes)...)
         precompile(Tuple{typeof(CrystalNets.rational_lu!), SparseMatrixCSC{Ti,Int}, Vector{Int}, Bool})
@@ -564,35 +551,11 @@ function _precompile_()
     end
 
     # types.jl 1/2
-    precompile(Tuple{Type{CrystalNets.EquivalentPosition}, SMatrix{3,3,Int,9}, SVector{3,Rational{Int}}})
-    precompile(Tuple{typeof(CrystalNets.find_refid), Vector{String}})
-    precompile(Tuple{typeof(parse), Type{CrystalNets.EquivalentPosition}, String, NTuple{3,String}})
-    precompile(Tuple{typeof(CrystalNets.rationaltostring), Int, Bool, Bool})
-    precompile(Tuple{typeof(show), Base.TTY, CrystalNets.EquivalentPosition})
-    precompile(Tuple{typeof(show), Base.IOStream, CrystalNets.EquivalentPosition})
-    precompile(Tuple{Type{cell}, Int, mat, Vector{CrystalNets.EquivalentPosition}})
-    precompile(Tuple{Type{cell}, Int, Matrix{BigFloat}, Vector{CrystalNets.EquivalentPosition}})
-    precompile(Tuple{typeof(==), cell, cell})
-    precompile(Tuple{Type{cell}, Int, NTuple{3,BigFloat}, NTuple{3,BigFloat}, Vector{CrystalNets.EquivalentPosition}})
-    precompile(Tuple{Type{cell}, Int, NTuple{3,Int}, NTuple{3,Int}, Vector{CrystalNets.EquivalentPosition}})
-    precompile(Tuple{Type{cell}})
-    precompile(Tuple{typeof(CrystalNets.cell_parameters), mat})
-    precompile(Tuple{typeof(CrystalNets.cell_parameters), fmat})
-    precompile(Tuple{typeof(CrystalNets.cell_parameters), cell})
-    precompile(Tuple{Type{cell}, mat})
-    precompile(Tuple{Type{cell}, fmat})
-    precompile(Tuple{typeof(show), Base.TTY, cell})
-    precompile(Tuple{typeof(show), Base.IOStream, cell})
-    precompile(Tuple{typeof(show), Base.TTY, MIME"text/plain", cell})
-    precompile(Tuple{typeof(show), Base.IOStream, MIME"text/plain", cell})
     precompile(Tuple{Type{cif}, Dict{String,Union{String,Vector{String}}}, cell, Vector{Int}, types, Matrix{Float64}, bondlist})
     precompile(Tuple{typeof(CrystalNets.keepinbonds), bondlist, Vector{Int}})
     precompile(Tuple{typeof(CrystalNets.add_to_bondlist!), Vector{Tuple{Int,Float32}}, Int, Float32})
     precompile(Tuple{typeof(CrystalNets.get_bondlist), Vector{Tuple{Int,Float32}}, Int})
     precompile(Tuple{typeof(CrystalNets.sortprune_bondlist!), Vector{Tuple{Int,Float32}}})
-    precompile(Tuple{typeof(CrystalNets.prepare_periodic_distance_computations), mat})
-    precompile(Tuple{typeof(CrystalNets.prepare_periodic_distance_computations), fmat})
-    precompile(Tuple{typeof(CrystalNets.periodic_distance!), MVector{3,Float64}, _pos, fmat, Bool, Float64})
     precompile(Tuple{typeof(CrystalNets.remove_partial_occupancy), cif})
     precompile(Tuple{typeof(CrystalNets.prune_collisions), cif})
     precompile(Tuple{typeof(CrystalNets.expand_symmetry), cif})
@@ -934,7 +897,7 @@ function _precompile_()
     precompile(Tuple{typeof(CrystalNets.julia_main)})
 end
 
-_precompile_()
+# _precompile_()
 
 #=
 if ccall(:jl_generating_output, Cint, ()) == 1 # precompilation

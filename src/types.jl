@@ -1,271 +1,13 @@
 ## Type definitions for intermediate representations of crystals up to a net
 
 import Base: ==
-using Tokenize
 
-
-
-## EquivalentPosition
-
-"""
-    EquivalentPosition
-
-Representation of a symmetry operation in 3D, defined by an affine function.
-"""
-struct EquivalentPosition
-    mat::SMatrix{3,3,Int,9}
-    ofs::SVector{3,Rational{Int}}
-end
-
-"""
-Find the reference identifiers for the three dimensions for the CIF group called
-`symmetry_equiv_pos_as_xyz` or `space_group_symop_operation_xyz`.
-Usually this is simply ("x", "y", "z").
-"""
-function find_refid(eqs)
-    isempty(eqs) && return ("x", "y", "z")
-    for eq in eqs # Normally it should be the first one but I'm not sure of the specs here
-        ts = collect(tokenize(eq))
-        refid = [""]
-        not_at_the_end = true
-        immediate_continue = false
-        for t in ts
-            @toggleassert not_at_the_end
-            k = Tokenize.Tokens.kind(t)
-            if k === Tokenize.Tokens.IDENTIFIER
-                @toggleassert refid[end] == ""
-                refid[end] = Tokenize.Tokens.untokenize(t)
-            elseif k === Tokenize.Tokens.COMMA || k === Tokenize.Tokens.SEMICOLON
-                @toggleassert refid[end] != ""
-                push!(refid, "")
-            elseif k === Tokenize.Tokens.ENDMARKER
-                not_at_the_end = false
-            elseif k !== Tokenize.Tokens.WHITESPACE && t.kind !== Tokenize.Tokens.PLUS
-                immediate_continue = true
-                break
-            end
-        end
-        immediate_continue && continue
-        if not_at_the_end
-            error(lazy"Unknown end of line marker for symmetry equivalent {$eq}")
-        end
-        if length(refid) != 3 || refid[end] == ""
-            error(lazy"Input string {$eq} is not a valid symmetry equivalent")
-        end
-        return tuple(lowercase(refid[1]), lowercase(refid[2]), lowercase(refid[3]))
-    end
-    return ("x", "y", "z")
-end
-
-"""
-    Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "y", "z"))
-
-Parse a string into its represented `EquivalentPosition` given the name of the three
-variables obtained from [`find_refid`](@ref CrystalNets.find_refid).
-"""
-function Base.parse(::Type{EquivalentPosition}, s::AbstractString, refid=("x", "y", "z"))
-    const_dict = Dict{String, Int}(refid[1]=>1, refid[2]=>2, refid[3]=>3)
-    mat = zeros(Int, 3, 3)
-    ofs = zeros(Rational{Int}, 3)
-    curr_num::Union{Int, Nothing} = nothing
-    curr_val::Union{Rational{Int}, Nothing} = nothing
-    curr_sign::Union{Bool, Nothing} = nothing
-    encountered_div::Bool = false
-    i::Int = 1
-    something_written = false
-    for x in tokenize(lowercase(s))
-        k = Tokenize.Tokens.kind(x)
-        k === Tokenize.Tokens.WHITESPACE && continue
-        if k === Tokenize.Tokens.INTEGER
-            @toggleassert isnothing(curr_val)
-            if encountered_div
-                curr_val = Rational{Int}(Int(curr_num), parse(Int, x.val))
-                curr_num = nothing
-                encountered_div = false
-            else
-                @toggleassert isnothing(curr_num)
-                curr_num = parse(Int, x.val)
-            end
-        else
-            @toggleassert !encountered_div
-            if k === Tokenize.Tokens.IDENTIFIER
-                if !isnothing(curr_num)
-                    @toggleassert isnothing(curr_val)
-                    curr_val = curr_num
-                    curr_num = nothing
-                end
-                sign = isnothing(curr_sign) ? 1 : 2*curr_sign - 1
-                val = isnothing(curr_val)  ? 1//1 : curr_val
-                j = const_dict[Tokenize.Tokens.untokenize(x)]
-                mat[i,j] += sign * val
-                curr_val = nothing
-                curr_sign = nothing
-                something_written = true
-            else
-                if x.kind === Tokenize.Tokens.FWD_SLASH
-                    @toggleassert isnothing(curr_val)
-                    @toggleassert !isnothing(curr_num)
-                    encountered_div = true
-                    continue
-                end
-                if x.kind === Tokenize.Tokens.FLOAT
-                    @toggleassert isnothing(curr_val)
-                    @toggleassert isnothing(curr_num)
-                    @toggleassert !encountered_div
-                    curr_val = Rational{Int}(rationalize(Int8, parse(Float16, x.val)))
-                    continue
-                end
-                if !isnothing(curr_num)
-                    @toggleassert isnothing(curr_val)
-                    curr_val = curr_num
-                    curr_num = nothing
-                end
-                if !isnothing(curr_val)
-                    sign = isnothing(curr_sign) ? 1 : 2*curr_sign - 1
-                    @ifwarn if !iszero(ofs[i])
-                        @warn lazy"Existing offset already existing for position $i in {$s}"
-                    end
-                    ofs[i] += sign * Rational{Int}(curr_val)
-                    curr_val = nothing
-                    curr_sign = nothing
-                else
-                    @toggleassert isnothing(curr_sign)
-                end
-                if x.kind === Tokenize.Tokens.PLUS
-                    curr_sign = true
-                elseif x.kind === Tokenize.Tokens.MINUS
-                    curr_sign = false
-                elseif k === Tokenize.Tokens.COMMA || k === Tokenize.Tokens.SEMICOLON
-                    i > 2 && error(lazy"Too many dimensions specified for symmetry equivalent {$s}")
-                    something_written || error(lazy"{$s} is not a symmetry equivalent (no dependency expressed in position $i)")
-                    something_written = false
-                    i += 1
-                else
-                    k !== Tokenize.Tokens.ENDMARKER && error(lazy"Unknown end of line marker for symmetry equivalent {$s}")
-                    i != 3 && error(lazy"Input string \"$s\" is not a valid symmetry equivalent")
-                end
-            end
-        end
-    end
-    EquivalentPosition(SMatrix{3,3,Int,9}(mat), SVector{3,Rational{Int}}(ofs))
-end
-
-function rationaltostring(x::Int, notofs::Bool, first::Bool)
-    if notofs && (x == 1 || x == -1)
-        return x < 0 ? "-" : first ? "" : "+"
-    end
-    return x < 0 || first ? string(x) : string('+', x)
-end
-
-function Base.show(io::IO, eq::EquivalentPosition)
-    xyz = ('x', 'y', 'z')
-    for i in 1:3
-        first = true
-        for j in 1:3
-            if eq.mat[i,j] != 0
-                coeff = rationaltostring(eq.mat[i,j], true, first)
-                first = false
-                print(io, coeff)
-                print(io, xyz[j])
-            end
-        end
-        if eq.ofs[i] != 0
-            print(io, rationaltostring(eq.ofs[i], false, first))
-        end
-        i < 3 && print(io, ',')
-    end
-    nothing
-end
-
-## Cell
-
-"""
-    Cell
-
-Representation of a periodic cell in 3D. Contains information about the cell
-(axes lengths and angles) and its symmetry group, through its Hall number.
-
-See [`SPACE_GROUP_HALL`](@ref CrystalNets.SPACE_GROUP_HALL),
-[`SPACE_GROUP_FULL`](@ref CrystalNets.SPACE_GROUP_FULL),
-[`SPACE_GROUP_HM`](@ref CrystalNets.SPACE_GROUP_HM)
-and [`SPACE_GROUP_IT`](@ref CrystalNets.SPACE_GROUP_IT)
-for the correspondance between Hall number and usual symbolic representations.
-"""
-struct Cell
-    hall::Int
-    mat::SMatrix{3,3,BigFloat,9} # Cartesian coordinates of a, b and c
-    equivalents::Vector{EquivalentPosition}
-
-    Cell(hall, mat::AbstractMatrix, equivalents) = new(hall, mat, equivalents)
-end
-
-function ==(c1::Cell, c2::Cell)
-    c1.hall == c2.hall && c1.mat == c2.mat
-end
-
-function Cell(hall, (a, b, c), (α, β, γ), eqs=EquivalentPosition[])
-    cosα = cosd(α); cosβ = cosd(β); cosγ = cosd(γ); sinγ = sind(γ)
-    ω = sqrt(1 - cosα^2 - cosβ^2 - cosγ^2 + 2*cosα*cosβ*cosγ)
-    mat = SMatrix{3,3,BigFloat,9}([a  b*cosγ  c*cosβ ;
-                                  0   b*sinγ  c*(cosα - cosβ*cosγ)/sinγ ;
-                                  0   0       c*ω/sinγ ])
-    if isempty(eqs)
-        eqs = get_symmetry_equivalents(hall)
-        id = popfirst!(eqs)
-        @toggleassert isone(id.mat) && iszero(id.ofs)
-    end
-    return Cell(hall, mat, eqs)
-end
-Cell() = Cell(1, (10, 10, 10), (90, 90, 90), EquivalentPosition[])
-
-function cell_parameters(mat::AbstractMatrix)
-    _a, _b, _c = eachcol(mat)
-    a = norm(_a)
-    b = norm(_b)
-    c = norm(_c)
-    α = acosd(_b'_c/(b*c))
-    β = acosd(_c'_a/(c*a))
-    γ = acosd(_a'_b/(a*b))
-    return (a, b, c), (α, β, γ)
-end
-
-"""
-    cell_parameters(cell::Cell)
-
-Return `((lengths, angles), mat)` where `mat` is the matrix of the cell in upper triangular
-format, `lengths` is the triplet `(a, b, c)` of lengths of the three axes, and `angles` is
-the triplet `(α, β, γ)` of angles between them.
-"""
-function cell_parameters(cell::Cell)
-    lengths, angles = cell_parameters(cell.mat)
-    normalized_mat = istriu(cell.mat) ? cell.mat :
-        Cell(cell.hall, lengths, angles, cell.equivalents).mat
-    return (lengths, angles), normalized_mat
-end
-
-function Cell(cell::Cell, mat::StaticArray{Tuple{3,3},BigFloat})
-    return Cell(cell.hall, mat, cell.equivalents)
-end
-
-function Cell(mat::StaticArray{Tuple{3,3},BigFloat})
+function cell_with_warning(mat::StaticArray{Tuple{3,3},BigFloat})
     if !all(isfinite, mat) || iszero(det(mat))
         @ifwarn @error lazy"Suspicious unit cell of matrix $(Float64.(mat)). Is the input really periodic? Using a cubic unit cell instead."
         return Cell()
     end
     return Cell(Cell(), mat)
-end
-
-function Base.show(io::IO, cell::Cell)
-    ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(cell)
-    _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
-    print(io, Cell, "($(cell.hall), ($_a, $_b, $_c), ($_α, $_β, $_γ))")
-end
-function Base.show(io::IO, ::MIME"text/plain", cell::Cell)
-    ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(cell)
-    _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
-    hall_symbol, crystal_system = HALL_SYMBOLS[cell.hall]
-    print(io, Cell, " with Hall symbol $hall_symbol ($crystal_system) and parameters ")
-    print(io, "a=$_a, b=$_b, c=$_c, α=$_α, β=$_β, γ=$_γ")
 end
 
 ## CIF
@@ -353,61 +95,6 @@ function sortprune_bondlist!(bondlist::Vector{Tuple{Int,Float32}})
     end
     isempty(toremove) || deleteat!(bondlist, toremove)
     nothing
-end
-
-function prepare_periodic_distance_computations(mat)
-    (a, b, c), (α, β, γ) = cell_parameters(mat)
-    ortho = all(x -> isapprox(Float16(x), 90; rtol=0.02), (α, β, γ))
-    _a, _b, _c = eachcol(mat)
-    safemin = min(Float64(dot(cross(_b, _c), _a)/(b*c)),
-                  Float64(dot(cross(_c, _a), _b)/(a*c)),
-                  Float64(dot(cross(_a, _b), _c)/(a*b)))/2
-    # safemin is the half-distance between opposite planes of the unit cell
-    return MVector{3,Float64}(undef), ortho, safemin
-end
-
-function periodic_distance!(buffer, u, mat, ortho, safemin)
-    @simd for i in 1:3
-        diff = u[i] + 0.5
-        buffer[i] = diff - floor(diff) - 0.5
-    end
-    ref = norm(mat*buffer)
-    (ortho || ref ≤ safemin) && return ref
-    @inbounds for i in 1:3
-        buffer[i] += 1
-        newnorm = norm(mat*buffer)
-        newnorm < ref && return newnorm # in a reduced lattice, there should be at most one
-        buffer[i] -= 2
-        newnorm = norm(mat*buffer)
-        newnorm < ref && return newnorm
-        buffer[i] += 1
-    end
-    return ref
-end
-
-"""
-    periodic_distance(u, mat, ortho=nothing, safemin=nothing)
-
-Distance between point `u` and the origin, given as a triplet of fractional coordinates, in
-a repeating unit cell of matrix `mat`.
-The distance is the shortest between all equivalents of `u` and the origin.
-If `ortho` is set to `true`, the angles α, β and γ of the cell are assumed right, which
-accelerates the computation by up to 7 times.
-If a distance lower than `safemin` is computed, stop trying to find a periodic image of `u`
-closer to the origin.
-If unspecified, both `ortho` and `safemin` are automatically determined from `mat`.
-
-This implementation assumes that the cell corresponds to a reduced lattice. It may be
-invalid for some edge cases otherwise.
-
-For optimal performance, use `periodic_distance!` with `buffer`, `ortho` and `safemin`
-obtained from `prepare_periodic_distance_computations`.
-"""
-function periodic_distance(u, mat, ortho=nothing, safemin=nothing)
-    if ortho === nothing || safemin === nothing
-        _, ortho, safemin = prepare_periodic_distance_computations(mat)
-    end
-    periodic_distance!(similar(u), u, mat, ortho::Bool, safemin::Float64)
 end
 
 
@@ -722,38 +409,39 @@ fractional placement of the atoms and their type, as well as the residues which 
 vertices for the computation of the underlying topology.
 """
 struct Crystal{T<:Union{Nothing,Clusters}}
-    cell::Cell
+    pge::PeriodicGraphEmbedding3D{Float64}
     types::Vector{Symbol}
     clusters::T
-    pos::Vector{SVector{3,Float64}}
-    graph::PeriodicGraph3D
     options::Options
 
-    function Crystal{Clusters}(cell, types, clusters, pos, graph, options)
-        return new{Clusters}(cell, types, clusters, pos, graph, options)
+    function Crystal{Clusters}(pge, types, clusters, options)
+        return new{Clusters}(pge, types, clusters, options)
     end
 
-    function Crystal{Nothing}(cell, types, pos, graph, options)
-        return new{Nothing}(cell, types, nothing, pos, graph, options)
+    function Crystal{Nothing}(pge, types, options)
+        return new{Nothing}(pge, types, nothing, options)
     end
 end
 
+function Crystal{Clusters}(cell, types, clusters, pos, graph, options)
+    Crystal{Clusters}(PeriodicGraphEmbedding3D(graph, pos, cell), types, clusters, options)
+end
+function Crystal{Nothing}(cell, types, pos, graph, options)
+    Crystal{Nothing}(PeriodicGraphEmbedding3D(graph, pos, cell), types, options)
+end
 
-
-
-function Crystal(cell, types, clusters, pos, graph, options)
+function Crystal(pge, types, clusters, options)
     if clusters isa Nothing
-        return Crystal{Nothing}(cell, types, pos, graph, options)
+        return Crystal{Nothing}(pge, types, options)
     end
-    return Crystal{Clusters}(cell, types, clusters, pos, graph, options)
+    return Crystal{Clusters}(pge, types, clusters, options)
 end
 function Crystal(c::Crystal; kwargs...)
-    return Crystal(c.cell, c.types, c.clusters, c.pos, c.graph, Options(c.options; kwargs...))
+    return Crystal(c.pge, c.types, c.clusters, Options(c.options; kwargs...))
 end
 
 function ==(c1::Crystal{T}, c2::Crystal{T}) where T
-    c1.cell == c2.cell && c1.types == c2.types && c1.clusters == c2.clusters &&
-    c1.pos == c2.pos && c1.graph == c2.graph && c1.options == c2.options
+    c1.pge == c2.pge && c1.types == c2.types && c1.clusters == c2.clusters && c1.options == c2.options
 end
 
 function Crystal{Nothing}(c::Crystal{T}; kwargs...) where T
@@ -761,17 +449,15 @@ function Crystal{Nothing}(c::Crystal{T}; kwargs...) where T
         if T === Nothing
             return c
         end
-        return Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, c.options)
+        return Crystal{Nothing}(c.pge, c.types, c.options)
     end
-    return Crystal{Nothing}(c.cell, c.types, c.pos, c.graph,
-                            Options(c.options; kwargs...))
+    return Crystal{Nothing}(c.pge, c.types, Options(c.options; kwargs...))
 end
 function Crystal{Clusters}(c::Crystal, clusters::Clusters; kwargs...)
     if isempty(kwargs)
-        return Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph, c.options)
+        return Crystal{Clusters}(c.pge, c.types, clusters, c.options)
     end
-    return Crystal{Clusters}(c.cell, c.types, clusters, c.pos, c.graph,
-                            Options(c.options; kwargs...))
+    return Crystal{Clusters}(c.pge, c.types, clusters, Options(c.options; kwargs...))
 end
 function Crystal{Clusters}(c::Crystal{T}; kwargs...) where T
     if T === Clusters
@@ -786,24 +472,22 @@ end
 Rebuild the crystal after trimming its graph according to [`trim_topology`](@ref CrystalNets.trim_topology).
 """
 function trimmed_crystal(c::Crystal{Nothing})
-    g = deepcopy(c.graph)
+    g = deepcopy(c.pge.g)
     remove_metal_cluster_bonds!(g, c.types, c.options)
     vmap, graph = trim_topology(g)
     types = c.types[vmap]
-    pos = c.pos[vmap]
-    opts = isempty(c.options._pos) ? c.options : Options(c.options; _pos=pos)
-    return Crystal{Nothing}(c.cell, types, pos, graph, opts)
+    pge = PeriodicGraphEmbedding(graph, c.pge.pos[vmap], c.pge.cell)
+    opts = isempty(c.options._pos) ? c.options : Options(c.options; _pos=pge.pos)
+    return Crystal{Nothing}(pge, types, opts)
 end
 
 
 function Base.getindex(c::Crystal{T}, vmap::AbstractVector{<:Integer}) where T
     types = c.types[vmap]
-    pos = c.pos[vmap]
-    graph = c.graph[vmap]
     if T === Nothing
-        return Crystal{Nothing}(c.cell, types, pos, graph, c.options)
+        return Crystal{Nothing}(c.pge[vmap], types, c.options)
     else
-        return Crystal{Clusters}(c.cell, types, c.clusters[vmap], pos, graph, c.options)
+        return Crystal{Clusters}(c.pge[vmap], types, c.clusters[vmap], c.options)
     end
 end
 
@@ -918,11 +602,9 @@ of the space the crystal is embedded into, which would always be 3 for real spac
 `T` is the numeric type used to store the exact coordinates of each vertex at the
 equilibrium placement.
 """
-struct CrystalNet{D,T<:Real}
-    cell::Cell
+struct CrystalNet{D,T<:Union{Rational{Int32}, Rational{Int64}, Rational{Int128}, Rational{BigInt}}}
+    pge::PeriodicGraphEmbedding{D,T}
     types::Vector{Symbol}
-    pos::Vector{SVector{D,T}}
-    graph::PeriodicGraph{D}
     options::Options
 end
 
@@ -934,19 +616,18 @@ function CrystalNet{D,T}(net::CrystalNet{N}; kwargs...) where {D,T,N}
         for i in 1:n
             if N < D
                 _pos = zero(MVector{D,T})
-                _pos[1:N] = net.pos[i]
+                _pos[1:N] = net.pge.pos[i]
                 pos = SVector{D,T}(_pos)
             else
-                pos = SVector{D,T}(net.pos[i][1:D])
+                pos = SVector{D,T}(net.pge.pos[i][1:D])
             end
             newpos[i] = pos
         end
     else
-        newpos = net.pos
+        newpos = net.pge.pos
     end
-    CrystalNet{D,T}(net.cell, net.types, newpos,
-                    PeriodicGraphs.change_dimension(PeriodicGraph{D}, net.graph),
-                    Options(net.options; kwargs...))
+    pge = PeriodicGraphEmbedding{D,T}(change_dimension(PeriodicGraph{D}, net.pge.g), newpos, net.pge.cell)
+    CrystalNet{D,T}(pge, net.types, Options(net.options; kwargs...))
 end
 CrystalNet{D}(net::CrystalNet{R,T}; kwargs...) where {D,R,T} = CrystalNet{D,T}(net; kwargs...)
 
@@ -960,28 +641,24 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
                        placement::AbstractMatrix{T}, options::Options) where {D,T<:Real}
     n = nv(graph)
     @toggleassert size(placement) == (D, n)
-    pos = Vector{SVector{D,T}}(undef, n)
-    offsets = Vector{SVector{D,Int}}(undef, n)
-    @inbounds for (i, x) in enumerate(eachcol(placement))
-        offsets[i] = floor.(Int, x)
-        pos[i] = Base.unsafe_rational.(getfield.(x, :num) .- getfield.(x, :den).*offsets[i], getfield.(x, :den))
-    end
-    s = sortperm(pos)
-    pos = pos[s]
+    pge, s = PeriodicGraphEmbedding{D,T}(graph, placement, cell, Val(true))
     types = Symbol[types[s[i]] for i in 1:n]
-    graph = offset_representatives!(graph, .-offsets)[s]
     # @toggleassert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
-    return CrystalNet{D,T}(cell, types, pos, graph, options)
+    return CrystalNet{D,T}(pge, types, options)
 end
 
 function CrystalNet{D,T}(cell::Cell, opts::Options) where {D,T<:Real}
-    return CrystalNet{D,T}(cell, Symbol[], SVector{D,T}[], PeriodicGraph{D}(), opts)
+    return CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(cell), Symbol[], opts)
 end
-CrystalNet{D}(cell::Cell, opts::Options) where {D} = CrystalNet{D,Rational{Int8}}(cell, opts)
+CrystalNet{D}(cell::Cell, opts::Options) where {D} = CrystalNet{D,Rational{Int32}}(cell, opts)
+
+function CrystalNet{D,T}(cell::Cell, types::Vector{Symbol}, pos, graph::PeriodicGraph{D}, options::Options) where {D,T}
+    CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(graph, pos, cell), types, options)
+end
 
 function Base.show(io::IO, x::CrystalNet)
     print(io, typeof(x), " of ", x.options.name, " with ", length(x.types), " vertices and ",
-          ne(x.graph), " edges")
+          ne(x.pge.g), " edges")
     if length(x.options.clusterings) == 1
         print(io, " (clustering: ", x.options.clusterings[1], ')')
     end
@@ -992,7 +669,7 @@ function Base.show(io::IO, x::CrystalNet)
 end
 
 function separate_components(c::Crystal{T}) where T
-    graph = PeriodicGraphs.change_dimension(PeriodicGraph3D, c.graph)
+    graph = change_dimension(PeriodicGraph3D, c.pge.g)
     dimensions = PeriodicGraphs.dimensionality(graph)
     @ifwarn if haskey(dimensions, 0)
         @warn "Detected structure of dimension 0, possibly solvent residues. It will be ignored for topology computation."
@@ -1009,23 +686,23 @@ end
 
 
 function _collect_net!(ret::Vector{<:CrystalNet{D}}, encountered, idx, c, clustering) where D
-    vmap, graph = trim_topology(c.graph)
+    vmap, graph = trim_topology(c.pge.g)
     types = c.types[vmap]
     remove_metal_cluster_bonds!(graph, types, c.options)
     remove_homoatomic_bonds!(graph, types, c.options.ignore_homoatomic_bonds, false)
-    j = get!(encountered, c.graph, idx)
+    j = get!(encountered, c.pge.g, idx)
     if j == idx
-        export_default(Crystal{Nothing}(c.cell, types, c.pos[vmap], graph, c.options),
+        export_default(Crystal{Nothing}(c.pge.cell, types, c.pge.pos[vmap], graph, c.options),
             lazy"subnet_$clustering", c.options.name, c.options.export_subnets)
         ret[idx] = try
-            CrystalNet{D}(c.cell, types, graph, c.options)
+            CrystalNet{D}(c.pge.cell, types, graph, c.options)
         catch e
             (c.options.throw_error || isinterrupt(e)) && rethrow()
-            CrystalNet{D}(c.cell, Options(c.options; error=(string(e)::String)))
+            CrystalNet{D}(c.pge.cell, Options(c.options; error=(string(e)::String)))
         end
     else
         ref = ret[j]
-        ret[idx] = typeof(ref)(ref.cell, ref.types, ref.pos, ref.graph, c.options)
+        ret[idx] = typeof(ref)(ref.pge.cell, ref.types, ref.pge.pos, ref.pge.g, c.options)
     end
     nothing
 end
@@ -1039,7 +716,8 @@ function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
         structure = c.options.structure
         if clustering == Clustering.Auto && (structure == StructureType.MOF || structure == StructureType.Cluster)
             alln = Crystal{Nothing}(c; clusterings=[Clustering.AllNodes])
-            singlen = allnodes_to_singlenodes(Crystal{Nothing}(c.cell, c.types, c.pos, c.graph, Options(c.options; clusterings=[Clustering.SingleNodes])))
+            pge = PeriodicGraphEmbedding(c.pge.g, c.pge.pos, c.pge.cell)
+            singlen = allnodes_to_singlenodes(Crystal{Nothing}(pge, c.types, Options(c.options; clusterings=[Clustering.SingleNodes])))
             resize!(ret, length(ret)+1)
             _collect_net!(ret, encountered, idx, alln, Clustering.AllNodes)
             _collect_net!(ret, encountered, idx+1, singlen, Clustering.SingleNodes)
@@ -1111,7 +789,7 @@ function UnderlyingNets(c::Crystal)
     components = separate_components(c)
     if all(isempty, components)
         vmap = collect(1:length(c.types))
-        nets = [CrystalNet3D(c.cell, Options(c.options; clusterings=[clust])) for clust in c.options.clusterings]
+        nets = [CrystalNet3D(c.pge.cell, Options(c.options; clusterings=[clust])) for clust in c.options.clusterings]
         push!(groups.D3, (vmap, nets))
         return groups
     end
@@ -1129,7 +807,7 @@ end
 function CrystalNet(c::Crystal)
     group = UnderlyingNets(c)
     D = isempty(group.D3) ? isempty(group.D2) ? isempty(group.D1) ? 0 : 1 : 2 : 3
-    D == 0 && return CrystalNet{0}(c[1].cell, c[1].options)
+    D == 0 && return CrystalNet{0}(c[1].pge.cell, c[1].options)
     if D == 3
         length(group.D3) > 1 && __throw_interpenetrating(D)
         (isempty(group.D1) && isempty(group.D2)) || __warn_nonunique(D)
@@ -1200,18 +878,15 @@ macro tryinttype(T)
     S = :(double_widen($T))
     return esc(quote
         if (($tmin <= m) & (M <= $tmax))
-            net = CrystalNet{D,Rational{$S}}(cell, types, graph,
-                        Rational{$S}.(placement), options)
-            return net
+            return PeriodicGraphEmbedding{D,Rational{$S}}(graph, Rational{$S}.(placement), cell, Val(true))
         end
     end)
 end
 
-function _CrystalNet(cell::Cell, types::Vector{Symbol}, graph::PeriodicGraph{D},
-                     placement, options::Options) where D
+function _PeriodicGraphEmbedding(cell::Cell, graph::PeriodicGraph{D}, placement) where D
     if isempty(placement)
         @toggleassert isempty(types)
-        return CrystalNet{D}(cell, options)
+        return PeriodicGraphEmbedding{D,Rational{Int}}(cell), Int[]
     end
     m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
     M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))
@@ -1220,20 +895,26 @@ function _CrystalNet(cell::Cell, types::Vector{Symbol}, graph::PeriodicGraph{D},
     @tryinttype Int32
     @tryinttype Int64
     @tryinttype Int128
-    return CrystalNet{D,Rational{BigInt}}(cell, types, graph, placement, options)
+    return PeriodicGraphEmbedding{D,Rational{BigInt}}(graph, placement, cell, Val(true))
     # Type-unstable function, but yields better performance than always falling back to BigInt
 end
 
+function CrystalNet{D}(pge::PeriodicGraphEmbedding{D,T}, types::Vector{Symbol}, options::Options) where {D,T}
+    CrystalNet{D,T}(pge, types, options)
+end
 function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
     placement = equilibrium(graph)
-    _CrystalNet(cell, types, graph, placement, options)
+    pge, s = _PeriodicGraphEmbedding(cell, graph, placement)
+    return CrystalNet{D}(pge, types[s], options)
 end
 
 
 
-const PseudoGraph = Union{PeriodicGraph,AbstractString,AbstractVector{PeriodicEdge{D}} where D}
-function UnderlyingNets(g::PseudoGraph, options::Options)
+const PseudoGraph{D} = Union{PeriodicGraph{D},AbstractVector{PeriodicEdge{D}}}
+const SmallPseudoGraph = Union{PseudoGraph{1},PseudoGraph{2},PseudoGraph{3}}
+
+function UnderlyingNets(g::SmallPseudoGraph, options::Options)
     groups = UnderlyingNets()
     graph = PeriodicGraph(g)
     dimensions = PeriodicGraphs.dimensionality(graph)
@@ -1250,12 +931,13 @@ function UnderlyingNets(g::PseudoGraph, options::Options)
     end
     return groups
 end
-UnderlyingNets(g::PseudoGraph; kwargs...) = UnderlyingNets(g, Options(; kwargs...))
+UnderlyingNets(g::SmallPseudoGraph; kwargs...) = UnderlyingNets(g, Options(; kwargs...))
 
-CrystalNet(g::PseudoGraph, options::Options) = CrystalNet(UnderlyingNets(g, options))
-CrystalNet(g::PseudoGraph; kwargs...) = CrystalNet(g, Options(; kwargs...))
-CrystalNet{D}(g::PseudoGraph, options::Options) where {D} = CrystalNet{D}(UnderlyingNets(g, options))
-CrystalNet{D}(g::PseudoGraph; kwargs...) where {D} = CrystalNet{D}(UnderlyingNets(g; kwargs...))
+CrystalNet(g::SmallPseudoGraph, options::Options) = CrystalNet(UnderlyingNets(g, options))
+CrystalNet{D}(g::SmallPseudoGraph, options::Options) where {D} = CrystalNet{D}(UnderlyingNets(g, options))
+
+CrystalNet(g::Union{PseudoGraph,AbstractString}; kwargs...) = CrystalNet(g, Options(; kwargs...))
+CrystalNet{D}(g::Union{PseudoGraph,AbstractString}; kwargs...) where {D} = CrystalNet{D}(UnderlyingNets(g; kwargs...))
 
 
 const SmallDimPeriodicGraph = Union{PeriodicGraph{0}, PeriodicGraph1D, PeriodicGraph2D, PeriodicGraph3D}

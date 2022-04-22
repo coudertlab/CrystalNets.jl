@@ -116,7 +116,7 @@ function export_default(c, obj=nothing, name=nothing, path=tempdir(); repeats=no
         if obj isa AbstractString && (obj == "net" || startswith(obj, "clusters") || startswith(obj, "subnet"))
             2
         else
-            nv(c.graph) == 0 ? 1 : clamp(fld(600, nv(c.graph)), 2, 6)
+            nv(c.pge.g) == 0 ? 1 : clamp(fld(600, nv(c.pge.g)), 2, 6)
         end
     end
     if !isempty(path)
