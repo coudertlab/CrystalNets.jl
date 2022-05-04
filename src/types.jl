@@ -641,7 +641,7 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
                        placement::AbstractMatrix{T}, options::Options) where {D,T<:Real}
     n = nv(graph)
     @toggleassert size(placement) == (D, n)
-    pge, s = PeriodicGraphEmbedding{D,T}(graph, placement, cell, Val(true))
+    pge, s = sort_periodicgraphembedding!(graph, placement, cell)
     types = Symbol[types[s[i]] for i in 1:n]
     # @toggleassert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
     return CrystalNet{D,T}(pge, types, options)
@@ -655,6 +655,70 @@ CrystalNet{D}(cell::Cell, opts::Options) where {D} = CrystalNet{D,Rational{Int32
 function CrystalNet{D,T}(cell::Cell, types::Vector{Symbol}, pos, graph::PeriodicGraph{D}, options::Options) where {D,T}
     CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(graph, pos, cell), types, options)
 end
+
+
+macro tryinttype(T)
+    tmin = :(typemin($T))
+    tmax = :(typemax($T))
+    S = :(double_widen($T))
+    return esc(quote
+        if (($tmin <= m) & (M <= $tmax))
+            return sort_periodicgraphembedding!(graph, Rational{$S}.(placement), cell)
+        end
+    end)
+end
+
+function _PeriodicGraphEmbedding(cell::Cell, graph::PeriodicGraph{D}, placement) where D
+    if isempty(placement)
+        @toggleassert isempty(types)
+        return PeriodicGraphEmbedding{D,Rational{Int}}(cell), Int[]
+    end
+    m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
+    M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))
+    @tryinttype Int8
+    @tryinttype Int16
+    @tryinttype Int32
+    @tryinttype Int64
+    @tryinttype Int128
+    return sort_periodicgraphembedding!(graph, placement, cell)
+    # Type-unstable function, but yields better performance than always falling back to BigInt
+end
+
+function CrystalNet{D}(pge::PeriodicGraphEmbedding{D,T}, types::Vector{Symbol}, options::Options) where {D,T}
+    CrystalNet{D,T}(pge, types, options)
+end
+function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
+                       graph::PeriodicGraph{D}, options::Options) where D
+    placement = equilibrium(graph)
+    pge, s = _PeriodicGraphEmbedding(cell, graph, placement)
+    return CrystalNet{D}(pge, types[s], options)
+end
+
+function CrystalNet{D}(graph::PeriodicGraph{D}, options::Options) where D
+    CrystalNet{D}(Cell(), fill(Symbol(""), nv(graph)), graph, options)
+end
+function CrystalNet(graph::PeriodicGraph{D}, options::Options) where D
+    CrystalNet{D}(Cell(), fill(Symbol(""), nv(graph)), graph, options)
+end
+
+
+const PseudoGraph{D} = Union{PeriodicGraph{D},AbstractVector{PeriodicEdge{D}}}
+
+function CrystalNet(g::Union{PseudoGraph,AbstractString}; kwargs...)
+    CrystalNet(g isa PeriodicGraph ? g : PeriodicGraph(g), Options(; kwargs...))
+end
+function CrystalNet{D}(g::Union{PseudoGraph,AbstractString}; kwargs...) where {D}
+    CrystalNet{D}(g isa PeriodicGraph ? g : PeriodicGraph{D}(g), Options(; kwargs...))
+end
+
+
+function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
+                       graph::PeriodicGraph, options::Options) where D
+    ne(graph) == 0 && return CrystalNet{D}(cell, types, PeriodicGraph{D}(nv(graph)), options)
+    g = change_dimension(PeriodicGraph{D}, graph)
+    return CrystalNet{D}(cell, types, g, options)
+end
+
 
 function Base.show(io::IO, x::CrystalNet)
     print(io, typeof(x), " of ", x.options.name, " with ", length(x.types), " vertices and ",
@@ -831,12 +895,6 @@ __warn_nonunique(D) = @ifwarn @warn "Presence of periodic structures of differen
 __throw_interpenetrating(D) = error(ArgumentError("Multiple interpenetrating $D-dimensional structures. Cannot handle this as a single CrystalNet, use UnderlyingNets instead."))
 __throw_multiplenets(D) = error(ArgumentError("Found multiple nets of dimension $D, please specify a single `Clustering` option."))
 
-function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
-                       graph::PeriodicGraph, options::Options) where D
-    ne(graph) == 0 && return CrystalNet{D}(cell, types, PeriodicGraph{D}(nv(graph)), options)
-    g = change_dimension(PeriodicGraph{D}, graph)
-    return CrystalNet{D}(cell, types, g, options)
-end
 
 function CrystalNet(x::UnderlyingNets)
     if isempty(x.D3)
@@ -872,51 +930,11 @@ function CrystalNet{D}(x::UnderlyingNets) where D
 end
 
 
-macro tryinttype(T)
-    tmin = :(typemin($T))
-    tmax = :(typemax($T))
-    S = :(double_widen($T))
-    return esc(quote
-        if (($tmin <= m) & (M <= $tmax))
-            return PeriodicGraphEmbedding{D,Rational{$S}}(graph, Rational{$S}.(placement), cell, Val(true))
-        end
-    end)
-end
-
-function _PeriodicGraphEmbedding(cell::Cell, graph::PeriodicGraph{D}, placement) where D
-    if isempty(placement)
-        @toggleassert isempty(types)
-        return PeriodicGraphEmbedding{D,Rational{Int}}(cell), Int[]
-    end
-    m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
-    M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))
-    @tryinttype Int8
-    @tryinttype Int16
-    @tryinttype Int32
-    @tryinttype Int64
-    @tryinttype Int128
-    return PeriodicGraphEmbedding{D,Rational{BigInt}}(graph, placement, cell, Val(true))
-    # Type-unstable function, but yields better performance than always falling back to BigInt
-end
-
-function CrystalNet{D}(pge::PeriodicGraphEmbedding{D,T}, types::Vector{Symbol}, options::Options) where {D,T}
-    CrystalNet{D,T}(pge, types, options)
-end
-function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
-                       graph::PeriodicGraph{D}, options::Options) where D
-    placement = equilibrium(graph)
-    pge, s = _PeriodicGraphEmbedding(cell, graph, placement)
-    return CrystalNet{D}(pge, types[s], options)
-end
-
-
-
-const PseudoGraph{D} = Union{PeriodicGraph{D},AbstractVector{PeriodicEdge{D}}}
 const SmallPseudoGraph = Union{PseudoGraph{1},PseudoGraph{2},PseudoGraph{3}}
 
 function UnderlyingNets(g::SmallPseudoGraph, options::Options)
     groups = UnderlyingNets()
-    graph = PeriodicGraph(g)
+    graph = g isa PeriodicGraph ? g : PeriodicGraph(g)
     dimensions = PeriodicGraphs.dimensionality(graph)
     @ifwarn if haskey(dimensions, 0)
         @error "Detected substructure of dimension 0 in the input graph. It will be ignored for topology computation."
@@ -931,14 +949,8 @@ function UnderlyingNets(g::SmallPseudoGraph, options::Options)
     end
     return groups
 end
-UnderlyingNets(g::SmallPseudoGraph; kwargs...) = UnderlyingNets(g, Options(; kwargs...))
-
-CrystalNet(g::SmallPseudoGraph, options::Options) = CrystalNet(UnderlyingNets(g, options))
-CrystalNet{D}(g::SmallPseudoGraph, options::Options) where {D} = CrystalNet{D}(UnderlyingNets(g, options))
-
-CrystalNet(g::Union{PseudoGraph,AbstractString}; kwargs...) = CrystalNet(g, Options(; kwargs...))
-CrystalNet{D}(g::Union{PseudoGraph,AbstractString}; kwargs...) where {D} = CrystalNet{D}(UnderlyingNets(g; kwargs...))
-
+UnderlyingNets(g::AbstractString, opts::Options) = UnderlyingNets(PeriodicGraph(g), opts)
+UnderlyingNets(g::Union{SmallPseudoGraph,AbstractString}; kwargs...) = UnderlyingNets(g, Options(; kwargs...))
 
 const SmallDimPeriodicGraph = Union{PeriodicGraph{0}, PeriodicGraph1D, PeriodicGraph2D, PeriodicGraph3D}
 
@@ -1098,10 +1110,10 @@ end
 
 
 @static if VERSION < v"1.7-"
-    function Returns(x)
-        returns(args...; kwargs...) = x
-        return returns
+    struct Returns{T} <: Function
+        x::T
     end
+    (r::Returns)(args...; kwargs...) = r.x
 end
 
 function Base.get(f::Union{Function,Type}, x::TopologyResult, c::_Clustering)
