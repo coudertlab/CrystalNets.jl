@@ -79,7 +79,7 @@ function topological_genome(g::PeriodicGraph, options::Options)
     return topological_genome(nets)
 end
 topological_genome(s::String, options::Options) = topological_genome(PeriodicGraph(s), options)
-topological_genome(g::Union{String,PeriodicGraph}; kwargs...) = topological_genome(g, Options(; kwargs...))
+topological_genome(g::Union{String,PeriodicGraph}; kwargs...) = topological_genome(g, Options(; throw_error=true, kwargs...))
 
 
 function _loop_group!(ex::Expr, id::Symbol, net::Symbol, group::Expr)

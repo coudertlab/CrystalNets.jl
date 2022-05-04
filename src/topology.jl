@@ -72,7 +72,7 @@ function find_all_valid_translations(shrunk_net::CrystalNet{D,T}, collisions) wh
     check_symmetry = check_symmetry_with_collisions(collisions)
     for (nz, i_max_den, max_den, t) in possible_translations(shrunk_net)
         vmap = check_symmetry(shrunk_net.pge, t, nothing, shrunk_net.types)
-        if vmap isa Vector{Int}
+        if vmap isa Vector{PeriodicVertex{D}}
             push!(ret[nz+1], (i_max_den, max_den, t))
         end
     end
@@ -469,7 +469,7 @@ end
 
 
 """
-    partition_by_coordination_sequence(graph, vmaps=nothing)
+    partition_by_coordination_sequence(graph, symmetries::AbstractSymmetryGroup=NoSymmetryGroup(graph))
 
 Partition the vertices of the graph into disjoint categories, one for each coordination
 sequence. The partition is then sorted by order of coordination sequence.
@@ -479,76 +479,26 @@ unchanged. In other words, `vmaps` is a set of symmetry operations of the graph.
 
 Return the categories and a list of unique representative for each symmetry class.
 """
-function partition_by_coordination_sequence(graph, vmaps=nothing)
-    # First, union-find on the symmetries to avoid computing useless coordination sequences
+function partition_by_coordination_sequence(graph, symmetries::AbstractSymmetryGroup=NoSymmetryGroup(graph))
     n = nv(graph)
-    unionfind = collect(1:n)
-    if vmaps isa Nothing || isempty(vmaps) # Absence of symmetry
-        unique_reprs = Vector{Int}[Int[i] for i in 1:n]
-        categories = Vector{Int}[[i] for i in 1:n]
-    else
-        for vmap in vmaps
-            for (i,j) in enumerate(vmap)
-                i == j && continue
-                if i > j
-                    i, j = j, i
-                end
-                repri = i
-                while repri != unionfind[repri]
-                    repri = unionfind[repri]
-                end
-                reprj = j
-                while reprj != unionfind[reprj]
-                    reprj = unionfind[reprj]
-                end
-                repri == reprj && continue
-                if repri < reprj
-                    unionfind[j] = repri
-                else
-                    unionfind[i] = reprj
-                end
-            end
-        end
-
-        cat_map = zeros(Int, n)
-        unique_reprs = Vector{Int}[]
-        categories = Vector{Int}[]
-        for i in 1:n
-            repri = i
-            if repri != unionfind[repri]
-                repri = unionfind[repri]
-                while repri != unionfind[repri]
-                    repri = unionfind[repri]
-                end
-                descent = i
-                while descent != unionfind[descent]
-                    tmp = unionfind[descent]
-                    unionfind[descent] = repri
-                    descent = tmp
-                end
-                @toggleassert descent == repri
-            end
-            cat = cat_map[repri]
-            if iszero(cat)
-                push!(unique_reprs, [i])
-                push!(categories, [i])
-                cat = length(categories)
-                cat_map[repri] = cat
-            else
-                push!(categories[cat], i)
-            end
-            cat_map[i] = cat
-        end
-    end
-
-    unique_reprs::Vector{Vector{Int}}
-    @toggleassert all(x -> length(x) == 1, unique_reprs)
-    categories::Vector{Vector{Int}}
-
-    PeriodicGraphs.graph_width!(graph) # setup for the computation of coordination sequences
-    csequences = [coordination_sequence(graph, repr[1], 10) for repr in unique_reprs]
+    uniques::Vector{Int} = unique(symmetries)
+    unique_reprs = [Int[repr] for repr in uniques]
+    csequences = [coordination_sequence(graph, repr, 10) for repr in uniques]
     I = sortperm(csequences)
     @toggleassert csequences[I[1]][1] >= 2 # vertices of degree <= 1 should have been removed at input creation
+
+    if symmetries isa NoSymmetryGroup
+        categories = [Int[i] for i in 1:n]
+    else
+        rev_uniques = Vector{Int}(undef, n)
+        for (i, repr) in enumerate(uniques)
+            rev_uniques[repr] = i
+        end
+        categories = [Int[] for _ in 1:length(uniques)]
+        for i in 1:n
+            push!(categories[rev_uniques[symmetries(i)]], i)
+        end
+    end
 
     todelete = falses(length(categories))
     last_i = I[1]
@@ -604,21 +554,6 @@ function check_symmetry_with_collisions(collisions)
     check_symmetry
 end
 
-struct OnlyVIterator{D}
-    c::SubArray{PeriodicVertex{D},1,Matrix{PeriodicVertex{D}},Tuple{Base.Slice{Base.OneTo{Int}},Int},true}
-end
-Base.iterate(x::OnlyVIterator, state=1) = state > length(x.c) ? nothing : x.c[state].v
-Base.length(x::OnlyVIterator) = length(x.c)
-Base.eltype(::Type{OnlyVIterator{D}}) where {D} = Int
-struct EachcolVIterator{D}
-    m::Matrix{PeriodicVertex{D}}
-end
-function Base.iterate(x::EachcolVIterator, state=1)
-    state > size(x.m, 2) && return nothing
-    OnlyVIterator(@inbounds @view x.m[:,state])
-end
-Base.length(x::EachcolVIterator) = size(x.m, 2)
-Base.eltype(::Type{EachcolVIterator{D}}) where {D} = OnlyVIterator{D}
 
 """
     find_candidates(net::CrystalNet{D}, collisions::Vector{CollisionNode}) where D
@@ -637,7 +572,7 @@ function find_candidates(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}
     if D == 3
         check_symmetry = check_symmetry_with_collisions(collisions)
         symmetries = find_symmetries(net.pge, net.types, check_symmetry)
-        categories, unique_reprs = partition_by_coordination_sequence(net.pge.g, EachcolVIterator(symmetries.vmaps))
+        categories, unique_reprs = partition_by_coordination_sequence(net.pge.g, symmetries)
     else
         categories, unique_reprs = partition_by_coordination_sequence(net.pge.g)
     end
@@ -697,7 +632,7 @@ function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}
     unique_candidates = Pair{Int,SMatrix{3,3,T,9}}[]
     for (i, mats) in candidates
         @toggleassert i == symmetries(i)
-        indices = [j for (j,symm) in enumerate(symmetries) if symm(i) == i] # vmap for which i is a fixpoint
+        symms = [symm for symm in symmetries if symm[i] == i] # vmaps for which i is a fixpoint
         min_mats = Set{SVector{9,T}}()
         for mat in mats
             # At this point, `i => mat` is a potential candidate, and so are all its
@@ -706,8 +641,8 @@ function extract_through_symmetry(candidates::Dict{Int,Vector{SMatrix{3,3,T,9}}}
             # Let's enumerate all such candidates and only keep one of them, for example
             # the lexicographically smallest, since they are all equivalent to `i => mat`.
             min_mat = SVector{9,T}(mat) # flattened to allow lexicographic comparison
-            for j in indices
-                new_mat = SVector{9,T}(symmetries.rotations[j] * mat)
+            for symm in symms
+                new_mat = SVector{9,T}(symm(mat))
                 if new_mat < min_mat
                     min_mat = new_mat
                 end
