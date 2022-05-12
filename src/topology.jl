@@ -530,9 +530,9 @@ function partition_by_coordination_sequence(graph, symmetries::AbstractSymmetryG
     # categories are thus uniquely determined and ordered independently of the representation of the net
 
     @toggleassert allunique(csequences)
-    for i in 1:num
-        @toggleassert all(coordination_sequence(graph, x, 10) == csequences[i] for x in categories[i])
-    end # if enabled, these assertions are somewhat costly (up to ~10% total execution time)
+    # for i in 1:num
+    #     @toggleassert all(coordination_sequence(graph, x, 10) == csequences[i] for x in categories[i])
+    # end # if enabled, these assertions are somewhat costly (up to ~10% total execution time)
     return categories[sortorder], unique_reprs[sortorder]
 end
 
