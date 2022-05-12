@@ -14,96 +14,13 @@ function export_dataline(f, x)
     println(f, inbetween*x)
 end
 
-function export_vtf(file, __c::Union{Crystal,CrystalNet}, repeatedges=6, colorname=false)
-    mkpath(splitdir(file)[1])
-    n = length(__c.types)
-    @toggleassert length(__c.pge.pos) == n
-    c = __c isa CrystalNet ? CrystalNet3D(__c) : __c
-    open(file, write=true) do f
-        invcorres = [PeriodicVertex3D(i) for i in 1:n]
-        corres = Dict{PeriodicVertex3D,Int}([invcorres[i]=>i for i in 1:n])
-        encounteredtypes = Dict{Symbol,String}()
-        atomnums = Int[]
-        numencounteredtypes = 0
-        println(f, """
-        ###############################
-        # written by CrystalNets.jl
-        ###############################
-        """)
-
-        for i in 1:n
-            ty = c.types[i]
-            sty = ty === Symbol("") ? string(i) : string_atomtype(ty)
-            if length(sty) > 16
-                sty = sty[1:13]*"etc" # otherwise VMD fails to load the .vtf
-            end
-            name = if colorname
-                _name = get(encounteredtypes, ty, missing)
-                if _name isa String
-                    _name
-                else
-                    numencounteredtypes += 1
-                    encounteredtypes[ty] = string(" name ", numencounteredtypes)
-                end
-            else
-                n ≥ 32768 ? "" : string(" name ", i)
-            end
-            atomnum = ty === Symbol("") ? 0 : representative_atom(ty, i)[2]
-            push!(atomnums, atomnum)
-            resid = colorname ? i : 0
-            println(f, "atom $(i-1) type $sty$name resid $resid atomicnumber $atomnum")
-        end
-        j = n + 1
-        for _ in 1:repeatedges
-            jmax = j - 1
-            for i in 1:jmax
-                vertex = invcorres[i]
-                for x in neighbors(c.pge.g, vertex.v)
-                    y = PeriodicVertex3D(x.v, x.ofs .+ vertex.ofs)
-                    if get!(corres, y, j) == j
-                        j += 1
-                        push!(invcorres, y)
-                    end
-                end
-            end
-        end
-        for i in n+1:length(invcorres)
-            v = invcorres[i].v
-            ofs = invcorres[i].ofs
-            ty = c.types[v]
-            sty = ty === Symbol("") ? string(i) : string_atomtype(ty)
-            if length(sty) > 16
-                sty = sty[1:13]*"etc"
-            end
-            name = colorname ? string(" name ", encounteredtypes[ty]) :
-                    n ≥ 32768 ? "" : string(" name ", v)
-            atomnum = atomnums[v]
-            resid = colorname ? i : PeriodicGraphs.hash_position(ofs)
-            println(f, "atom $(i-1) type $sty$name resid $resid atomicnumber $atomnum")
-        end
-        println(f)
-
-        for (i,x) in enumerate(invcorres)
-            for neigh in neighbors(c.pge.g, x.v)
-                j = get(corres, PeriodicVertex3D(neigh.v, neigh.ofs .+ x.ofs), nothing)
-                isnothing(j) && continue
-                if i < j
-                    println(f, "bond ", i - 1, ':', j - 1)
-                end
-            end
-        end
-        println(f)
-
-        ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(c.pge.cell)
-        println(f, "pbc $_a $_b $_c $_α $_β $_γ\n")
-
-        println(f, "ordered")
-        for x in invcorres
-            coord = mat * (widen.(c.pge.pos[x.v]) .+ x.ofs)
-            join(f, round.(Float64.(coord); digits=15), ' ')
-            println(f)
-        end
+_representative_atom(ty, i) = last(representative_atom(ty, i))
+function PeriodicGraphEmbeddings.export_vtf(file, c::Union{CrystalNet,Crystal}, repeatedges=6, colorname=false)
+    if c isa CrystalNet
+        net = CrystalNet3D(c)
+        return export_vtf(file, net.pge, net.types, repeatedges, colorname, string_atomtype, _representative_atom)
     end
+    return export_vtf(file, c.pge, c.types, repeatedges, colorname, string_atomtype, _representative_atom)
 end
 
 
@@ -218,64 +135,8 @@ function export_cif(file, __c::Union{Crystal, CIF})
     nothing
 end
 
-function export_cgd(file, c::Crystal)
-    mkpath(splitdir(file)[1])
-    open(file, write=true) do f
-        println(f, "CRYSTAL\n")
-        margin = 1
-        println(f, "\tNAME\t", last(splitdir(file)))
-        #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pge.pos[:,1] != [0,0,0] ? 1.2 : 1.0
-        ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(c.pge.cell)
-        _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
-        print(f, "\tGROUP\t\"")
-        print(f, RAW_SYMMETRY_DATA[c.pge.cell.hall][4])
-        println("\"")
-        println(f, "\tCELL\t", _a, ' ', _b, ' ', _c, ' ', _α, ' ', _β, ' ', _γ, ' ')
-        println(f, "\tATOM")
-        to_revisit = Int[]
-        for i in 1:length(c.types)
-            push!(to_revisit, i)
-            pos = c.pge.pos[i]
-            println(f, "\t\t", i, ' ', degree(c.pge.g, i), ' ', pos[1], ' ',
-                    pos[2], ' ', pos[3])
-        end
-        println(f, "\tEDGE")
-        for i in to_revisit
-            for e in neighbors(c.pge.g, i)
-                e.v < i && continue
-                dest = c.pge.pos[e.v] .+ e.ofs
-                println(f, "\t\t", i, '\t', dest[1], ' ', dest[2], ' ', dest[3])
-            end
-        end
-        println(f, "\nEND")
-    end
-end
-
-function export_cgd(file, g::PeriodicGraph)
-    mkpath(splitdir(file)[1])
-    f = open("/tmp/foobar", "w")#open(file, write=true) do f
-        println(f, "PERIODIC_GRAPH\n")
-        println(f, "ID ", basename(splitext(file)[1]), '\n')
-        println(f, "EDGES")
-        repr = reverse(split(string(g)))
-        n = parse(Int, pop!(repr))
-        m = length(repr) ÷ (n+2)
-        @toggleassert iszero(length(repr) % (n+2))
-        for _ in 1:m
-            src = pop!(repr)
-            dst = pop!(repr)
-            ofs = Vector{String}(undef, n)
-            for i in 1:n
-                ofs[i] = pop!(repr)
-            end
-            print(f, '\t', src, ' ', dst, ' ')
-            join(f, ofs, ' ')
-            println(f)
-        end
-        println(f, "END\n")
-    #end
-end
-export_cgd(file, c::CrystalNet) = export_cgd(file, change_dimension(PeriodicGraph3D, c.pge.g))
+PeriodicGraphEmbeddings.export_cgd(file, c::Crystal) = export_cgd(file, c.pge)
+PeriodicGraphEmbeddings.export_cgd(file, c::CrystalNet) = export_cgd(file, change_dimension(PeriodicGraph3D, c.pge.g))
 
 
 function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tempname()))

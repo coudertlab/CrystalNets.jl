@@ -339,6 +339,66 @@ function parse_arcs(path, lesser_priority=["epinet"])
     return flag, dict
 end
 
+function parse_cgd_lines!(edgelist::Vector{PeriodicEdge{D}}, iterator) where D
+    for _l in iterator
+        l = strip(_l)
+        isempty(l) && continue
+        lowercase(l) == "end" && break
+        src, dst, ofs... = parse.(Int, split(l))
+        push!(edgelist, PeriodicEdge{D}(src, dst, ofs))
+    end
+    nothing
+end
+
+"""
+    parse_cgd(path::AbstractString)
+
+Parse a .cgd Systre configuration data file such as the one used by the RCSR.
+Return a list of `id => g` where `id` is the name of the structure and `g` is its
+`PeriodicGraph`.
+
+Only support PERIODIC_GRAPH inputs.
+"""
+function parse_cgd(path::AbstractString)
+    ret = Tuple{String,Union{PeriodicGraph2D,PeriodicGraph3D}}[]
+    current_name = ""
+    current_edgelist2D = PeriodicEdge2D[]
+    current_edgelist3D = PeriodicEdge3D[]
+    edgeready = false
+    iterator = eachline(path)
+    for _l in iterator
+        l = strip(_l)
+        isempty(l) && continue
+        splits = split(l; limit=2)
+        keyw = lowercase(first(splits))
+        if keyw == "periodic_graph"
+            @assert isempty(current_name) && isempty(current_edgelist2D) && isempty(current_edgelist3D) && !edgeready
+        elseif keyw == "name" || keyw == "id" || keyw == "key"
+            current_name = last(splits)
+        elseif keyw == "edges"
+            edgeready = true
+        elseif edgeready
+            @assert keyw != "edge"
+            src, dst, ofs... = parse.(Int, split(l))
+            if length(ofs) == 2
+                push!(current_edgelist2D, PeriodicEdge2D(src, dst, SVector{2,Int}(ofs)))
+                parse_cgd_lines!(current_edgelist2D, iterator)
+                push!(ret, (current_name, PeriodicGraph2D(current_edgelist2D)))
+                empty!(current_edgelist2D)
+            else
+                @assert length(ofs) == 3
+                push!(current_edgelist3D, PeriodicEdge3D(src, dst, SVector{3,Int}(ofs)))
+                parse_cgd_lines!(current_edgelist3D, iterator)
+                push!(ret, (current_name, PeriodicGraph3D(current_edgelist3D)))
+                empty!(current_edgelist3D)
+            end
+            current_name = ""
+            edgeready = false
+        end
+    end
+    return ret
+end
+
 function parse_atom_name(name::AbstractString)
     firstsep = findfirst(x -> ispunct(x) || isspace(x) || isnumeric(x), name)
     symb::Symbol = if firstsep isa Nothing
