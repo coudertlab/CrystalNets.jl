@@ -424,17 +424,17 @@ function _precompile_()
 
     # output.jl
     @enforce precompile(Tuple{typeof(CrystalNets.export_dataline), Base.IOStream, String})
-    @enforce precompile(Tuple{typeof(CrystalNets.export_vtf), String, cryst, Int, Bool})
-    @enforce precompile(Tuple{typeof(CrystalNets.export_vtf), String, crystclust, Int, Bool})
-    @enforce precompile(Tuple{typeof(CrystalNets.export_vtf), String, cryst, Int})
-    @enforce precompile(Tuple{typeof(CrystalNets.export_vtf), String, crystclust, Int})
-    @enforce precompile(Tuple{typeof(CrystalNets.export_vtf), String, cryst})
-    @enforce precompile(Tuple{typeof(CrystalNets.export_vtf), String, crystclust})
+    @enforce precompile(Tuple{typeof(PeriodicGraphEmbeddings.export_vtf), String, cryst, Int, Bool})
+    @enforce precompile(Tuple{typeof(PeriodicGraphEmbeddings.export_vtf), String, crystclust, Int, Bool})
+    @enforce precompile(Tuple{typeof(PeriodicGraphEmbeddings.export_vtf), String, cryst, Int})
+    @enforce precompile(Tuple{typeof(PeriodicGraphEmbeddings.export_vtf), String, crystclust, Int})
+    @enforce precompile(Tuple{typeof(PeriodicGraphEmbeddings.export_vtf), String, cryst})
+    @enforce precompile(Tuple{typeof(PeriodicGraphEmbeddings.export_vtf), String, crystclust})
     for D in 1:3
         for T in inttypes
-            @enforce precompile(Tuple{typeof(CrystalNets.export_vtf), String, cnet{D,T}, Int, Bool})
-            @enforce precompile(Tuple{typeof(CrystalNets.export_vtf), String, cnet{D,T}, Int})
-            @enforce precompile(Tuple{typeof(CrystalNets.export_vtf), String, cnet{D,T}})
+            @enforce precompile(Tuple{typeof(PeriodicGraphEmbeddings.export_vtf), String, cnet{D,T}, Int, Bool})
+            @enforce precompile(Tuple{typeof(PeriodicGraphEmbeddings.export_vtf), String, cnet{D,T}, Int})
+            @enforce precompile(Tuple{typeof(PeriodicGraphEmbeddings.export_vtf), String, cnet{D,T}})
         end
     end
     @enforce precompile(Tuple{typeof(CrystalNets.export_cif), String, cryst})
