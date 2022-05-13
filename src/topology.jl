@@ -714,23 +714,17 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
     initial_candidates = find_initial_candidates(net, candidates_v, category_map)
     candidates = Dict{Int,Vector{SMatrix{3,3,T,9}}}()
     isempty(initial_candidates) && return candidates
-    # the two next variables are accessed concurrently, must be locked before read/write
-    current_cats::SVector{3,Int} = SVector{3,Int}((length(category_map), length(category_map), length(category_map)))
-    current_ordertype::Int = 1
+    mincats::SVector{3,Int} = SVector{3,Int}((length(category_map), length(category_map), length(category_map)))
+    ordertype::Int = 1
     # ordertype designates the kind of ordering of the category of the three edges:
     # ordertype == 1 means c1 == c2 == c3 where ci is the category of edge i
     # ordertype == 2 means c1  < c2 == c3
     # ordertype == 3 means c1 == c2  < c3
     # ordertype == 4 means c1  < c2  < c3
-    fastlock = SpinLock()
 
-    @threads for (v, (mat, cats)) in initial_candidates
+    for (v, (mat, cats)) in initial_candidates
         _, n = size(mat)
         matv = SMatrix{3,3,T,9}[] # the list of bases making a candidate with origin v
-        lock(fastlock) # needed even for read-only to avoid data race
-        ordertype = current_ordertype
-        mincats = copy(current_cats)
-        unlock(fastlock)
         for _i in 1:(n-2), _j in (_i+1):(n-1), _k in (_j+1):n
             m = SMatrix{3,3,T,9}(mat[:,[_i,_j,_k]])
             issingular(m) && continue
@@ -751,6 +745,7 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
                 (ordertype != 1 || mincats[1] < subcats[1]) && continue
                 if mincats[1] > subcats[1]
                     empty!(matv)
+                    empty!(candidates)
                     mincats = subcats
                 end
                 orders = SVector{3,Int}[(1,2,3), (1,3,2), (2,1,3), (2,3,1), (3,1,2), (3,2,1)]
@@ -758,6 +753,7 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
                 (ordertype > 2 || (ordertype == 2 && mincats < subcats)) && continue
                 if ordertype == 1 || mincats > subcats
                     empty!(matv)
+                    empty!(candidates)
                     ordertype = 2
                     mincats = subcats
                 end
@@ -766,6 +762,7 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
                 (ordertype == 4 || (ordertype == 3 && mincats < subcats)) && continue
                 if ordertype <= 2 || mincats > subcats
                     empty!(matv)
+                    empty!(candidates)
                     ordertype = 3
                     mincats = subcats
                 end
@@ -774,32 +771,15 @@ function find_candidates_onlyneighbors(net::CrystalNet3D{T}, candidates_v, categ
                 ordertype == 4 && mincats < subcats && continue
                 if ordertype != 4 || mincats > subcats
                     empty!(matv)
+                    empty!(candidates)
                     ordertype = 4
                     mincats = subcats
                 end
                 orders = SVector{3,Int}[reorder]
             end
-            mats = [m[:,o] for o in orders]
-            append!(matv, mats)
-        end
-        if ordertype < current_ordertype || (ordertype == current_ordertype
-                                             && mincats > current_cats)
-            continue # fast-path to avoid unecessary locking
-        end
-
-        lock(fastlock)
-        if ordertype < current_ordertype || (ordertype == current_ordertype
-                                             && mincats > current_cats)
-            unlock(fastlock)
-            continue
-        end
-        if ordertype > current_ordertype || mincats < current_cats
-            empty!(candidates)
-            current_ordertype = ordertype
-            current_cats = mincats
+            append!(matv, m[:,o] for o in orders)
         end
         candidates[v] = matv
-        unlock(fastlock)
     end
 
     return candidates
@@ -810,17 +790,12 @@ function find_candidates_onlyneighbors(net::CrystalNet2D{T}, candidates_v, categ
 
     candidates = Dict{Int,Vector{SMatrix{2,2,T,4}}}()
     isempty(initial_candidates) && return candidates
-    current_cats::SVector{2,Int} = SVector{2,Int}((length(category_map), length(category_map)))
-    current_ordertype::Int = 1
-    fastlock = SpinLock()
+    mincats::SVector{2,Int} = SVector{2,Int}((length(category_map), length(category_map)))
+    ordertype::Int = 1
 
-    @threads for (v, (mat, cats)) in initial_candidates
+    for (v, (mat, cats)) in initial_candidates
         _, n = size(mat)
         matv = SMatrix{2,2,T,4}[]
-        lock(fastlock)
-        ordertype = current_ordertype
-        mincats = copy(current_cats)
-        unlock(fastlock)
         for _i in 1:(n-1), _j in (_i+1):n
             m = SMatrix{2,2,T,4}(mat[:,[_i,_j]])
             issingular(m) && continue
@@ -832,6 +807,7 @@ function find_candidates_onlyneighbors(net::CrystalNet2D{T}, candidates_v, categ
                 (ordertype != 1 || mincats[1] < subcats[1]) && continue
                 if mincats[1] > subcats[1]
                     empty!(matv)
+                    empty!(candidates)
                     mincats = subcats
                 end
                 orders = SVector{2,Int}[(1,2), (2,1)]
@@ -839,32 +815,15 @@ function find_candidates_onlyneighbors(net::CrystalNet2D{T}, candidates_v, categ
                 ordertype == 2 && mincats < subcats && continue
                 if ordertype != 2 || mincats > subcats
                     empty!(matv)
+                    empty!(candidates)
                     ordertype = 2
                     mincats = subcats
                 end
                 orders = SVector{2,Int}[reorder]
             end
-            mats = [m[:,o] for o in orders]
-            append!(matv, mats)
-        end
-        if ordertype < current_ordertype || (ordertype == current_ordertype
-                                             && mincats > current_cats)
-            continue # fast-path to avoid unecessary locking
-        end
-
-        lock(fastlock)
-        if ordertype < current_ordertype || (ordertype == current_ordertype
-                                             && mincats > current_cats)
-            unlock(fastlock)
-            continue
-        end
-        if ordertype > current_ordertype || mincats < current_cats
-            empty!(candidates)
-            current_ordertype = ordertype
-            current_cats = mincats
+            append!(matv, m[:,o] for o in orders)
         end
         candidates[v] = matv
-        unlock(fastlock)
     end
 
     return candidates
@@ -875,44 +834,22 @@ function find_candidates_onlyneighbors(net::CrystalNet1D{T}, candidates_v, categ
 
     candidates = Dict{Int,Vector{SMatrix{1,1,T,1}}}()
     isempty(initial_candidates) && return candidates
-    current_cat::Int = length(category_map)
-    current_ordertype::Int = 1
-    fastlock = SpinLock()
+    mincat::Int = length(category_map)
 
-    @threads for (v, (mat, cats)) in initial_candidates
+    for (v, (mat, cats)) in initial_candidates
         n = length(mat)
         matv = SMatrix{1,1,T,1}[]
-        lock(fastlock)
-        ordertype = current_ordertype
-        mincat = current_cat
-        unlock(fastlock)
         for i in 1:n
             cat = cats[i]
             mincat < cat && continue
             if mincat > cat
                 empty!(matv)
+                empty!(candidates)
                 mincat = cat
             end
-            append!(matv, [mat[[i]]])
-        end
-        if ordertype < current_ordertype || (ordertype == current_ordertype
-                                             && mincat > current_cat)
-            continue # fast-path to avoid unecessary locking
-        end
-
-        lock(fastlock)
-        if ordertype < current_ordertype || (ordertype == current_ordertype
-                                             && mincat > current_cat)
-            unlock(fastlock)
-            continue
-        end
-        if ordertype > current_ordertype || mincat < current_cat
-            empty!(candidates)
-            current_ordertype = ordertype
-            current_cat = mincat
+            push!(matv, mat[[i]])
         end
         candidates[v] = matv
-        unlock(fastlock)
     end
 
     return candidates
