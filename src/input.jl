@@ -101,9 +101,16 @@ function parse_cif(file)
 end
 
 
-function parsestrip(T, s)
+function tryparsestrip(T, s, default=nothing)
     s = s[end] == ')' ? s[1:prevind(s, findlast('(', s))] : s
     x = tryparse(T, s)
+    if x isa T
+        return x
+    end
+    return default
+end
+function parsestrip(T, s)
+    x = tryparsestrip(T, s)
     if x isa T
         return x
     end
@@ -235,9 +242,11 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
        haskey(parsed, "geom_bond_atom_site_label_2")
         bond_a = popvecstring!(parsed, "geom_bond_atom_site_label_1")
         bond_b = popvecstring!(parsed, "geom_bond_atom_site_label_2")
-        dists = (haskey(parsed, "geom_bond_distance") ? 
-                    parsestrip.(Float32, popvecstring!(parsed, "geom_bond_distance")) :
-                    fill(-Inf32, length(bond_a)))
+        dists = if haskey(parsed, "geom_bond_distance")
+            tryparsestrip.(Float32, popvecstring!(parsed, "geom_bond_distance"), -Inf32)
+        else
+            fill(-Inf32, length(bond_a))
+        end
         bonds = [Tuple{Int,Float32}[] for _ in 1:natoms]
         for i in 1:length(bond_a)
             x = get(correspondence, bond_a[i], 0)
@@ -482,11 +491,13 @@ returned list.
 function check_collision(pos, mat)
     n = length(pos)
     toremove = Int[]
+    n == 0 && return toremove
     buffer, ortho, safemin = prepare_periodic_distance_computations(mat)
     for i in 1:n
         posi = pos[i]
         for j in (i+1):n
-            if periodic_distance!(buffer, posi .- pos[j], mat, ortho, safemin) < 0.55
+            buffer .= posi .- pos[j]
+            if periodic_distance!(buffer, mat, ortho, safemin) < 0.55
                 push!(toremove, j)
             end
         end
@@ -692,7 +703,7 @@ end
 In a configuration where atoms A, B and C are pairwise bonded, remove the longest of the
 three bonds if it is suspicious (too large and too close to the third atom).
 """
-function remove_triangles!(graph::PeriodicGraph3D, pos, types, mat, toinvestigate=collect(edges(graph))) where N
+function remove_triangles!(graph::PeriodicGraph3D, pos, types, mat, toinvestigate=collect(edges(graph)))
     preprocessed = Dict{PeriodicEdge3D,Tuple{Float64,Bool}}()
     removeedges = Dict{PeriodicEdge3D,Tuple{PeriodicEdge3D,PeriodicEdge3D}}()
     rev_removeedges = Dict{PeriodicEdge3D,Set{PeriodicEdge3D}}()

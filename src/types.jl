@@ -19,7 +19,7 @@ Representation of a .cif file.
 """
 struct CIF
     cifinfo::Dict{String, Union{String, Vector{String}}}
-    cell::Cell
+    cell::Cell{Rational{Int}}
     ids::Vector{Int}
     types::Vector{Symbol}
     pos::Matrix{Float64}
@@ -187,7 +187,8 @@ function prune_collisions(cif::CIF)
     smallmat = Float64.(cif.cell.mat)
     buffer, ortho, safemin = prepare_periodic_distance_computations(smallmat)
     for i in 1:n, j in (i+1):n
-        if periodic_distance!(buffer, points[i] .- points[j], smallmat, ortho, safemin) < 0.55
+        buffer .= points[i] .- points[j]
+        if periodic_distance!(buffer, smallmat, ortho, safemin) < 0.55
             push!(toremove, j)
         end
     end
@@ -258,7 +259,8 @@ function expand_symmetry(c::CIF)
             p = Vector(equiv.mat*v .+ equiv.ofs)
             p .-= floor.(p)
             for j in 1:length(newpos)
-                if periodic_distance!(buffer, newpos[j] .- p, smallmat, ortho, safemin) < 0.55
+                buffer .= newpos[j] .- p
+                if periodic_distance!(buffer, smallmat, ortho, safemin) < 0.55
                     image[i] = j
                     break
                 end
@@ -286,7 +288,8 @@ function expand_symmetry(c::CIF)
             for j in (i+1):m
                 bondlength = get_bondlist(oldbonds[newids[i]], newids[j])
                 bondlength < Inf32 || continue
-                if abs(periodic_distance!(buffer, newpos[i] .- newpos[j], smallmat, ortho, safemin) - bondlength) < 0.55
+                buffer .= newpos[i] .- newpos[j]
+                if abs(periodic_distance!(buffer, smallmat, ortho, safemin) - bondlength) < 0.55
                     push!(bonds[i], (j, bondlength))
                     push!(bonds[j], (i, bondlength))
                 end

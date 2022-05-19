@@ -330,7 +330,7 @@ function _precompile_dependencies()
         # @enforce precompile(Tuple{CrystalNets.var"#670#threadsfor_fun#114"{CrystalNet{Rational{T}}, Vector{Int}, Base.Threads.SpinLock, Vector{Pair{Int, Tuple{Matrix{Rational{T}}, Vector{Int}}}}, Int, DataType, Vector{Int}}})
         # @enforce precompile(Tuple{CrystalNets.var"#685#threadsfor_fun#116"{Rational{T}, Dict{Int, Vector{SMatrix{3, 3, Rational{T}, 9}}}, Base.Threads.SpinLock, DataType, Vector{Pair{Int, Tuple{Matrix{Rational{T}}, Vector{Int}}}}}})
 
-        @enforce precompile(Tuple{Type{CrystalNet{Rational{T}}},CrystalNets.Cell,Vector{Symbol},PeriodicGraph3D,Matrix{Rational{T}}})
+        @enforce precompile(Tuple{Type{CrystalNet{Rational{T}}},CrystalNets.Cell{Rational{Int}},Vector{Symbol},PeriodicGraph3D,Matrix{Rational{T}}})
         @enforce precompile(Tuple{typeof(CrystalNets.isrank3),Matrix{Rational{T}}})
         @enforce precompile(Tuple{typeof(CrystalNets.minimize),CrystalNet{Rational{T}}})
         @enforce precompile(Tuple{typeof(CrystalNets.topological_key),CrystalNet{Rational{T}}})
@@ -389,7 +389,7 @@ function _precompile_()
     clustering = Clustering._Clustering
     neighs = Vector{PeriodicVertex3D}
     edgs = Vector{PeriodicEdge3D}
-    cell = PeriodicGraphEmbeddings.Cell
+    cell = PeriodicGraphEmbeddings.Cell{Rational{Int}}
     cif = CrystalNets.CIF
     bondlist = Vector{Vector{Tuple{Int,Float32}}}
     unets = CrystalNets.UnderlyingNets
@@ -450,8 +450,8 @@ function _precompile_()
     end
     @enforce precompile(Tuple{typeof(CrystalNets.export_attributions), crystclust, String})
     @enforce precompile(Tuple{typeof(CrystalNets.export_attributions), crystclust})
-    @enforce precompile(Tuple{typeof(CrystalNets.export_arc), String, Bool, Dict{String,String}})
-    @enforce precompile(Tuple{typeof(CrystalNets.export_arc), String, Bool})
+    @enforce precompile(Tuple{typeof(CrystalNets.export_arc), String, Dict{String,String}})
+    @enforce precompile(Tuple{typeof(CrystalNets.export_arc), String, Nothing})
     @enforce precompile(Tuple{typeof(CrystalNets.export_arc), String})
 
     # utils.jl
