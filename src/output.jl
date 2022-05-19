@@ -51,7 +51,7 @@ function export_cif(file, __c::Union{Crystal, CIF})
             end
         end
 
-        cell::Cell = c isa CIF ? c.cell : c.pge.cell
+        cell::Cell{Rational{Int}} = c isa CIF ? c.cell : c.pge.cell
         #scale_factor::Float64 = unique!(sort(c.types)) == [:Si] && c.pge.pos[:,1] != [0,0,0] ? 1.2 : 1.0
         ((__a, __b, __c), (__α, __β, __γ)), _ = cell_parameters(cell)
         _a, _b, _c, _α, _β, _γ = Float64.((__a, __b, __c, __α, __β, __γ))
@@ -170,15 +170,16 @@ end
 
 
 """
-    export_arc(path)
+    export_arc(path, arc=CRYSTAL_NETS_ARCHIVE)
 
-Export the current archive to the specified path.
+Export archive `arc` to the specified `path`. If unspecified, the exported archive is the
+current one.
 """
-function export_arc(path, empty=false, arc=CRYSTAL_NETS_ARCHIVE)
+function export_arc(path, arc=CRYSTAL_NETS_ARCHIVE)
     mkpath(splitdir(path)[1])
     open(path, "w") do f
         println(f, "Made by CrystalNets.jl v$CRYSTAL_NETS_VERSION")
-        if !empty
+        if !isnothing(arc)
             println(f)
             pairs = sort(collect(arc); by=last)
             for (genome, id) in pairs

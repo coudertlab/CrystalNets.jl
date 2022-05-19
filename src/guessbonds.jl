@@ -84,7 +84,8 @@ function guess_bonds(pos, types, mat, options)
             radius_j = radii[j]
             iszero(radius_j) && continue
             posj = pos[j]
-            d1 = periodic_distance!(buffer, posi .- posj, mat, ortho, safemin)
+            buffer .= posi .- posj
+            d1 = periodic_distance!(buffer, mat, ortho, safemin)
             maxdist = cutoff2*(radius_i + radius_j)
             if d1 < cutoff && 0.5 < d1 < maxdist
                 push!(bonds[i], (j, maxdist))
