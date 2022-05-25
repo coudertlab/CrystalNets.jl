@@ -39,7 +39,6 @@ import Serialization
 
 using PeriodicGraphEmbeddings
 using PeriodicGraphs
-using PeriodicGraphs: hash_position, change_dimension
 using StaticArrays
 using Graphs
 

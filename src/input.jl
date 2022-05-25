@@ -738,14 +738,12 @@ function remove_triangles!(graph::PeriodicGraph3D, pos, types, mat, toinvestigat
                     l2 = norm(mat * (pos[x.v] .+ x.ofs .- pos[s]))
                     l2 < bondlength || continue
                     if bypass || (bondlength*bondlength > min(9.0, l1*l1 + l2*l2))
-                        e1 = PeriodicEdge(s, x)
-                        e1 = PeriodicGraphs.isindirectedge(e1) ? reverse(e1) : e1
+                        e1 = directedge(PeriodicEdge(s, x))
                         if haskey(removeedges, e1)
                             push!(new_toinvestigate, e)
                             continue
                         end
-                        e2 = PeriodicEdge(d, x.v, .- e.dst.ofs .- x.ofs)
-                        e2 = PeriodicGraphs.isindirectedge(e2) ? reverse(e2) : e2
+                        e2 = directedge(PeriodicEdge(d, x.v, .- e.dst.ofs .- x.ofs))
                         if haskey(removeedges, e2)
                             push!(new_toinvestigate, e)
                             continue
@@ -890,8 +888,8 @@ function sanity_checks!(graph, pos, types, mat, options)
             if !(options.dryrun isa Nothing)
                 options.dryrun[:try_no_Auto_bonds] = nothing
                 options.dryrun[:suspect_smallbonds] = union(
-                    Set{Symbol}([types[src(e)] for e in removeedges]),
-                    Set{Symbol}([types[dst(e)] for e in removeedges]))
+                    Set{Symbol}([types[first(e)] for e in removeedges]),
+                    Set{Symbol}([types[first(last(e))] for e in removeedges]))
             end
         end
         for e in removeedges

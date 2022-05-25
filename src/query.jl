@@ -41,9 +41,9 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
         collisions = _collisions
     end
 
-    if isempty(net.options._pos) # could not be exported before
-        export_default(net, "net", net.options.name, net.options.export_net)
-    end
+    export_net = isempty(net.options.export_net) ? isempty(net.options._pos) ?
+                 net.options.export_subnets : "" : net.options.export_net
+    export_default(net, "net", net.options.name, export_net)
 
     return topological_genome(shrunk_net, collisions)
 end
