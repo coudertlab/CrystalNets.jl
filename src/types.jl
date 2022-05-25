@@ -629,7 +629,7 @@ function CrystalNet{D,T}(net::CrystalNet{N}; kwargs...) where {D,T,N}
     else
         newpos = net.pge.pos
     end
-    pge = PeriodicGraphEmbedding{D,T}(change_dimension(PeriodicGraph{D}, net.pge.g), newpos, net.pge.cell)
+    pge = PeriodicGraphEmbedding{D,T}(PeriodicGraph{D}(net.pge.g), newpos, net.pge.cell)
     CrystalNet{D,T}(pge, net.types, Options(net.options; kwargs...))
 end
 CrystalNet{D}(net::CrystalNet{R,T}; kwargs...) where {D,R,T} = CrystalNet{D,T}(net; kwargs...)
@@ -673,7 +673,6 @@ end
 
 function _PeriodicGraphEmbedding(cell::Cell, graph::PeriodicGraph{D}, placement) where D
     if isempty(placement)
-        @toggleassert isempty(types)
         return PeriodicGraphEmbedding{D,Rational{Int}}(cell), Int[]
     end
     m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
@@ -718,8 +717,7 @@ end
 function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
                        graph::PeriodicGraph, options::Options) where D
     ne(graph) == 0 && return CrystalNet{D}(cell, types, PeriodicGraph{D}(nv(graph)), options)
-    g = change_dimension(PeriodicGraph{D}, graph)
-    return CrystalNet{D}(cell, types, g, options)
+    return CrystalNet{D}(cell, types, PeriodicGraph{D}(graph), options)
 end
 
 
@@ -736,7 +734,7 @@ function Base.show(io::IO, x::CrystalNet)
 end
 
 function separate_components(c::Crystal{T}) where T
-    graph = change_dimension(PeriodicGraph3D, c.pge.g)
+    graph = PeriodicGraph3D(c.pge.g)
     dimensions = PeriodicGraphs.dimensionality(graph)
     @ifwarn if haskey(dimensions, 0)
         @warn "Detected structure of dimension 0, possibly solvent residues. It will be ignored for topology computation."
@@ -945,7 +943,7 @@ function UnderlyingNets(g::SmallPseudoGraph, options::Options)
     cell = Cell()
     @repeatgroups begin
         for vmap in get(dimensions, D, Vector{Int}[])
-            nets = PeriodicGraphs.change_dimension(PeriodicGraph{D}, graph[vmap])
+            nets = PeriodicGraph{D}(graph[vmap])
             types = fill(Symbol(""), nv(nets))
             push!(groups, (vmap, CrystalNet{D}[CrystalNet{D}(cell, types, nets, options)]))
         end
@@ -1008,7 +1006,14 @@ function Base.show(io::IO, x::TopologicalGenome)
     elseif x.unstable
         print(io, "unstable ", x.genome)
     elseif x.name isa String
-        print(io, x.name)
+        splitcomma = split(x.name, ','; limit=1)
+        fstsplit = first(splitcomma)
+        if length(fstsplit) ≥ 3 && islowercase(fstsplit[3]) && !startswith(fstsplit, "sqc")
+            printstyled(io, fstsplit; bold=true) # RCSR
+        else
+            print(io, fstsplit)
+        end
+        length(splitcomma) == 2 && print(io, ',', last(splitcomma))
     else
         print(io, "UNKNOWN ", x.genome)
     end

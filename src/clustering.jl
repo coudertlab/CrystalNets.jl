@@ -658,21 +658,19 @@ function add_to_merge_or_newclass!(classes, mergeto, graph, sbus, periodicsbus, 
 end
 
 
-function small_cycles_around(graph, pos, mat, i, u_init, classes, acceptedclasses)
-    pos_init = pos[u_init.v]
+function small_cycles_around!(handled, newcycleidx, graph, pos, mat, i, u_init, classes, acceptedclasses, Cclass)
+    pos_init = pos[u_init.v] .+ u_init.ofs
     posu = [pos_init]
-    init_vec = mat * (pos_init .+ u_init.ofs .- pos[i])
+    init_vec = mat * (pos_init .- pos[i])
     vec = [init_vec]
-    prev_vec = [init_vec]
     init_vec = .- init_vec
     angles = [180.0]
     diffangles = [0.0]
-    visited = Int[i]
-    visited_set = Set{Int}(visited)
+    visited = [PeriodicVertex3D(i)]
+    visited_set = Set{PeriodicVertex3D}(visited)
     incycles = Set{Int}()
-    parent = [i]
+    parent = [PeriodicVertex3D(i)]
     toexplore = [u_init]
-    offsets = [zero(SVector{3,Int})]
     while !isempty(toexplore)
         u = pop!(toexplore)
         last_visited = last(visited)
@@ -681,10 +679,23 @@ function small_cycles_around(graph, pos, mat, i, u_init, classes, acceptedclasse
             delete!(visited_set, pop!(visited))
             last_visited = last(visited)
         end
-        if u.v ∈ visited_set
+        if u ∈ visited_set
             for (j, x) in enumerate(visited)
-                if x == u.v
-                    union!(incycles, visited[j:end])
+                if x == u
+                    viewcycle = @view visited[j:end]
+                    # countC = count(x -> classes[x.v] == Cclass, viewcycle)
+                    # if 2*countC ≥ length(viewcycle)
+                        union!(incycles, x.v for x in viewcycle)
+                        last_x = visited[j]
+                        l0 = get!(handled, directedge(last_x, visited[end]), Int[])
+                        push!(l0, newcycleidx)
+                        for k in j+1:length(visited)
+                            new_x = visited[k]
+                            l = get!(handled, directedge(last_x, new_x), Int[])
+                            push!(l, newcycleidx)
+                            last_x = new_x
+                        end
+                    # end
                     break
                 end
             end
@@ -694,78 +705,56 @@ function small_cycles_around(graph, pos, mat, i, u_init, classes, acceptedclasse
         last_angle = pop!(angles)
         last_diffangle = pop!(diffangles)
         last_vec = pop!(vec)
-        last_prev_vec = pop!(prev_vec)
-        last_offset = pop!(offsets)
-        push!(visited, u.v)
-        push!(visited_set, u.v)
-        for x in neighbors(graph, u.v)
-            (x.v == last_visited || degree(graph, x.v) == 1) && continue
+        push!(visited, u)
+        push!(visited_set, u)
+        for x in neighbors(graph, u)
+            (x == last_visited || degree(graph, x) == 1) && continue
             classes[x.v] ∈ acceptedclasses || continue
             new_vec = mat * (pos[x.v] .+ x.ofs .- last_posu)
             α = angle(last_vec, .-new_vec)
             90 < α < 145 || continue
             #β = dihedral(last_prev_vec, last_vec, new_vec)
             #β < 20 || β > 160 || continue
-            ofs = last_offset .+ x.ofs
-            γ = Float64(angle(init_vec, mat * (pos[x.v] .+ ofs .- pos_init)))
-            if last_parent == i
+            γ = Float64(angle(init_vec, mat * (pos[x.v] .+ x.ofs .- pos_init)))
+            if last_parent == PeriodicVertex3D(i)
                 last_diffangle = (180 - γ)/2
                 last_angle = γ + last_diffangle
             end
             γ < last_angle || continue
             diffangle = last_angle - γ
             abs(diffangle - last_diffangle) < last_diffangle/4 || continue
-            push!(toexplore, PeriodicVertex3D(x.v, ofs))
-            push!(parent, u.v)
-            push!(posu, pos[x.v])
+            push!(toexplore, x)
+            push!(parent, u)
+            push!(posu, pos[x.v] .+ x.ofs)
             push!(angles, γ)
             push!(diffangles, diffangle)
-            push!(prev_vec, last_vec)
             push!(vec, new_vec)
-            push!(offsets, ofs)
         end
     end
     # !isempty(incycles) && @show incycles
     return incycles
 end
 
-"""
-    in_small_cycles_around(graph, pos, mat, i, classes, acceptedclasses)
-
-Return the set of atoms belonging to a small cycle to which also belongs atom `i`.
-This cycle must only contain atoms whose class is in `acceptedclasses`
-"""
-function in_small_cycles_around(graph, pos, mat, i, classes, acceptedclasses)
-    neighs = neighbors(graph, i)
-    _, state = iterate(neighs)
-    incycle = Set{Int}()
-    for u in Base.rest(neighs, state)
-        degree(graph, u.v) == 1 && continue
-        union!(incycle, small_cycles_around(graph, pos, mat, i, u, classes, acceptedclasses))
-    end
-    return incycle
-end
-
-
 function detect_organiccycles(classes, graph, pos, mat, Cclass, modifiables)
-    handled = Set{Int}()
+    handled = Dict{PeriodicEdge3D,Vector{Int}}()
     cycles = Set{Int}[]
     acceptedclasses = union(modifiables, Cclass)
-    for (i, class) in enumerate(classes)
-        class == Cclass || continue
-        (i ∈ handled || degree(graph, i) ≤ 1) && continue
-        skipflag = true
-        for x in neighbors(graph, i)
-            if classes[x.v] ∈ acceptedclasses && degree(graph, x.v) > 1
-                skipflag = false
-                break
-            end
+    k = 1
+    for e in edges(graph)
+        if classes[e.src] == Cclass
+            i, u = (e.src, e.dst)
+        elseif classes[e.dst.v] == Cclass
+            i, u = e.dst.v, PeriodicVertex3D(e.src, .- e.dst.ofs)
+        else
+            continue
         end
-        skipflag && continue
-        incycle = in_small_cycles_around(graph, pos, mat, i, classes, acceptedclasses)
+        degree(graph, i) ≤ 1 && continue
+        (classes[u.v] ∈ acceptedclasses && degree(graph, u.v) > 1) || continue
+        haskey(handled, directedge(e)) && continue
+        incycle = small_cycles_around!(handled, k, graph, pos, mat, i, u, classes, acceptedclasses, Cclass)
         if !isempty(incycle)
-            union!(handled, incycle)
             push!(cycles, incycle)
+            k += 1
         end
     end
     return cycles
@@ -866,9 +855,7 @@ function remove_metal_cluster_bonds!(graph, types, opts)
     end
     edges_toremove = PeriodicEdge3D[]
     for e in edges(graph)
-        s = src(e)
-        d = dst(e)
-        o = PeriodicGraphs.ofs(e)
+        s, (d, o) = e
         if metallic[s] && metallic[d]
             for k in intersect(keys(nonmetallic_neighbours[s]), keys(nonmetallic_neighbours[d]))
                 if !isempty(intersect(nonmetallic_neighbours[s][k],
@@ -922,10 +909,13 @@ function find_sbus(crystal, kinds=default_sbus)
     temporary_classes_set = Set{Int}(temporary_classes)
     nclasses::Int = length(kinds)
     last_class = nclasses
+    aromaticcycleclassmin = -1
+    aromaticcycleclassmax = -2
     graph = crystal.pge.g
     organickind = kinds[:C]
 
     if crystal.options.detect_organiccycles
+        aromaticcycleclassmin = last_class + 1
         organiccycle = detect_organiccycles(classes, graph, crystal.pge.pos,
                                     crystal.pge.cell.mat, organickind, temporary_classes_set)
         same_SBU = group_cycle(organiccycle, crystal.types, graph)
@@ -935,6 +925,7 @@ function find_sbus(crystal, kinds=default_sbus)
                 # Each atom in an aromatic cycle is bonded to the other atoms of the
                 # same cycle. The newly-formed clique is assigned a new class.
                 last_class += 1
+                aromaticcycleclass = last_class
                 for (i, x) in enumerate(cycle)
                     classes[x.v] = last_class
                     for j in (i+1):length(cycle)
@@ -944,6 +935,7 @@ function find_sbus(crystal, kinds=default_sbus)
                 end
             end
         end
+        aromaticcycleclassmax = last_class
     end
 
     rev_nclasses = [0 for _ in 1:last_class]
@@ -1009,10 +1001,12 @@ function find_sbus(crystal, kinds=default_sbus)
     if crystal.options.detect_pe
         separate_simple_pe = !crystal.options.cluster_simple_pe
         first_pe = true
+        initial_last_class = last_class
         for (i, class) in enumerate(classes)
             class == organickind || continue
             for x in neighbors(graph, i)
-                if classes[x.v] != organickind
+                classx = classes[x.v]
+                if classx ≤ initial_last_class && classx != organickind && !(aromaticcycleclassmin ≤ classx ≤ aromaticcycleclassmax)
                     last_class += first_pe + separate_simple_pe
                     first_pe = false
                     classes[i] = last_class
@@ -1469,10 +1463,7 @@ function update_new_edgs!(new_edgs, atoms, keep_edges, toremove, rev_vmap)
             toremove[y.v] && continue
             val = keep_edges[i,j]
             x.v == y.v && y.ofs == x.ofs && !val && continue
-            e = PeriodicEdge3D(rev_vmap[x.v], rev_vmap[y.v], y.ofs .- x.ofs)
-            if PeriodicGraphs.isindirectedge(e)
-                e = reverse(e)
-            end
+            e = directedge(PeriodicEdge3D(rev_vmap[x.v], rev_vmap[y.v], y.ofs .- x.ofs))
             if get!(new_edgs, e, val) && !val
                 new_edgs[e] = false
             end
@@ -1561,15 +1552,15 @@ function edges_of_convex_hull(atoms, num_targets, ref_mat, pos, toremove, visite
                         end
                         Δac = norm(ref_mat * ca)
                         Δbd = norm(ref_mat * bd)
-                        Δab = norm(ref_mat * ba)
-                        Δbc = norm(ref_mat * bc)
-                        Δcd = norm(ref_mat * cd)
-                        Δda = norm(ref_mat * (poss[d] .- poss[a]))
-                        minΔ = min(Δab, Δbc, Δcd, Δda)*1.01
+                        # Δab = norm(ref_mat * ba)
+                        # Δbc = norm(ref_mat * bc)
+                        # Δcd = norm(ref_mat * cd)
+                        # Δda = norm(ref_mat * (poss[d] .- poss[a]))
+                        # minΔ = min(Δab, Δbc, Δcd, Δda)*1.01
                         # if keepsmallest
-                            if Δac < 0.9Δbd
+                            if Δac < 0.8Δbd
                                 keepac = true
-                            elseif Δbd < 0.9Δac
+                            elseif Δbd < 0.8Δac
                                 keepbd = true
                             end
                         # else
@@ -1581,38 +1572,6 @@ function edges_of_convex_hull(atoms, num_targets, ref_mat, pos, toremove, visite
             end
         end
     end
-
-    #=
-    n ≥ 5 || return keep_edges
-    for i in 1:num_targets
-        ref = poss[i]
-        for j1 in 1:n
-            keep_edges[i,j1] || continue
-            vec1 = poss[j1] .- ref
-            j2array = [j for j in 1:n if keep_edges[i,j] && j != j1]
-            for j2 in j2array
-                vec2 = poss[j2] .- ref
-                j3array = [j for j in j2array if keep_edges[i,j] && j != j2]
-                for j3 in j3array
-                    ordered4 = sort(SVector{4,Int}((i, j1, j2, j3)))
-                    ordered4 ∈ visited_coplanar4 && continue
-                    vec3 = poss[j3] .- ref
-                    otherneighs = [k for k in j3array if k > i && keep_edges[i,k] && k != j3]
-                    isempty(otherneighs) && continue
-                    mat = inv(hcat(vec1, vec2, vec3))
-                    for k in otherneighs
-                        coeffs = mat * (poss[k] .- ref)
-                        keep_edges[i,k] = keep_edges[k,i] = !all(≥(-3e-16), coeffs)
-                        if atoms == PeriodicVertex3D[(7, (0,0,0)), (7, (1,0,0)), (9, (0,-1,0)), (9, (1,-1,0)), (13, (0,0,-1)), (14, (0,-1,-1)), (13, (1,0,-1)), (14, (1,-1,-1)), (15, (1,0,0))]
-                            minmax(i, k) == (4, 6) && all(≥(-3e-16), coeffs) && @show i, j1, j2, j3
-                        end
-                    end
-                end
-            end
-        end
-    end
-    =#
-
 
     n ≥ 5 || return keep_edges
     for i in 1:num_targets
@@ -1741,10 +1700,7 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
                                 ofs = metal2.ofs .- flag
                                 for _n in neighs
                                     _v = rev_vmap[_n.v]
-                                    e = PeriodicEdge3D(_v, _v, ofs)
-                                    if PeriodicGraphs.isindirectedge(e)
-                                        e = reverse(e)
-                                    end
+                                    e = directedge(PeriodicEdge3D(_v, _v, ofs))
                                     new_edgs[e] = true
                                 end
                                 continue
@@ -1771,7 +1727,7 @@ function regroup_toremove(cryst, tomerge, toremove_list, msg)
         _b && add_edge!(graph, e)
     end
 
-    pge = PeriodicGraphEmbedding(graph, cryst.pos[vmap], cryst.pge.cell)
+    pge = PeriodicGraphEmbedding(graph, cryst.pge.pos[vmap], cryst.pge.cell)
     #remove_triangles!(graph, pge.pos, nothing, Float64.(cryst.pge.cell.mat), new_edgs)
     types = cryst.types[vmap]
 

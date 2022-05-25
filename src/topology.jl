@@ -8,7 +8,8 @@ Check that the dimensionality of the net (i.e. the number of independent axes al
 it is periodic) is equal to `D`, or throw a DimensionMismatch otherwise.
 """
 function check_dimensionality(c::CrystalNet{D}) where {D}
-    edgs = [c.pge.pos[dst(e)] .+ PeriodicGraphs.ofs(e) .- c.pge.pos[src(e)] for e in edges(c.pge.g)]
+    s, (d, o) = e
+    edgs = [c.pge.pos[d] .+ o .- c.pge.pos[s] for e in edges(c.pge.g)]
     sort!(edgs)
     unique!(edgs)
     mat = reduce(hcat, edgs)

@@ -136,7 +136,7 @@ function export_cif(file, __c::Union{Crystal, CIF})
 end
 
 PeriodicGraphEmbeddings.export_cgd(file, c::Crystal) = export_cgd(file, c.pge)
-PeriodicGraphEmbeddings.export_cgd(file, c::CrystalNet) = export_cgd(file, change_dimension(PeriodicGraph3D, c.pge.g))
+PeriodicGraphEmbeddings.export_cgd(file, c::CrystalNet) = export_cgd(file, PeriodicGraph3D(c.pge.g))
 
 
 function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tempname()))
@@ -159,8 +159,8 @@ function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir()
         # Chemfiles.add_atom!(residues[resid], i)
     end
     for e in edges(crystal.pge.g)
-        iszero(PeriodicGraphs.ofs(e)) || continue
-        Chemfiles.add_bond!(frame, src(e)-1, dst(e)-1)
+        iszero(last(last(e))) || continue
+        Chemfiles.add_bond!(frame, first(e)-1, first(last(e))-1)
     end
     target = isempty(last(splitext(path))) ? path*".pdb" : path
     output = Chemfiles.Trajectory(target, 'w')
