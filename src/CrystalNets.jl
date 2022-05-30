@@ -1,5 +1,5 @@
 """
-    CrystalNets
+    CrystalNets.jl
 
 Module for automatic recognition of crystal net topologies.
 To use as an executable, run the source file in a shell:
@@ -13,6 +13,10 @@ julia> using CrystalNets
 
 julia> determine_topology(FILE)
 ```
+
+See the documentation at http://molsim.info/CrystalNets.jl/ for further instructions on
+on the use of CrystalNets.jl, and how to do a full installation to reduce latency at
+startup.
 """
 module CrystalNets
 

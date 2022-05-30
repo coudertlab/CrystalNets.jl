@@ -971,7 +971,7 @@ hcb
 julia> typeof(topology)
 TopologicalGenome
 
-julia> topology.genome  # The actual topological genome, as a PeriodicGraph
+julia> PeriodicGraph(topology)  # The actual topological genome, as a PeriodicGraph
 PeriodicGraph2D(2, PeriodicEdge2D[(1, 2, (-1,0)), (1, 2, (0,0)), (1, 2, (0,1))])
 
 julia> parse(TopologicalGenome, "hcb") == topology
@@ -1033,6 +1033,9 @@ function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
     return TopologicalGenome(parse(PeriodicGraph, REVERSE_CRYSTAL_NETS_ARCHIVE[s]), s, false)
 end
 
+
+PeriodicGraphs.PeriodicGraph(t::TopologicalGenome) = t.genome
+PeriodicGraphs.PeriodicGraph{D}(t::TopologicalGenome) where D = PeriodicGraph{D}(t.genome)
 
 """
     TopologyResult

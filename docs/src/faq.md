@@ -69,3 +69,48 @@ Most often, the difference will come from either:
 
 The built-in way to do this consists in using the [`determine_topology_dataset`](@ref) function, or [`guess_topology_dataset`](@ref) in some cases.
 These functions expect the path of a directory containing CIF files within (possibly in subdirectories).
+
+## How can I directly access the genome of my structure instead of its name?
+
+The result of [`determine_topology`](@ref) is either a [`TopologicalGenome`](@ref) or a
+`Vector{Tuple{Vector{Int},TopologyResult}}`, depending on whether the input
+contains multiple interpenetrating subnets or not. In the second case, extract the relevant
+[`TopologyResult`](@ref).
+
+A [`TopologyResult`](@ref) can store the result for different clustering options, so the
+topological genome should be chosen by extracting the relevant result. For example:
+
+```jldoctest im19faq
+julia> path_to_im19 = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif", "IM-19.cif");
+
+julia> result = determine_topology(path_to_im19; structure=StructureType.MOF)
+AllNodes: rna
+SingleNodes: bpq
+
+julia> typeof(result)
+TopologyResult
+
+julia> genome_allnodes = result[Clustering.AllNodes]
+rna
+
+julia> typeof(genome_allnodes)
+TopologicalGenome
+```
+
+In case where all clusterings lead to the same genome, it can simply be accessed
+by calling `first(result)`.
+
+Having obtained a [`TopologicalGenome`](@ref), the topological genome itself can accessed
+by converting it to a `PeriodicGraph`:
+
+```jldoctest im19faq
+julia> genome = PeriodicGraph(genome_allnodes)
+PeriodicGraph3D(6, PeriodicEdge3D[(1, 2, (0,0,0)), (1, 3, (0,0,0)), (1, 4, (0,0,0)), (1, 4, (0,0,1)), (1, 5, (0,0,0)), (1, 6, (0,0,0)), (2, 4, (0,0,1)), (2, 6, (-1,0,0)), (3, 4, (0,0,1)), (3, 5, (0,-1,0)), (4, 5, (0,0,0)), (4, 6, (0,0,0))])
+```
+
+The string representation of the genome is simply `string(genome)`:
+
+``` im19faq
+julia> string(genome)
+"3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 4 0 0 1 1 5 0 0 0 1 6 0 0 0 2 4 0 0 1 2 6 -1 0 0 3 4 0 0 1 3 5 0 -1 0 4 5 0 0 0 4 6 0 0 0"
+```

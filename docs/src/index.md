@@ -67,7 +67,7 @@ In both known and unknown cases, the result is a [`TopologyResult`](@ref).
 #### Interpenetrating substructures
 
 If the file contains multiple interpenetrating substructures, the result is a
-`Vector{Tuple{Vector{Int64}, TopologyResult}}`, where each entry is a tuple
+`Vector{Tuple{Vector{Int}, TopologyResult}}`, where each entry is a tuple
 `(vmap, result)` with:
 
 - `vmap`: the list of vertices of the initial graph that were kept for this substructure.
