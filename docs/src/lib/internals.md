@@ -1,14 +1,15 @@
 # Internal types and functions
 
+See also the documentations of [`PeriodicGraphs.jl`](https://liozou.github.io/PeriodicGraphs.jl/)
+and of [`PeriodicGraphEmbeddings.jl`](https://liozou.github.io/PeriodicGraphEmbeddings.jl)
+
 ## Types
 
 ```@docs
 CrystalNets.Crystal
 CrystalNets.Clusters
 CrystalNets.CollisionNode
-CrystalNets.Cell
 CrystalNets.CIF
-CrystalNets.EquivalentPosition
 ```
 
 ## Core topology functions
@@ -35,8 +36,6 @@ CrystalNets.find_candidates_fallback
 ```@docs
 CrystalNets.parse_cif
 CrystalNets.CIF(file_path::AbstractString)
-CrystalNets.find_refid
-Base.parse(::Type{CrystalNets.EquivalentPosition}, s::AbstractString, refid=("x", "y", "z"))
 CrystalNets.check_collision
 CrystalNets.fix_atom_on_a_bond!
 CrystalNets.least_plausible_neighbours
@@ -50,8 +49,6 @@ CrystalNets.sanity_checks!
 ## Crystal and CIF handling
 
 ```@docs
-CrystalNets.cell_parameters
-CrystalNets.periodic_distance
 CrystalNets.remove_partial_occupancy
 CrystalNets.prune_collisions
 CrystalNets.expand_symmetry
@@ -77,21 +74,10 @@ CrystalNets.regroup_paddlewheel!
 CrystalNets.split_sbu!
 CrystalNets.reclassify!
 CrystalNets.add_to_newclass!
-CrystalNets.in_small_cycles_around
 CrystalNets.group_cycle
 CrystalNets.collapse_clusters
 CrystalNets.pem_to_pe
 CrystalNets.allnodes_to_singlenodes
-```
-
-## Symmetry handling
-
-```@docs
-CrystalNets.SPACE_GROUP_HALL
-CrystalNets.SPACE_GROUP_HM
-CrystalNets.SPACE_GROUP_FULL
-CrystalNets.SPACE_GROUP_IT
-CrystalNets.HALL_SYMBOLS
 ```
 
 ## Unstable nets
@@ -109,5 +95,4 @@ CrystalNets.collision_nodes
 ```@docs
 CrystalNets.@toggleassert
 CrystalNets.check_dimensionality
-CrystalNets.check_valid_symmetry
 ```

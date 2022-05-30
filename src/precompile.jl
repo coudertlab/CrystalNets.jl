@@ -720,6 +720,10 @@ function _precompile_()
     @enforce precompile(Tuple{typeof(parse), Type{genome}, String})
     @enforce precompile(Tuple{typeof(parse), Type{genome}, SubString{String}})
     @enforce precompile(Tuple{Type{result}, SizedVector{8,TopologicalGenome,Vector{TopologicalGenome}}, MVector{8,Int8}, Vector{Int8}})
+    @enforce precompile(Tuple{Type{PeriodicGraph}, TopologicalGenome})
+    for D in 1:3
+        @enforce precompile(Tuple{Type{PeriodicGraph{D}}, TopologicalGenome})
+    end
     @enforce precompile(Tuple{Type{result}})
     @enforce precompile(Tuple{Type{result}, Vector{Tuple{clustering,Union{clustering,genome}}}})
     @enforce precompile(Tuple{typeof(==), result, result})
