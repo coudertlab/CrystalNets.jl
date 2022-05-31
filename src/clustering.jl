@@ -1298,14 +1298,14 @@ function order_atomtype(sym)
     return anum
 end
 
-function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters)
+function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters, onlynv::Bool=false, bypassexport=false)
     structure = crystal.options.structure
     clustering = only(crystal.options.clusterings)
     if clustering == Clustering.EachVertex || structure == StructureType.Zeolite
         if crystal.options.split_O_vertex
             return split_O_vertices(crystal)
         end
-        return Crystal{Nothing}(crystal; _pos=crystal.pge.pos)
+        return onlynv ? crystal : Crystal{Nothing}(crystal; _pos=crystal.pge.pos)
     end
     edgs = PeriodicEdge3D[]
     for s in vertices(crystal.pge.g)
@@ -1340,21 +1340,27 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters)
     end
     n = length(clusters.sbus)
     graph = PeriodicGraph3D(n, edgs)
-    export_default(crystal, "trimmed", crystal.options.name, crystal.options.export_trimmed)
     if ne(graph) == 0
+        if !isempty(crystal.options.export_trimmed)
+            @ifwarn @warn "Could not export trimmed crystal: the resulting structure is empty."
+        end
         return Crystal{Nothing}(PeriodicGraphEmbedding{3,Float64}(crystal.pge.cell), Symbol[],
                                  Options(crystal.options; _pos=SVector{3,Float64}[]))
     end
-    if !isempty(crystal.options.export_attributions)
-        path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")
-        export_attributions(Crystal{Clusters}(crystal, clusters), path)
-        println("Attributions of atoms into SBUs represented represented at ", replace(path, ('\\'=>'/')))
+    if !onlynv && !bypassexport
+        export_default(crystal, "trimmed", crystal.options.name, crystal.options.export_trimmed)
+        if !isempty(crystal.options.export_attributions)
+            path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")
+            export_attributions(Crystal{Clusters}(crystal, clusters), path)
+            println("Attributions of atoms into SBUs represented represented at ", replace(path, ('\\'=>'/')))
+        end
     end
 
     sbus = clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.pge.g, crystal.types, crystal.options.split_O_vertex)]
     n = length(sbus)
     pos = Vector{SVector{3,Float64}}(undef, n)
     types = Vector{Symbol}(undef, n)
+    onlynv && return Crystal{Nothing}(crystal.pge.cell, types, pos, graph, crystal.options)
     for (i, sbu) in enumerate(sbus)
         pos[i] = mean(crystal.pge.pos[x.v] .+ x.ofs for x in sbu)
         name = sort!([crystal.types[x.v] for x in sbu])
@@ -1393,7 +1399,7 @@ function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Tupl
             return true, T === Clusters ? c.clusters : Clusters(length(c.types))
         end
         newc = Crystal{Nothing}(c; clusterings=[Clustering.Auto], export_attributions=false, export_input=false)
-        if nv(_collapse_clusters(newc, clusters).pge.g) <= 1
+        if nv(_collapse_clusters(newc, clusters, true).pge.g) <= 1
             return true, T === Clusters ? c.clusters : Clusters(length(c.types))
         end
         return false, clusters
@@ -1441,11 +1447,13 @@ transformed into a new vertex, for each targeted clustering.
 function collapse_clusters(crystal::Crystal)
     crystalclusters::Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}} = find_clusters(crystal)
     ret = Vector{Crystal{Nothing}}(undef, length(crystalclusters))
+    alreadyexported = false
     for (i, (cryst, clust)) in enumerate(crystalclusters)
-        ret[i] = if clust isa Int
-            Crystal{Nothing}(ret[clust]; clusterings=cryst.options.clusterings)
+        if clust isa Int
+            ret[i] = Crystal{Nothing}(ret[clust]; clusterings=cryst.options.clusterings)
         else
-            _collapse_clusters(cryst, clust)
+            ret[i] = _collapse_clusters(cryst, clust, false, alreadyexported)
+            alreadyexported = true
         end
     end
     return ret
