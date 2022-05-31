@@ -1006,7 +1006,7 @@ function Base.show(io::IO, x::TopologicalGenome)
     elseif x.unstable
         print(io, "unstable ", x.genome)
     elseif x.name isa String
-        splitcomma = split(x.name, ','; limit=1)
+        splitcomma = split(x.name, ','; limit=2)
         fstsplit = first(splitcomma)
         if length(fstsplit) ≥ 3 && islowercase(fstsplit[3]) && !startswith(fstsplit, "sqc")
             printstyled(io, fstsplit; bold=true) # RCSR
