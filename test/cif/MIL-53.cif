@@ -1,0 +1,78 @@
+####################################################################### 
+# 
+# This file contains crystal structure data downloaded from the 
+# Cambridge Structural Database (CSD) hosted by the Cambridge 
+# Crystallographic Data Centre (CCDC).
+# 
+# Full information about CCDC data access policies and citation 
+# guidelines are available at http://www.ccdc.cam.ac.uk/access/V1 
+# 
+# Audit and citation data items may have been added by the CCDC. 
+# Please retain this information to preserve the provenance of 
+# this file and to allow appropriate attribution of the data. 
+# 
+#######################################################################
+
+data_1
+_audit_block_doi                 10.5517/ccr5b6f
+_database_code_depnum_ccdc_archive 'CCDC 690314'
+loop_
+_citation_id
+_citation_doi
+_citation_year
+1 10.1021/ja9092715 2010
+2 10.1039/b809419e 2008
+_audit_update_record             
+;
+2008-06-03 deposited with the CCDC.	2022-05-17 downloaded from the CCDC.
+;
+
+
+_audit_creation_method           'Created with Diamond v2.0'
+_audit_creation_date             08-04-23
+_chemical_formula_sum            'Fe4 O20 C32 H16'
+_chemical_formula_weight         943.854
+_cell_length_a                   21.2693
+_cell_length_b                   6.7589
+_cell_length_c                   6.8838
+_cell_angle_alpha                90.000
+_cell_angle_beta                 114.625
+_cell_angle_gamma                90.000
+_cell_volume                     899.6
+_symmetry_int_tables_number      15
+_symmetry_space_group_name_H-M   'C 1 2/c 1'
+_symmetry_space_group_name_Hall  -C_2yc
+
+loop_
+_atom_type_symbol
+_atom_type_oxidation_number
+_atom_type_radius_bond
+Fe ? 1.200
+O ? 0.660
+C ? 0.860
+H ? 0.230
+
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_symmetry_multiplicity
+_atom_site_Wyckoff_symbol
+_atom_site_attached_hydrogens
+_atom_site_calc_flag
+_atom_site_thermal_displace_type
+_atom_site_u_iso_or_equiv
+Fe Fe 0.0000 0.0000 0.0000 1.000 4 a ? d ? ?
+O1 O 0.0000 -0.1338 0.7500 1.000 4 e ? d ? ?
+O11 O 0.4364 0.2927 0.3046 1.000 8 f ? d ? ?
+O12 O 0.4147 0.3510 -0.0250 1.000 8 f ? d ? ?
+C11 C 0.3191 0.2783 0.0550 1.000 8 f ? d ? ?
+C12 C 0.2967 0.2256 0.2078 1.000 8 f ? d ? ?
+C13 C 0.2276 0.1973 0.1528 1.000 8 f ? d ? ?
+C17 C 0.3942 0.3090 0.1148 1.000 8 f ? d ? ?
+H12 H 0.3302 0.2081 0.3565 1.000 8 f ? d ? ?
+H13 H 0.2116 0.1595 0.2621 1.000 8 f ? d ? ?

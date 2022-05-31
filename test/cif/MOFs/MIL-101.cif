@@ -1,0 +1,649 @@
+####################################################################### 
+# 
+# This file contains crystal structure data downloaded from the 
+# Cambridge Structural Database (CSD) hosted by the Cambridge 
+# Crystallographic Data Centre (CCDC).
+# 
+# Full information about CCDC data access policies and citation 
+# guidelines are available at http://www.ccdc.cam.ac.uk/access/V1 
+# 
+# Audit and citation data items may have been added by the CCDC. 
+# Please retain this information to preserve the provenance of 
+# this file and to allow appropriate attribution of the data. 
+# 
+#######################################################################
+
+data_Cr_+_Tereph
+_audit_block_doi                 10.5517/ccnb2lm
+_database_code_depnum_ccdc_archive 'CCDC 605510'
+loop_
+_citation_id
+_citation_doi
+_citation_year
+1 10.1021/cm051870o 2005
+2 10.1126/science.1116275 2005
+_audit_update_record             
+;
+2006-04-25 deposited with the CCDC.	2022-05-17 downloaded from the CCDC.
+;
+
+#=============================================================================
+
+# 5. CHEMICAL DATA
+
+_chemical_name_systematic        
+; ?
+;
+_chemical_name_common            MIL-101
+_chemical_formula_moiety         ?
+_chemical_formula_structural     ?
+_chemical_formula_analytical     ?
+_chemical_formula_iupac          ?
+_chemical_formula_sum            ?
+_chemical_formula_weight         ?
+_chemical_melting_point          ?
+_chemical_compound_source        ? # for minerals and
+# natural products
+
+loop_
+_atom_type_symbol
+_atom_type_scat_Cromer_Mann_a1
+_atom_type_scat_Cromer_Mann_b1
+_atom_type_scat_Cromer_Mann_a2
+_atom_type_scat_Cromer_Mann_b2
+_atom_type_scat_Cromer_Mann_a3
+_atom_type_scat_Cromer_Mann_b3
+_atom_type_scat_Cromer_Mann_a4
+_atom_type_scat_Cromer_Mann_b4
+_atom_type_scat_Cromer_Mann_c
+_atom_type_scat_dispersion_real
+_atom_type_scat_dispersion_imag
+_atom_type_scat_source
+cr 10.64060 6.10380 7.35370 0.39200 3.32400 20.26260 1.49220 98.73990 1.18320
+0.28400 0.62400
+International_Tables_for_Crystallography_Vol.C(1991)_Tables_6.1.1.4_and_6.1.1.5
+o 3.04850 13.27710 2.28680 5.70110 1.54630 0.32390 0.86700 32.90890 0.25080
+0.00800 0.00600
+International_Tables_for_Crystallography_Vol.C(1991)_Tables_6.1.1.4_and_6.1.1.5
+c 2.31000 20.84390 1.02000 10.20750 1.58860 0.56870 0.86500 51.65120 0.21560
+0.00200 0.00200
+International_Tables_for_Crystallography_Vol.C(1991)_Tables_6.1.1.4_and_6.1.1.5
+
+#=============================================================================
+
+# 6. POWDER SPECIMEN AND CRYSTAL DATA
+
+_symmetry_cell_setting           Cubic
+_symmetry_space_group_name_H-M   'F D -3 M'
+_symmetry_space_group_name_Hall  '-F 4vw 2vw 3'
+
+loop_
+_symmetry_equiv_pos_as_xyz #<--must include 'x,y,z'
+x,y,z
+x,-y+1/4,-z+1/4
+-x+1/4,y,-z+1/4
+-x+1/4,-y+1/4,z
+y,z,x
+-y+1/4,-z+1/4,x
+y,-z+1/4,-x+1/4
+-y+1/4,z,-x+1/4
+z,x,y
+-z+1/4,x,-y+1/4
+-z+1/4,-x+1/4,y
+z,-x+1/4,-y+1/4
+y,x,z
+-y+1/4,x,-z+1/4
+y,-x+1/4,-z+1/4
+-y+1/4,-x+1/4,z
+z,y,x
+-z+1/4,-y+1/4,x
+-z+1/4,y,-x+1/4
+z,-y+1/4,-x+1/4
+x,z,y
+x,-z+1/4,-y+1/4
+-x+1/4,-z+1/4,y
+-x+1/4,z,-y+1/4
+-x,-y,-z
+-x,y+3/4,z+3/4
+x+3/4,-y,z+3/4
+x+3/4,y+3/4,-z
+-y,-z,-x
+y+3/4,z+3/4,-x
+-y,z+3/4,x+3/4
+y+3/4,-z,x+3/4
+-z,-x,-y
+z+3/4,-x,y+3/4
+z+3/4,x+3/4,-y
+-z,x+3/4,y+3/4
+-y,-x,-z
+y+3/4,-x,z+3/4
+-y,x+3/4,z+3/4
+y+3/4,x+3/4,-z
+-z,-y,-x
+z+3/4,y+3/4,-x
+z+3/4,-y,x+3/4
+-z,y+3/4,x+3/4
+-x,-z,-y
+-x,z+3/4,y+3/4
+x+3/4,z+3/4,-y
+x+3/4,-z,y+3/4
+x+1/2,y+1/2,z
+x+1/2,-y+3/4,-z+1/4
+-x+3/4,y+1/2,-z+1/4
+-x+3/4,-y+3/4,z
+y+1/2,z+1/2,x
+-y+3/4,-z+3/4,x
+y+1/2,-z+3/4,-x+1/4
+-y+3/4,z+1/2,-x+1/4
+z+1/2,x+1/2,y
+-z+3/4,x+1/2,-y+1/4
+-z+3/4,-x+3/4,y
+z+1/2,-x+3/4,-y+1/4
+y+1/2,x+1/2,z
+-y+3/4,x+1/2,-z+1/4
+y+1/2,-x+3/4,-z+1/4
+-y+3/4,-x+3/4,z
+z+1/2,y+1/2,x
+-z+3/4,-y+3/4,x
+-z+3/4,y+1/2,-x+1/4
+z+1/2,-y+3/4,-x+1/4
+x+1/2,z+1/2,y
+x+1/2,-z+3/4,-y+1/4
+-x+3/4,-z+3/4,y
+-x+3/4,z+1/2,-y+1/4
+-x+1/2,-y+1/2,-z
+-x+1/2,y+1/4,z+3/4
+x+1/4,-y+1/2,z+3/4
+x+1/4,y+1/4,-z
+-y+1/2,-z+1/2,-x
+y+1/4,z+1/4,-x
+-y+1/2,z+1/4,x+3/4
+y+1/4,-z+1/2,x+3/4
+-z+1/2,-x+1/2,-y
+z+1/4,-x+1/2,y+3/4
+z+1/4,x+1/4,-y
+-z+1/2,x+1/4,y+3/4
+-y+1/2,-x+1/2,-z
+y+1/4,-x+1/2,z+3/4
+-y+1/2,x+1/4,z+3/4
+y+1/4,x+1/4,-z
+-z+1/2,-y+1/2,-x
+z+1/4,y+1/4,-x
+z+1/4,-y+1/2,x+3/4
+-z+1/2,y+1/4,x+3/4
+-x+1/2,-z+1/2,-y
+-x+1/2,z+1/4,y+3/4
+x+1/4,z+1/4,-y
+x+1/4,-z+1/2,y+3/4
+x+1/2,y,z+1/2
+x+1/2,-y+1/4,-z+3/4
+-x+3/4,y,-z+3/4
+-x+3/4,-y+1/4,z+1/2
+y+1/2,z,x+1/2
+-y+3/4,-z+1/4,x+1/2
+y+1/2,-z+1/4,-x+3/4
+-y+3/4,z,-x+3/4
+z+1/2,x,y+1/2
+-z+3/4,x,-y+3/4
+-z+3/4,-x+1/4,y+1/2
+z+1/2,-x+1/4,-y+3/4
+y+1/2,x,z+1/2
+-y+3/4,x,-z+3/4
+y+1/2,-x+1/4,-z+3/4
+-y+3/4,-x+1/4,z+1/2
+z+1/2,y,x+1/2
+-z+3/4,-y+1/4,x+1/2
+-z+3/4,y,-x+3/4
+z+1/2,-y+1/4,-x+3/4
+x+1/2,z,y+1/2
+x+1/2,-z+1/4,-y+3/4
+-x+3/4,-z+1/4,y+1/2
+-x+3/4,z,-y+3/4
+-x+1/2,-y,-z+1/2
+-x+1/2,y+3/4,z+1/4
+x+1/4,-y,z+1/4
+x+1/4,y+3/4,-z+1/2
+-y+1/2,-z,-x+1/2
+y+1/4,z+3/4,-x+1/2
+-y+1/2,z+3/4,x+1/4
+y+1/4,-z,x+1/4
+-z+1/2,-x,-y+1/2
+z+1/4,-x,y+1/4
+z+1/4,x+3/4,-y+1/2
+-z+1/2,x+3/4,y+1/4
+-y+1/2,-x,-z+1/2
+y+1/4,-x,z+1/4
+-y+1/2,x+3/4,z+1/4
+y+1/4,x+3/4,-z+1/2
+-z+1/2,-y,-x+1/2
+z+1/4,y+3/4,-x+1/2
+z+1/4,-y,x+1/4
+-z+1/2,y+3/4,x+1/4
+-x+1/2,-z,-y+1/2
+-x+1/2,z+3/4,y+1/4
+x+1/4,z+3/4,-y+1/2
+x+1/4,-z,y+1/4
+x,y+1/2,z+1/2
+x,-y+3/4,-z+3/4
+-x+1/4,y+1/2,-z+3/4
+-x+1/4,-y+3/4,z+1/2
+y,z+1/2,x+1/2
+-y+1/4,-z+3/4,x+1/2
+y,-z+3/4,-x+3/4
+-y+1/4,z+1/2,-x+3/4
+z,x+1/2,y+1/2
+-z+1/4,x+1/2,-y+3/4
+-z+1/4,-x+3/4,y+1/2
+z,-x+3/4,-y+3/4
+y,x+1/2,z+1/2
+-y+1/4,x+1/2,-z+3/4
+y,-x+3/4,-z+3/4
+-y+1/4,-x+3/4,z+1/2
+z,y+1/2,x+1/2
+-z+1/4,-y+3/4,x+1/2
+-z+1/4,y+1/2,-x+3/4
+z,-y+3/4,-x+3/4
+x,z+1/2,y+1/2
+x,-z+3/4,-y+3/4
+-x+1/4,-z+3/4,y+1/2
+-x+1/4,z+1/2,-y+3/4
+-x,-y+1/2,-z+1/2
+-x,y+1/4,z+1/4
+x+3/4,-y+1/2,z+1/4
+x+3/4,y+1/4,-z+1/2
+-y,-z+1/2,-x+1/2
+y+3/4,z+1/4,-x+1/2
+-y,z+1/4,x+1/4
+y+3/4,-z+1/2,x+1/4
+-z,-x+1/2,-y+1/2
+z+3/4,-x+1/2,y+1/4
+z+3/4,x+1/4,-y+1/2
+-z,x+1/4,y+1/4
+-y,-x+1/2,-z+1/2
+y+3/4,-x+1/2,z+1/4
+-y,x+1/4,z+1/4
+y+3/4,x+1/4,-z+1/2
+-z,-y+1/2,-x+1/2
+z+3/4,y+1/4,-x+1/2
+z+3/4,-y+1/2,x+1/4
+-z,y+1/4,x+1/4
+-x,-z+1/2,-y+1/2
+-x,z+1/4,y+1/4
+x+3/4,z+1/4,-y+1/2
+x+3/4,-z+1/2,y+1/4
+
+_cell_length_a                   88.86899
+_cell_length_b                   88.86899
+_cell_length_c                   88.86899
+_cell_angle_alpha                90.00000
+_cell_angle_beta                 90.00000
+_cell_angle_gamma                90.00000
+_cell_volume                     701860.31300
+_cell_formula_units_Z            ?
+_cell_measurement_temperature    ?
+_cell_special_details            
+; ?
+;
+# The next three fields give the specimen dimensions in mm. The equatorial
+# plane contains the incident and diffracted beam.
+
+_pd_spec_size_axial              ? # perpendicular to
+# equatorial plane
+_pd_spec_size_equat              ? # parallel to
+# scattering vector
+# in transmission
+_pd_spec_size_thick              ? # parallel to
+# scattering vector
+# in reflection
+
+# The next five fields are character fields that describe the specimen.
+
+_pd_spec_mounting                
+# This field should be
+# used to give details of the
+# container.
+; ?
+;
+_pd_spec_mount_mode              ? # options are 'reflection'
+# or 'transmission'
+_pd_spec_shape                   ? # options are 'cylinder'
+# 'flat_sheet' or 'irregular'
+_pd_char_particle_morphology     ?
+_pd_char_colour                  ? # use ICDD colour descriptions
+
+# The following three fields describe the preparation of the specimen.
+# The cooling rate is in K/min. The pressure at which the sample was
+# prepared is in kPa. The temperature of preparation is in K.
+
+_pd_prep_cool_rate               ?
+_pd_prep_pressure                ?
+_pd_prep_temperature             ?
+
+# The next four fields are normally only needed for transmission experiments.
+
+_exptl_absorpt_coefficient_mu    ?
+_exptl_absorpt_correction_type   ?
+_exptl_absorpt_process_details   ?
+_exptl_absorpt_correction_T_min  ?
+_exptl_absorpt_correction_T_max  ?
+
+#=============================================================================
+
+# 7. EXPERIMENTAL DATA
+
+_exptl_special_details           
+; ?
+;
+
+# The following item is used to identify the equipment used to record
+# the powder pattern when the diffractogram was measured at a laboratory
+# other than the authors' home institution, e.g. when neutron or synchrotron
+# radiation is used.
+
+_pd_instr_location               
+; ?
+;
+_pd_calibration_special_details  
+# description of the method used
+# to calibrate the instrument
+; ?
+;
+
+_diffrn_ambient_temperature      ?
+_diffrn_source                   ?
+# Put here: 'rotating-anode X-ray tube' or similar
+_diffrn_radiation_type           X-ray
+_diffrn_source_target            ?
+# Put here the chemical symbol of the anode
+
+_diffrn_radiation_monochromator  ?
+_diffrn_measurement_device_type  ?
+_diffrn_measurement_method       ?
+_diffrn_detector_area_resol_mean ? # Not in version 2.0.1
+_diffrn_detector                 ?
+_diffrn_detector_type            ? # make or model of detector
+_pd_meas_scan_method             ? # options are 'step', 'cont',
+# 'tof', 'fixed' or
+# 'disp' (= dispersive)
+_pd_meas_special_details         
+; ?
+;
+
+# The following four items give details of the measured (not processed)
+# powder pattern. Angles are in degrees.
+
+_pd_meas_number_of_points        28459
+_pd_meas_2theta_range_min        1.01200
+_pd_meas_2theta_range_max        57.92800
+_pd_meas_2theta_range_inc        0.002000
+
+#=============================================================================
+
+# 8. REFINEMENT DATA
+
+_refine_special_details          
+; ?
+;
+
+# Use the next field to give any special details about the fitting of the
+# powder pattern.
+
+_pd_proc_ls_special_details      
+; ?
+;
+
+# The next three items are given as text.
+
+_pd_proc_ls_profile_function     ?
+_pd_proc_ls_background_function  ?
+_pd_proc_ls_pref_orient_corr     
+; ?
+;
+
+# The following profile R-factors are NOT CORRECTED for background
+# The sum is extended to all non-excluded points.
+# These are the current CIF standard
+
+_pd_proc_ls_prof_R_factor        8.3638
+_pd_proc_ls_prof_wR_factor       11.4305
+_pd_proc_ls_prof_wR_expected     1.5281
+
+# The following profile R-factors are CORRECTED for background
+# The sum is extended to all non-excluded points.
+# These items are not in the current CIF standard, but are defined above
+
+_pd_proc_ls_prof_cR_factor       11.1128
+_pd_proc_ls_prof_cwR_factor      15.6702
+_pd_proc_ls_prof_cwR_expected    2.0948
+
+
+# Items related to LS refinement
+
+_refine_ls_R_I_factor            5.6408
+_refine_ls_number_reflns         8318
+_refine_ls_number_parameters     1
+_refine_ls_number_restraints     0
+
+# The following four items apply to angular dispersive measurements.
+# 2theta minimum, maximum and increment (in degrees) are for the
+# intensities used in the refinement.
+
+_pd_proc_2theta_range_min        1.0190
+_pd_proc_2theta_range_max        57.9350
+_pd_proc_2theta_range_inc        0.002000
+_pd_proc_wavelength              1.250071
+
+_pd_block_diffractogram_id       ? # The id used for the block containing
+# the powder pattern profile (section 11)
+
+# Give appropriate details in the next two text fields.
+
+_pd_proc_info_excluded_regions   ?
+_pd_proc_info_data_reduction     ?
+
+# The following items are used to identify the programs used.
+
+_computing_data_collection       ?
+_computing_structure_solution    ?
+_computing_structure_refinement  FULLPROF
+_computing_molecular_graphics    ?
+_computing_publication_material  ?
+
+#=============================================================================
+
+# 9. ATOMIC COORDINATES AND DISPLACEMENT PARAMETERS
+
+loop_
+_atom_site_label
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_U_iso_or_equiv
+_atom_site_occupancy
+_atom_site_adp_type # Not in version 2.0.1
+_atom_site_type_symbol
+Cr1 0.09473 -0.07201 0.51291 0.00000 1.00000 Uiso Cr
+Cr2 -0.07092 -0.09773 0.82092 0.00000 1.00000 Uiso Cr
+Cr3 0.14205 0.35795 0.50000 0.00000 1.00000 Uiso Cr
+Cr4 0.12500 0.35421 0.62500 0.00000 1.00000 Uiso Cr
+Cr5 0.13618 0.36129 -0.11129 0.00000 1.00000 Uiso Cr
+Cr6 0.21632 0.21632 0.29932 0.00000 1.00000 Uiso Cr
+Cr7 0.32280 0.29246 0.70846 0.00000 1.00000 Uiso Cr
+O1 0.07916 0.07916 0.17085 0.00000 1.00002 Uiso O
+O2 0.20004 0.20004 0.29603 0.00000 1.00000 Uiso O
+O3 0.12500 -0.12367 0.12500 0.00000 1.00000 Uiso O
+O4 0.15812 0.34189 0.50000 0.00000 1.00000 Uiso O
+O5 0.85869 -0.09018 -0.06964 0.00000 1.00000 Uiso O
+O6 0.32390 0.30587 0.72646 0.00000 1.00000 Uiso O
+O7 0.33886 0.32263 0.80070 0.00000 1.00000 Uiso O
+O8 0.22122 0.27416 0.82068 0.00000 1.00000 Uiso O
+O9 0.21763 0.27195 0.79523 0.00000 1.00000 Uiso O
+O10 0.07701 -0.07439 0.48044 0.00000 1.00000 Uiso O
+O11 0.08776 -0.05997 0.49692 0.00000 1.00000 Uiso O
+O12 0.08758 -0.02721 0.39876 0.00000 1.00000 Uiso O
+O13 0.10774 -0.02253 0.38451 0.00000 1.00000 Uiso O
+O14 0.10125 -0.10189 0.37552 0.00000 1.00000 Uiso O
+O15 0.12292 -0.09307 0.36631 0.00000 1.00000 Uiso O
+O16 0.69362 -0.05911 -0.07805 0.00000 1.00000 Uiso O
+O17 0.64839 -0.10378 -0.12056 0.00000 1.00000 Uiso O
+O18 0.18523 -0.02376 0.45379 0.00000 1.00000 Uiso O
+O19 0.18927 -0.03088 0.43055 0.00000 1.00000 Uiso O
+O20 0.11692 0.00664 0.42722 0.00000 1.00000 Uiso O
+O21 0.12647 -0.00338 0.40475 0.00000 1.00000 Uiso O
+O22 -0.06102 -0.11185 0.81102 0.00000 1.00000 Uiso O
+O23 0.34415 0.28873 0.71087 0.00000 1.00000 Uiso O
+O24 0.26893 0.20642 0.76893 0.00000 1.00000 Uiso O
+O25 0.15369 0.35171 -0.10171 0.00000 1.00000 Uiso O
+O26 0.12500 0.33237 0.62500 0.00000 1.00000 Uiso O
+O27 0.12523 0.37477 0.50000 0.00000 1.00000 Uiso O
+O28 0.09420 -0.05250 0.52526 0.00000 1.00000 Uiso O
+C1 -0.12050 -0.10929 -0.06934 0.00000 1.00000 Uiso C
+C2 0.14658 0.10341 0.06614 0.00000 1.00000 Uiso C
+C3 0.13577 0.11423 0.06680 0.00000 1.00000 Uiso C
+C4 0.33163 0.31200 0.75507 0.00000 1.00000 Uiso C
+C5 0.18414 0.18414 0.26664 0.00000 1.00000 Uiso C
+C6 0.17855 0.17855 0.25298 0.00000 1.00000 Uiso C
+C7 0.33506 0.31530 0.77052 0.00000 1.00000 Uiso C
+C8 0.17083 0.17083 0.20626 0.00000 1.00000 Uiso C
+C9 0.17268 0.17268 0.22215 0.00000 1.00000 Uiso C
+C10 0.23623 0.24748 0.79691 0.00000 1.00000 Uiso C
+C11 0.22600 0.27033 0.80736 0.00000 1.00000 Uiso C
+C12 0.23755 0.25940 0.80736 0.00000 1.00000 Uiso C
+C13 0.24506 0.25632 0.82141 0.00000 1.00000 Uiso C
+C14 0.07184 -0.05231 0.45923 0.00000 1.00000 Uiso C
+C15 0.08022 -0.06130 0.48456 0.00000 1.00000 Uiso C
+C16 0.08111 -0.05018 0.47259 0.00000 1.00000 Uiso C
+C17 0.09290 -0.03933 0.47197 0.00000 1.00000 Uiso C
+C18 0.09204 -0.05816 0.39347 0.00000 1.00000 Uiso C
+C19 0.09671 -0.03092 0.38844 0.00000 1.00000 Uiso C
+C20 0.09891 -0.04596 0.38504 0.00000 1.00000 Uiso C
+C21 0.09472 -0.07310 0.38883 0.00000 1.00000 Uiso C
+C22 0.11030 -0.09071 0.37309 0.00000 1.00000 Uiso C
+C23 0.10769 -0.07589 0.37950 0.00000 1.00000 Uiso C
+C24 0.11224 -0.04836 0.37746 0.00000 1.00000 Uiso C
+C25 0.11582 -0.06350 0.37311 0.00000 1.00000 Uiso C
+C26 0.69470 -0.07340 -0.07340 0.00000 1.00000 Uiso C
+C27 0.68725 -0.08343 -0.08343 0.00000 1.00000 Uiso C
+C28 0.65361 -0.10826 -0.10826 0.00000 1.00000 Uiso C
+C29 0.66184 -0.09804 -0.09804 0.00000 1.00000 Uiso C
+C30 0.67951 -0.07678 -0.09529 0.00000 1.00000 Uiso C
+C31 0.66801 -0.08485 -0.10355 0.00000 1.00000 Uiso C
+C32 0.15706 -0.01355 0.44571 0.00000 1.00000 Uiso C
+C33 0.18130 -0.02464 0.44016 0.00000 1.00000 Uiso C
+C34 0.16789 -0.01807 0.43518 0.00000 1.00000 Uiso C
+C35 0.14422 -0.00617 0.44076 0.00000 1.00000 Uiso C
+C36 0.12747 -0.00095 0.41918 0.00000 1.00000 Uiso C
+C37 0.14175 -0.00489 0.42522 0.00000 1.00000 Uiso C
+C38 0.16484 -0.01846 0.41968 0.00000 1.00000 Uiso C
+C39 0.15158 -0.01171 0.41458 0.00000 1.00000 Uiso C
+Ow1 0.31076 0.28784 0.78784 0.00000 1.00000 Uiso O
+Ow2 0.24713 0.20958 0.74713 0.00000 1.00000 Uiso O
+Ow3 0.21979 0.25383 0.85500 0.00000 1.00000 Uiso O
+Ow4 0.17001 -0.04716 0.45284 0.00000 1.00000 Uiso O
+Ow5 0.13030 -0.09584 0.40416 0.00000 1.00000 Uiso O
+Ow6 0.02319 -0.22614 0.77386 0.00000 1.00000 Uiso O
+Ow7 0.18775 0.34925 -0.09925 0.00000 1.00000 Uiso O
+Ow8 -0.11440 -0.11440 -0.11440 0.00000 1.00002 Uiso O
+Ow9 0.15811 0.32404 0.59189 0.00000 1.00000 Uiso O
+Ow10 -0.07621 -0.07621 -0.10122 0.00000 1.00000 Uiso O
+Ow11 0.20882 0.37500 -0.12500 0.00000 1.00000 Uiso O
+Ow12 0.11464 -0.03449 0.51497 0.00000 1.00000 Uiso O
+Ow13 0.08160 -0.07090 0.42910 0.00000 1.00000 Uiso O
+Ow14 0.15920 -0.04691 0.39261 0.00000 1.00000 Uiso O
+Ow15 0.13325 -0.02995 0.47005 0.00000 1.00000 Uiso O
+Ow16 0.15625 -0.01948 0.38115 0.00000 1.00000 Uiso O
+Ow17 0.27669 0.27669 0.77669 0.00000 0.99996 Uiso O
+Ow18 -0.09712 -0.09712 -0.09712 0.00000 0.99996 Uiso O
+Ow19 -0.04528 -0.12808 0.79528 0.00000 1.00000 Uiso O
+Ow20 0.15922 0.35978 -0.06480 0.00000 1.00000 Uiso O
+Ow21 0.18491 0.02613 0.47574 0.00000 1.00000 Uiso O
+Ow22 0.11492 -0.01105 0.48895 0.00000 1.00000 Uiso O
+Ow23 0.25734 0.23384 0.75734 0.00000 1.00000 Uiso O
+Ow24 0.25538 0.39416 -0.04670 0.00000 1.00000 Uiso O
+Ow25 0.13059 -0.04093 0.41889 0.00000 1.00000 Uiso O
+Ow26 0.12293 -0.05856 0.44144 0.00000 1.00000 Uiso O
+Ow27 0.15846 0.15846 0.65847 0.00000 1.00002 Uiso O
+Ow28 0.35713 0.28245 0.68784 0.00000 1.00000 Uiso O
+Ow29 0.13605 -0.06577 0.41093 0.00000 1.00000 Uiso O
+Ow30 0.08462 0.38665 0.50000 0.00000 0.50000 Uiso O
+Ow31 0.22787 0.37152 -0.05026 0.00000 1.00000 Uiso O
+Ow32 0.13859 0.33373 -0.08373 0.00000 1.00000 Uiso O
+Ow33 0.16049 0.06754 0.42418 0.00000 1.00000 Uiso O
+Ow34 0.11466 0.06339 0.44263 0.00000 1.00000 Uiso O
+
+# Note: if the displacement parameters were refined anisotropically
+# the U matrices should be given as for single-crystal studies.
+
+#=============================================================================
+
+# 10. DISTANCES AND ANGLES / MOLECULAR GEOMETRY
+
+_geom_special_details            ?
+
+loop_
+_geom_bond_atom_site_label_1
+_geom_bond_atom_site_label_2
+_geom_bond_site_symmetry_1
+_geom_bond_site_symmetry_2
+_geom_bond_distance
+_geom_bond_publ_flag
+? ? ? ? ? ?
+
+loop_
+_geom_contact_atom_site_label_1
+_geom_contact_atom_site_label_2
+_geom_contact_distance
+_geom_contact_site_symmetry_1
+_geom_contact_site_symmetry_2
+_geom_contact_publ_flag
+? ? ? ? ? ?
+
+loop_
+_geom_angle_atom_site_label_1
+_geom_angle_atom_site_label_2
+_geom_angle_atom_site_label_3
+_geom_angle_site_symmetry_1
+_geom_angle_site_symmetry_2
+_geom_angle_site_symmetry_3
+_geom_angle
+_geom_angle_publ_flag
+? ? ? ? ? ? ? ?
+
+loop_
+_geom_torsion_atom_site_label_1
+_geom_torsion_atom_site_label_2
+_geom_torsion_atom_site_label_3
+_geom_torsion_atom_site_label_4
+_geom_torsion_site_symmetry_1
+_geom_torsion_site_symmetry_2
+_geom_torsion_site_symmetry_3
+_geom_torsion_site_symmetry_4
+_geom_torsion
+_geom_torsion_publ_flag
+? ? ? ? ? ? ? ? ? ?
+
+loop_
+_geom_hbond_atom_site_label_D
+_geom_hbond_atom_site_label_H
+_geom_hbond_atom_site_label_A
+_geom_hbond_site_symmetry_D
+_geom_hbond_site_symmetry_H
+_geom_hbond_site_symmetry_A
+_geom_hbond_distance_DH
+_geom_hbond_distance_HA
+_geom_hbond_distance_DA
+_geom_hbond_angle_DHA
+_geom_hbond_publ_flag
+? ? ? ? ? ? ? ? ? ? ?
+
+#=============================================================================
+
+#=============================================================================
+# Additional structures (last six sections and associated data_? identifiers)
+# may be added at this point.
+#=============================================================================
+
+# The following lines are used to test the character set of files sent by
+# network email or other means. They are not part of the CIF data set.
+# abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
+# !@#$%^&*()_+{}:"~<>?|\-=[];'`,./

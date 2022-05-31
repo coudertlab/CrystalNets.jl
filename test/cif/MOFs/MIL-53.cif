@@ -1,0 +1,153 @@
+####################################################################### 
+# 
+# This file contains crystal structure data downloaded from the 
+# Cambridge Structural Database (CSD) hosted by the Cambridge 
+# Crystallographic Data Centre (CCDC).
+# 
+# Full information about CCDC data access policies and citation 
+# guidelines are available at http://www.ccdc.cam.ac.uk/access/V1 
+# 
+# Audit and citation data items may have been added by the CCDC. 
+# Please retain this information to preserve the provenance of 
+# this file and to allow appropriate attribution of the data. 
+# 
+#######################################################################
+
+data_GEM28422-CIF_phase_1
+_audit_block_doi                 10.5517/cc1jzqbk
+_database_code_depnum_ccdc_archive 'CCDC 1429699'
+loop_
+_citation_id
+_citation_doi
+_citation_year
+1 10.1021/jp102463p 2010
+_audit_update_record             
+;
+2015-09-28 deposited with the CCDC.	2022-05-18 downloaded from the CCDC.
+;
+
+_pd_block_id                     
+2010-05-11T12:36|GEM28422-CIF_phase1|GEM284422||
+
+#==============================================================================
+# 7. CHEMICAL, STRUCTURAL AND CRYSTAL DATA
+
+_pd_char_particle_morphology     ?
+
+_chemical_name_systematic        
+; ?
+;
+_chemical_name_common            ?
+_chemical_formula_moiety         ?
+_chemical_formula_structural     ?
+_chemical_formula_analytical     ?
+_chemical_melting_point          ?
+_chemical_compound_source        ? # for minerals and
+# natural products
+_symmetry_space_group_name_Hall  ?
+
+_exptl_crystal_F_000             ?
+_exptl_crystal_density_diffrn    ?
+_exptl_crystal_density_meas      ?
+_exptl_crystal_density_method    ?
+
+_cell_measurement_temperature    ?
+
+_cell_special_details            
+; ?
+;
+
+_geom_special_details            ?
+
+# The following item identifies the program(s) used (if appropriate).
+_computing_structure_solution    ?
+
+#==============================================================================
+
+# 8. Phase information from GSAS
+
+_pd_phase_name                   'from C:/gsas/MyWork/GEM28405.EXP'
+_cell_length_a                   16.772(8)
+_cell_length_b                   13.145(5)
+_cell_length_c                   6.847(5)
+_cell_angle_alpha                90.0
+_cell_angle_beta                 90.0
+_cell_angle_gamma                90.0
+_cell_volume                     1506.7(14)
+_symmetry_cell_setting           orthorhombic
+_symmetry_space_group_name_H-M   'I m c m'
+loop_
+_symmetry_equiv_pos_site_id
+_symmetry_equiv_pos_as_xyz
+1 +x,+y,+z
+2 -x+1/2,+y,+z
+3 +x,-y+1/2,+z+1/2
+4 -x+1/2,-y+1/2,+z+1/2
+-1 -x,-y,-z
+-2 +x+1/2,-y,-z
+-3 -x,+y+1/2,-z+1/2
+-4 +x+1/2,+y+1/2,-z+1/2
+101 +x+1/2,+y+1/2,+z+1/2
+102 -x,+y+1/2,+z+1/2
+103 +x+1/2,-y,+z
+104 -x,-y,+z
+-101 -x+1/2,-y+1/2,-z+1/2
+-102 +x,-y+1/2,-z+1/2
+-103 -x+1/2,+y,-z
+-104 +x,+y,-z
+
+# ATOMIC COORDINATES AND DISPLACEMENT PARAMETERS
+
+
+loop_
+_atom_site_type_symbol
+_atom_site_label
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_thermal_displace_type
+_atom_site_U_iso_or_equiv
+_atom_site_symmetry_multiplicity
+O O1 0.25 0.7 0.0 1.0 Uiso 0.01 4
+O O2 0.165 0.843 0.154 1.0 Uiso 0.00752 16
+C C1 0.033 0.966 0.832 1.0 Uiso 0.03 16
+C C2 0.069 0.936 0.0 1.0 Uiso 0.01 8
+C C3 0.142 0.869 0.0 1.0 Uiso 0.02 8
+Cr CR1 0.25 0.75 0.25 1.0 Uiso 0.025 4
+D D1 0.056 0.943 0.31 1.0 Uiso 0.04 16
+
+loop_
+_atom_type_symbol
+_atom_type_number_in_cell
+O 20.0
+C 32.0
+Cr 4.0
+D 16.0
+
+# If you change Z, be sure to change all 3 of the following
+_chemical_formula_sum            'C8 D4 Cr O5'
+_chemical_formula_weight         236.13
+_cell_formula_units_Z            4
+
+# MOLECULAR GEOMETRY
+
+loop_
+_geom_bond_atom_site_label_1
+_geom_bond_atom_site_label_2
+_geom_bond_distance
+_geom_bond_site_symmetry_1
+_geom_bond_site_symmetry_2
+_geom_bond_publ_flag
+? ? ? ? ? ?
+
+loop_
+_geom_angle_atom_site_label_1
+_geom_angle_atom_site_label_2
+_geom_angle_atom_site_label_3
+_geom_angle
+_geom_angle_site_symmetry_1
+_geom_angle_site_symmetry_2
+_geom_angle_site_symmetry_3
+_geom_angle_publ_flag
+? ? ? ? ? ? ? ?
