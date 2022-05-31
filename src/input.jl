@@ -257,7 +257,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
                 @ifwarn @error lazy"Atom $missingatom, used in a bond, has either zero or multiple placements in the CIF file. This invalidates all bonds from the file, which will thus be discarded."
                 break
             end
-            d = 1.001f0*dists[i] # to avoid rounding errors
+            d = 1.004f0*dists[i] # to avoid rounding errors
             if isnan(d) || (d != -Inf32 && (d ≤ 0f0 || isinf(d)))
                 @ifwarn @error lazy"Invalid bond distance of $d between atoms $(bond_a[i]) and $(bond_b[i])"
                 continue
@@ -595,7 +595,7 @@ end
 
 
 """
-    fix_valence!(graph::PeriodicGraph3D, pos, types, passO, passCN, mat, ::Val{dofix}, options) where {dofix}
+    fix_valence!(graph::PeriodicGraph3D, pos, types, passH, passO, passCN, mat, ::Val{dofix}, options) where {dofix}
 
 Attempt to ensure that the coordinence of certain atoms are at least plausible
 by removing some edges from the graph.
@@ -603,12 +603,15 @@ These atoms are H, halogens, O, N and C.
 if `dofix` is set, actually modify the graph; otherwise, only emit a warning.
 In both cases, return a list of atoms with invalid coordinence.
 """
-function fix_valence!(graph::PeriodicGraph3D, pos, types, passO, passCN, mat,
+function fix_valence!(graph::PeriodicGraph3D, pos, types, passH, passO, passCN, mat,
                       ::Val{dofix}, options) where {dofix}
     # Small atoms valence check
     n = length(types)
     invalidatoms = Set{Symbol}()
     # First pass over H, since those are likely bonded to their closest neighbor
+    for i in passH
+        @reduce_valence_to1
+    end
     for i in passO
         t = :O
         if options.structure == StructureType.Zeolite
@@ -1117,11 +1120,13 @@ function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vec
                 attributions = attributions[vmap]
             end
         end
+        passH = Int[]
         passO = Int[]
         passCN = Int[]
         for (i, t) in enumerate(types)
             if t === :H || t === :D
                 @reduce_valence_to1
+                push!(passH, i)
             elseif t === :O
                 push!(passO, i)
             elseif t === :C || t === :N
@@ -1129,7 +1134,7 @@ function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vec
             end
         end
         fix_atom_on_a_bond!(graph, pos, mat)
-        bad_valence = !isempty(fix_valence!(graph, pos, types, passO, passCN, mat, Val(false), options))
+        bad_valence = !isempty(fix_valence!(graph, pos, types, Int[], passO, passCN, mat, Val(false), options))
         recompute_bonds = bad_valence || sanity_checks!(graph, pos, types, mat, options)
         if recompute_bonds
             if !guessed_bonds
@@ -1141,7 +1146,7 @@ function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vec
                 guessed_bonds = true
                 graph = PeriodicGraph3D(n, edges_from_bonds(bonds, mat, pos))
             end
-            invalidatoms = fix_valence!(graph, pos, types, passO, passCN, mat, Val(true), options)
+            invalidatoms = fix_valence!(graph, pos, types, passH, passO, passCN, mat, Val(true), options)
             remaining_not_fixed = !isempty(invalidatoms)
             @ifwarn if remaining_not_fixed
                 @warn "Remaining atoms with invalid valence. Proceeding anyway."
