@@ -144,9 +144,11 @@ function db_options(; kwargs...)
     restore_warns = false
     if DOWARN[] && !get(kwargs, :force_warn, false)
         restore_warns = true
-        @warn "Warnings may critically alter performance for this operation and were turned off."
-        @info "Use CrystalNets.toggle_warning(false) or the --no-warn option to remove this warning"
-        @info "Use the force_warn option to force printing warnings"
+        @ifwarn begin    
+            @warn "Warnings may critically alter performance for this operation and were turned off."
+            @info "Use CrystalNets.toggle_warning(false) or the --no-warn option to remove this warning"
+            @info "Use the force_warn option to force printing warnings"
+        end
         DOWARN[] = false
     end
     # if kwargs explicitly set one of the two, it will take precedence

@@ -36,8 +36,6 @@ end
 import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
 
 
-CrystalNets.toggle_export(false)
-
 @testset "MOF examples" begin
     cifs, crystalnetsdir = _finddirs()
     kwargs = (; structure=StructureType.MOF, clusterings=[Clustering.Auto,Standard,PE,PEM])
