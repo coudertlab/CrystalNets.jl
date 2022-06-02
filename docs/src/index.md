@@ -6,7 +6,7 @@ Its inputs can be chemical files in any format recognized by [chemfiles](https:/
 
 ## Package installation
 
-The installation follows the usual procedure. Start by downloading and installing [Julia](https://julialang.org/) (v1.6 or higher for `CrystalNets.jl`). Then, either
+The installation follows the usual procedure. Start by downloading and installing [Julia](https://julialang.org/), v1.6 at least for `CrystalNets.jl`. This package was optimized with Julia v1.8 so performance and latency will be better on the more recent versions of Julia. Then, either
 
 - open the Julia REPL and enter the package manager by typing `]`, then install `CrystalNets.jl` by entering:
   ```julia
