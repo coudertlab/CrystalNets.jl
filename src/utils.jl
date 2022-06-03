@@ -320,20 +320,6 @@ function representative_atom(t::Symbol, default::Int=0)
 end
 
 """
-    double_widen(::Type)
-
-Internal function used to selectively widen small integer and rational types.
-This is useful to avoid overflow without sacrificing too much efficiency by
-always having to resolve to very large types.
-"""
-double_widen(::Type{T}) where {T} = T
-double_widen(::Type{Int64}) = Int128
-double_widen(::Type{Int32}) = Int64
-double_widen(::Type{Int16}) = Int64
-double_widen(::Type{Int8}) = Int32
-double_widen(::Type{Rational{T}}) where {T} = Rational{double_widen(T)}
-
-"""
     issingular(x::SMatrix{N,N,T}) where {N,T<:Rational}
 
 Test whether a NxN matrix is singular.

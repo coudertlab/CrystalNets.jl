@@ -61,12 +61,11 @@ end
 
 # TODO: check whether it works
 function precompile_kwarg(@nospecialize(tt), @nospecialize(kwargtypes))
-    let fbody = try __lookup_kwbody__(which(tt)) catch missing end
-        if !ismissing(fbody)
-            ttu = Base.unwrap_unionall(tt)
-            newtt = Tuple{Core.Typeof(fbody), kwargtypes..., ttu.parameters...}
-            #=@enforce=# precompile(Base.rewrap_unionall(newtt, tt))
-        end
+    let fbody = try __lookup_kwbody__(which(tt)) catch; missing end
+        @enforce !ismissing(fbody)
+        ttu = Base.unwrap_unionall(tt)
+        newtt = Tuple{Core.Typeof(fbody), kwargtypes..., ttu.parameters...}
+        #=@enforce=# precompile(Base.rewrap_unionall(newtt, tt))
     end
 end
 
@@ -455,10 +454,6 @@ function _precompile_()
     @enforce precompile(Tuple{typeof(CrystalNets.export_arc), String})
 
     # utils.jl
-    for T in (Int8, Int16, Int32, Int64, Int128, BigInt)
-        @enforce precompile(Tuple{typeof(CrystalNets.double_widen), Type{T}})
-        @enforce precompile(Tuple{typeof(CrystalNets.double_widen), Type{Rational{T}}})
-    end
     @enforce precompile(Tuple{typeof(CrystalNets.recursive_readdir!), Vector{String}, String, String})
     @enforce precompile(Tuple{typeof(CrystalNets.recursive_readdir), String})
     @enforce precompile(Tuple{typeof(CrystalNets.tmpexportname), String, String, String, String})
@@ -690,9 +685,6 @@ function _precompile_()
             @enforce precompile(Tuple{Type{CrystalNet{D}}, cell, types, PeriodicGraph{D2}, opts})
         end
         @enforce precompile(Tuple{Type{CrystalNet{D}}, unets})
-        for T in (Int64, Int128, BigInt)
-            @enforce precompile(Tuple{typeof(CrystalNets._PeriodicGraphEmbedding), cell, PeriodicGraph{D}, Matrix{Rational{T}}})
-        end
         @enforce precompile(Tuple{Type{CrystalNet{D}}, cell, types, PeriodicGraph{D}, opts})
         @enforce precompile(Tuple{Type{unets}, PeriodicGraph{D}, opts})
         @enforce precompile(Tuple{Type{unets}, Vector{PeriodicEdge{D}}, opts})

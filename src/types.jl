@@ -644,7 +644,7 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
                        placement::AbstractMatrix{T}, options::Options) where {D,T<:Real}
     n = nv(graph)
     @toggleassert size(placement) == (D, n)
-    pge, s = sort_periodicgraphembedding!(graph, placement, cell)
+    pge, s = SortedPeriodicGraphEmbedding{T}(graph, placement, cell)
     types = Symbol[types[s[i]] for i in 1:n]
     # @toggleassert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
     return CrystalNet{D,T}(pge, types, options)
@@ -660,39 +660,13 @@ function CrystalNet{D,T}(cell::Cell, types::Vector{Symbol}, pos, graph::Periodic
 end
 
 
-macro tryinttype(T)
-    tmin = :(typemin($T))
-    tmax = :(typemax($T))
-    S = :(double_widen($T))
-    return esc(quote
-        if (($tmin <= m) & (M <= $tmax))
-            return sort_periodicgraphembedding!(graph, Rational{$S}.(placement), cell)
-        end
-    end)
-end
-
-function _PeriodicGraphEmbedding(cell::Cell, graph::PeriodicGraph{D}, placement) where D
-    if isempty(placement)
-        return PeriodicGraphEmbedding{D,Rational{Int}}(cell), Int[]
-    end
-    m = min(minimum(numerator.(placement)), minimum(denominator.(placement)))
-    M = max(maximum(numerator.(placement)), maximum(denominator.(placement)))
-    @tryinttype Int8
-    @tryinttype Int16
-    @tryinttype Int32
-    @tryinttype Int64
-    @tryinttype Int128
-    return sort_periodicgraphembedding!(graph, placement, cell)
-    # Type-unstable function, but yields better performance than always falling back to BigInt
-end
-
 function CrystalNet{D}(pge::PeriodicGraphEmbedding{D,T}, types::Vector{Symbol}, options::Options) where {D,T}
     CrystalNet{D,T}(pge, types, options)
 end
 function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
     placement = equilibrium(graph)
-    pge, s = _PeriodicGraphEmbedding(cell, graph, placement)
+    pge, s = SortedPeriodicGraphEmbedding(graph, placement, cell)
     return CrystalNet{D}(pge, types[s], options)
 end
 
