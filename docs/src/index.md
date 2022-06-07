@@ -14,7 +14,7 @@ The installation follows the usual procedure. Start by downloading and installin
   ```
 - alternatively, you can do it from a shell by executing:
   ```bash
-  julia -e 'import Pkg; Pkg.add("CrystalNets")
+  julia -e 'import Pkg; Pkg.add("CrystalNets")'
   ```
 
 To use the package, open a REPL and enter

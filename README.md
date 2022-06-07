@@ -5,13 +5,18 @@
 
 A Julia package for determining the topology of a net.
 
-This package will be added to the main Julia registry in a few days. In the meantime,
-it can be installed by executing
-```julia
-import Pkg
-Pkg.add(url="https://github.com/coudertlab/CrystalNets.jl")
-```
-in Julia.
+The installation follows the usual procedure. Start by downloading and installing [Julia](https://julialang.org/), version 1.6 at least for `CrystalNets.jl`. This package was optimized with Julia version 1.8 so performance and latency will be better on the more recent versions of Julia. Then, either
 
-- The companion article is [on preprint](https://chemrxiv.org/engage/chemrxiv/article-details/628e4d986cae1c6dce16cbb7)
-- Read [the documentation](https://coudertlab.github.io/CrystalNets.jl/dev)
+- open the Julia REPL and enter the package manager by typing `]`, then install `CrystalNets.jl` by entering:
+  ```julia
+  pkg> add CrystalNets
+  ```
+- alternatively, you can do it from a shell by executing:
+  ```bash
+  julia -e 'import Pkg; Pkg.add("CrystalNets")'
+  ```
+
+Please read [the documentation](https://coudertlab.github.io/CrystalNets.jl/dev) for more
+information on the use of CrystalNets.jl and [alternative installation as an executable](http://molsim.info/CrystalNets.jl/dev/#Full-installation) to reduce latency.
+
+The companion article is [on preprint](https://chemrxiv.org/engage/chemrxiv/article-details/628e4d986cae1c6dce16cbb7)
