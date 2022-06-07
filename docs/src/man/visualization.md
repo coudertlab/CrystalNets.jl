@@ -13,7 +13,7 @@ find more resources, check the [official website](https://www.ks.uiuc.edu/Resear
 
 !!! tip
     To toggle off the automatic export of VTF files, use [`CrystalNets.toggle_export`](@ref).
-    The automatic export setting is bypassed when giving explicity values to `export_*`
+    The automatic export setting is bypassed when giving explicity values to [`export_*`](@ref exports)
     keyword arguments through [`CrystalNets.Options`](@ref) or directly to the
     [`determine_topology`](@ref) function (and other related functions).
 
@@ -149,7 +149,7 @@ off the visualization of the input file by double-clicking on the `D` letter lef
 the input file name in the main VMD window. The result should look like this:
 ![bpq net underlying IM-19](assets/singlenodesonly.jpg)
 
-## Export options
+## [Export options](@id exports)
 
 There are several export options bundled with `CrystalNets.jl`, documented in the
 [`Options`](@ref CrystalNets.Options). Each of them can be given as keyword arguments

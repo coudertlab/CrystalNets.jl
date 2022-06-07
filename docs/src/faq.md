@@ -7,7 +7,7 @@ This page covers a few issues that may occur when using CrystalNets.jl. If your 
 - From the module: see [`CrystalNets.toggle_warning`](@ref) and [`CrystalNets.toggle_export`](@ref)
 - From the executable: use the `--no-warn` and `--no-export` flags.
 
-For exports, each `export_...` keyword argument to [`Options`](@ref CrystalNets.Options) can be individually set to `false` or `""` to silence this particular export. See also the paragraph on [Export options](@ref).
+For exports, each `export_...` keyword argument to [`Options`](@ref CrystalNets.Options) can be individually set to `false` or `""` to silence this particular export. See also the paragraph on [export options](@ref exports).
 
 ## How can I check that the detected topology corresponds to my input?
 
