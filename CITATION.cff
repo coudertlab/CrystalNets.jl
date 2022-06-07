@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: CrystalNets.jl
+message: "If you use this software, please cite it as below (WARNING: temporary version awaiting article publication)."
+type: software
+authors:
+  - given-names: Lionel
+    family-names: Zoubritzky
+repository-code: "https://github.com/coudertlab/CrystalNets.jl"
+url: "http://molsim.info/CrystalNets.jl/"
+license: MIT
+version: 1.0.0
+identifiers:
+  - type: url
+    value: "https://scipost.org/submissions/10.26434/chemrxiv-2022-bl6mf-v2/"
+    description: The SciPost submission.
+preferred-citation:
+  type: article
+  authors:
+    - given-names: Lionel
+      family-names: Zoubritzky
+      affiliation: Chimie ParisTech - PSL
+    - given-names: François-Xavier
+      family-names: Coudert
+      affiliation: Chimie ParisTech - PSL
+      orcid: "https://orcid.org/0000-0001-5318-3910"
+  title: "CrystalNets.jl: Identification of Crystal Topologies"
+  year: 2022
+  doi: "10.26434/chemrxiv-2022-bl6mf-v2"
+
