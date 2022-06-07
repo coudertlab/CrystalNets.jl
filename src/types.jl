@@ -499,39 +499,6 @@ end
 # For the remainder of the file, we can work in 1D, 2D or 3D
 
 """
-    equilibrium(g::PeriodicGraph)
-
-Return an equilibrium placement for the vertices of the graph, defined as a set
-of positions such that each vertex is at the barycentre of its neighbors.
-The returned equilibrium placement is such that the first vertex of the graph
-is at the origin of the space.
-"""
-function equilibrium(g::PeriodicGraph{N}) where N
-    n = nv(g)
-    iszero(n) && return Matrix{Rational{Int64}}(undef, N, 0)
-    Y = Matrix{Int}(undef, n, N)
-    A = spzeros(Int, n, n)
-    neigh = Vector{Int}(undef, n)
-    offset = SizedVector{N,Int}(undef)
-    for i in 1:n
-        neigh .= 0
-        offset .= 0
-        count = 0
-        for k in neighbors(g, i)
-            k.v == i && continue
-            count += 1
-            neigh[k.v] += 1
-            offset .-= k.ofs
-        end
-        Y[i,:] .= offset
-        A[i,:] .= neigh
-        A[i,i] = -count
-    end
-
-    return dixon_solve(Val(N), A[2:end,2:end], Y[2:end,:])
-end
-
-"""
     trim_topology(graph::PeriodicGraph)
 
 Return a pair `(vmap, newgraph)` extracted from the input by removing vertices
@@ -665,7 +632,7 @@ function CrystalNet{D}(pge::PeriodicGraphEmbedding{D,T}, types::Vector{Symbol}, 
 end
 function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
-    placement = equilibrium(graph)
+    placement = equilibrium(graph) # from PeriodicGraphEquilibriumPlacement.jl
     pge, s = SortedPeriodicGraphEmbedding(graph, placement, cell)
     return CrystalNet{D}(pge, types[s], options)
 end

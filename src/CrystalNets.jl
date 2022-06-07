@@ -42,6 +42,7 @@ using Base.Threads
 import Serialization
 
 using PeriodicGraphEmbeddings
+using PeriodicGraphEquilibriumPlacement
 using PeriodicGraphs
 using StaticArrays
 using Graphs
@@ -90,7 +91,6 @@ end
 
 include("utils.jl")
 __precompile__(true)
-include("specialsolver.jl") # Exact sparse symmetric integer matrix factorization
 include("options.jl") # Computation options
 include("types.jl") # Main internal type definitions used to represent topologies
 include("input.jl") # Crystal file parsing and conversion to an internal type
