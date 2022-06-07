@@ -55,7 +55,6 @@ CrystalNets.expand_symmetry
 CrystalNets.trim_monovalent
 CrystalNets.trimmed_crystal
 CrystalNets.trim_topology
-CrystalNets.equilibrium
 ```
 
 ## Bond guessing

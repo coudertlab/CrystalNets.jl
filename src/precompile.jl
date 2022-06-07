@@ -1,4 +1,4 @@
-using CrystalNets, PeriodicGraphs, ArgParse, LinearAlgebra, SparseArrays,
+using CrystalNets, PeriodicGraphs, ArgParse, LinearAlgebra,
       StaticArrays, Logging, Tokenize, BigRationals
 import Chemfiles
 
@@ -93,17 +93,6 @@ function _precompile_dependencies()
     @enforce precompile(Tuple{typeof(union!),Set{PeriodicVertex3D},Vector{PeriodicVertex3D}})
     @enforce precompile(Tuple{typeof(Base.setindex!),Dict{PeriodicEdge3D, Nothing},Nothing,PeriodicEdge3D})
     @enforce precompile(Tuple{typeof(Base.union!),Set{PeriodicVertex3D},Vector{PeriodicVertex3D}})
-
-    # SparseArrays
-    @enforce precompile(Tuple{typeof(*),SparseArrays.SparseMatrixCSC{Int, Int},Matrix{Rational{BigInt}}})
-    @enforce precompile(Tuple{typeof(Base.copyto_unaliased!),IndexCartesian,SubArray{Int, 1, SparseArrays.SparseMatrixCSC{Int, Int}, Tuple{Int, Base.Slice{Base.OneTo{Int}}}, false},IndexLinear,Vector{Int}})
-    @enforce precompile(Tuple{typeof(Base.mightalias),SubArray{Int, 1, SparseArrays.SparseMatrixCSC{Int, Int}, Tuple{Int, Base.Slice{Base.OneTo{Int}}}, false},Vector{Int}})
-    @enforce precompile(Tuple{typeof(LinearAlgebra.mul!),Matrix{BigInt},SparseArrays.SparseMatrixCSC{Int, Int},Matrix{BigInt},Bool,Bool})
-    @enforce precompile(Tuple{typeof(SparseArrays.dimlub),Vector{Int}})
-    @enforce precompile(Tuple{typeof(SparseArrays.findnz),SparseArrays.SparseMatrixCSC{Int, Int}})
-    @enforce precompile(Tuple{typeof(SparseArrays.sparse_check_length),String,Vector{Int},Int,Type})
-    @enforce precompile(Tuple{typeof(SparseArrays.spzeros),Type{Int},Type{Int},Int,Int})
-    @enforce precompile(Tuple{typeof(getindex),SparseArrays.SparseMatrixCSC{Int, Int},UnitRange{Int},UnitRange{Int}})
 
     # Logging
     @enforce precompile(Tuple{typeof(Base.CoreLogging.handle_message),Logging.ConsoleLogger,Any,Any,Any,Any,Any,Any,Any})
@@ -395,30 +384,10 @@ function _precompile_()
     genome = CrystalNets.TopologicalGenome
     result = CrystalNets.TopologyResult
     collisions = Vector{CrystalNets.CollisionNode}
-    modulo{P} = CrystalNets.Modulo{P, Int32}
     collision = CrystalNets.CollisionNode
     smat{D,T,L} = SMatrix{D,D,Rational{T},L}
 
     # kwargs = Base.Pairs{Symbol,V,Tuple{Vararg{Symbol,N}}, NamedTuple{names,T}} where {V,N,names,T<:Tuple{Vararg{Any,N}}}
-
-
-    # Modulos.jl
-    for P in primes
-        @enforce precompile(Tuple{typeof(SparseArrays.sparse),Vector{Int},Vector{Int},Vector{CrystalNets.Modulos.Modulo{P, Int32}},Int,Int,Function})
-        @enforce precompile(Tuple{typeof(SparseArrays.sparse),Vector{Int},Vector{Int},Vector{CrystalNets.Modulos.Modulo{P, Int32}},Int,Int,Function})
-        @enforce precompile(Tuple{typeof(-),CrystalNets.Modulos.Modulo{P, Int32},CrystalNets.Modulos.Modulo{P, Int32}})
-        @enforce precompile(Tuple{typeof(/),Int,CrystalNets.Modulos.Modulo{P, Int32}})
-        @enforce precompile(Tuple{typeof(==),Matrix{CrystalNets.Modulos.Modulo{P, Int32}},Matrix{Int}})
-        @enforce precompile(Tuple{typeof(Base._unsafe_copyto!),Matrix{CrystalNets.Modulos.Modulo{P, Int32}},Int,Matrix{Int},Int,Int})
-        @enforce precompile(Tuple{typeof(Base._unsafe_getindex),IndexLinear,Matrix{CrystalNets.Modulos.Modulo{P, Int32}},Int,Base.Slice{Base.OneTo{Int}}})
-        @enforce precompile(Tuple{typeof(Base.copyto_unaliased!),IndexLinear,SubArray{CrystalNets.Modulos.Modulo{P, Int32}, 1, Matrix{CrystalNets.Modulos.Modulo{P, Int32}}, Tuple{Int, Base.Slice{Base.OneTo{Int}}}, true},IndexLinear,Vector{CrystalNets.Modulos.Modulo{P, Int32}}})
-        @enforce precompile(Tuple{typeof(LinearAlgebra.mul!),Matrix{CrystalNets.Modulos.Modulo{P, Int32}},SparseArrays.SparseMatrixCSC{Int, Int},Matrix{CrystalNets.Modulos.Modulo{P, Int32}},Bool,Bool})
-        @enforce precompile(Tuple{typeof(SparseArrays._setindex_scalar!),SparseArrays.SparseMatrixCSC{CrystalNets.Modulos.Modulo{P, Int32}, Int},Int,Int,Int})
-        @enforce precompile(Tuple{typeof(SparseArrays.sparse!),Vector{Int},Vector{Int},Vector{CrystalNets.Modulos.Modulo{P, Int32}},Int,Int,typeof(+),Vector{Int},Vector{Int},Vector{Int},Vector{CrystalNets.Modulos.Modulo{P, Int32}},Vector{Int},Vector{Int},Vector{CrystalNets.Modulos.Modulo{P, Int32}}})
-        @enforce precompile(Tuple{typeof(SparseArrays.sparse),Vector{Int},Vector{Int},Vector{CrystalNets.Modulos.Modulo{P, Int32}},Int,Int,Function})
-        @enforce precompile(Tuple{typeof(SparseArrays.sparse_check_length),String,Vector{CrystalNets.Modulos.Modulo{P, Int32}},Int,Type})
-        @enforce precompile(Tuple{typeof(getindex),SparseArrays.SparseMatrixCSC{CrystalNets.Modulos.Modulo{P, Int32}, Int},UnitRange{Int},UnitRange{Int}})
-    end
 
 
     # output.jl
@@ -511,47 +480,6 @@ function _precompile_()
     @enforce precompile(Tuple{Type{CrystalNets.Options}})
     @enforce precompile(Tuple{Type{CrystalNets.Options}, CrystalNets.Options})
 
-    # specialsolver.jl
-    for Ti in (BigRational, (modulo{P} for P in primes)...)
-        @enforce precompile(Tuple{typeof(CrystalNets.rational_lu!), SparseMatrixCSC{Ti,Int}, Vector{Int}, Bool})
-        @enforce precompile(Tuple{typeof(CrystalNets.rational_lu!), SparseMatrixCSC{Ti,Int}, Vector{Int}})
-    end
-    for P in primes
-        @enforce precompile(Tuple{typeof(CrystalNets.rational_lu), SparseMatrixCSC{modulo{P},Int}, Bool, Type{modulo{P}}})
-        @enforce precompile(Tuple{typeof(CrystalNets.rational_lu), SparseMatrixCSC{modulo{P},Int}, Bool, Type{BigRational}})
-        @enforce precompile(Tuple{typeof(CrystalNets.rational_lu), SparseMatrixCSC{Int,Int}, Bool})
-    end
-    for Ti in (Rational{BigInt}, (modulo{P} for P in primes)...)
-        @enforce precompile(Tuple{typeof(CrystalNets.forward_substitution!), SparseMatrixCSC{Ti,Int}, Matrix{Ti}})
-        @enforce precompile(Tuple{typeof(CrystalNets.backward_substitution!), SparseMatrixCSC{Ti,Int}, Matrix{Ti}})
-    end
-    @static if VERSION < v"1.8-"
-        @enforce precompile(Tuple{typeof(CrystalNets.linsolve!), LU{Rational{BigInt},SparseMatrixCSC{Rational{BigInt},Int}}, Matrix{Rational{BigInt}}})
-        for P in primes
-            @enforce precompile(Tuple{typeof(CrystalNets.linsolve!), LU{modulo{P},SparseMatrixCSC{modulo{P},Int}}, Matrix{Int}})
-        end
-    else
-        @enforce precompile(Tuple{typeof(CrystalNets.linsolve!), LU{Rational{BigInt},SparseMatrixCSC{Rational{BigInt},Int},Base.OneTo{Int}}, Matrix{Rational{BigInt}}})
-        for P in primes
-            @enforce precompile(Tuple{typeof(CrystalNets.linsolve!), LU{modulo{P},SparseMatrixCSC{modulo{P},Int},Base.OneTo{Int}}, Matrix{Int}})
-        end
-    end
-    for T in (Int64, Int128, BigInt)
-        @enforce precompile(Tuple{typeof(CrystalNets.copyuntil), Int, Matrix{Rational{T}}, Type{Rational{T}}})
-        @enforce precompile(Tuple{typeof(CrystalNets._inner_dixon_p!), Vector{Int}, Matrix{Rational{T}}, BigInt, Matrix{BigInt}, BigInt, BigInt})
-    end
-    for N in 1:3
-        @enforce precompile(Tuple{typeof(CrystalNets.rational_solve), Val{N}, SparseMatrixCSC{Int,Int}, Matrix{Int}})
-        for P in primes
-            @static if VERSION < v"1.8-"
-                @enforce precompile(Tuple{typeof(CrystalNets.dixon_p), Val{N}, SparseMatrixCSC{Int,Int}, LU{modulo{P},SparseMatrixCSC{modulo{P},Int}}, Matrix{Int}})
-            else
-                @enforce precompile(Tuple{typeof(CrystalNets.dixon_p), Val{N}, SparseMatrixCSC{Int,Int}, LU{modulo{P},SparseMatrixCSC{modulo{P},Int},Base.OneTo{Int}}, Matrix{Int}})
-            end
-        end
-        @enforce precompile(Tuple{typeof(CrystalNets.dixon_solve), Val{N}, SparseMatrixCSC{Int,Int}, Matrix{Int}})
-    end
-
     # types.jl 1/2
     @enforce precompile(Tuple{Type{cif}, Dict{String,Union{String,Vector{String}}}, cell, Vector{Int}, types, Matrix{Float64}, bondlist})
     @enforce precompile(Tuple{typeof(CrystalNets.keepinbonds), bondlist, Vector{Int}})
@@ -591,7 +519,6 @@ function _precompile_()
     @enforce precompile(Tuple{typeof(getindex), crystclust, Base.OneTo{Int}})
     @enforce precompile(Tuple{typeof(getindex), crystclust, Base.UnitRange{Int}})
     for D in 1:3
-        @enforce precompile(Tuple{typeof(CrystalNets.equilibrium), PeriodicGraph{D}})
         @enforce precompile(Tuple{typeof(CrystalNets.trim_topology), PeriodicGraph{D}})
         for T in inttypes
             @enforce precompile(Tuple{Type{cnet{D,T}}, cell, types, ppos{D,T}, PeriodicGraph{D}, opts})
