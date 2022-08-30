@@ -70,7 +70,8 @@ function parse_cif(file)
             next_i, next_j, next_x = nextword(l, x)
             @toggleassert next_i != 0
             lastword = l[i+1:j]
-            all_data[lastword] = l[next_i:next_j]
+            newword = l[next_i:next_j]
+            newword != "?" && (all_data[lastword] = newword)
             x = next_x
         else
             if l[i:j] == "loop_"
