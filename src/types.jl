@@ -596,7 +596,7 @@ function CrystalNet{D,T}(net::CrystalNet{N}; kwargs...) where {D,T,N}
     else
         newpos = net.pge.pos
     end
-    pge = PeriodicGraphEmbedding{D,T}(PeriodicGraph{D}(net.pge.g), newpos, net.pge.cell)
+    pge = PeriodicGraphEmbedding{D,T}(copy(net.pge.g), newpos, net.pge.cell)
     CrystalNet{D,T}(pge, net.types, Options(net.options; kwargs...))
 end
 CrystalNet{D}(net::CrystalNet{R,T}; kwargs...) where {D,R,T} = CrystalNet{D,T}(net; kwargs...)
@@ -611,7 +611,7 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
                        placement::AbstractMatrix{T}, options::Options) where {D,T<:Real}
     n = nv(graph)
     @toggleassert size(placement) == (D, n)
-    pge, s = SortedPeriodicGraphEmbedding{T}(graph, placement, cell)
+    pge, s = SortedPeriodicGraphEmbedding{T}(copy(graph), placement, cell)
     types = Symbol[types[s[i]] for i in 1:n]
     # @toggleassert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
     return CrystalNet{D,T}(pge, types, options)
@@ -623,7 +623,7 @@ end
 CrystalNet{D}(cell::Cell, opts::Options) where {D} = CrystalNet{D,Rational{Int32}}(cell, opts)
 
 function CrystalNet{D,T}(cell::Cell, types::Vector{Symbol}, pos, graph::PeriodicGraph{D}, options::Options) where {D,T}
-    CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(graph, pos, cell), types, options)
+    CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(copy(graph), pos, cell), types, options)
 end
 
 
@@ -633,7 +633,7 @@ end
 function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
     placement = equilibrium(graph) # from PeriodicGraphEquilibriumPlacement.jl
-    pge, s = SortedPeriodicGraphEmbedding(graph, placement, cell)
+    pge, s = SortedPeriodicGraphEmbedding(copy(graph), placement, cell)
     return CrystalNet{D}(pge, types[s], options)
 end
 
