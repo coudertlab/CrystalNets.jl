@@ -1,4 +1,4 @@
-import PeriodicGraphs
+import PeriodicGraphEmbeddings: export_vtf
 
 function export_dataline(f, x)
     inbetween = '\t'
@@ -14,13 +14,21 @@ function export_dataline(f, x)
     println(f, inbetween*x)
 end
 
+function perturbate_positions(pge::PeriodicGraphEmbedding{D}) where {D}
+    lens, _ = cell_parameters(pge.cell.mat)
+    newpos = [pos .+ rand((-1,1), 3) .* rand(3) ./ (8 .* lens) for pos in pge.pos]
+    return PeriodicGraphEmbedding{D}(copy(pge.g), newpos, pge.cell)
+end
+
 _representative_atom(ty, i) = last(representative_atom(ty, i))
-function PeriodicGraphEmbeddings.export_vtf(file, c::Union{CrystalNet,Crystal}, repeatedges=6, colorname=false)
+function export_vtf(file, c::Union{CrystalNet,Crystal}, repeatedges=6, perturb=false, colorname=false)
     if c isa CrystalNet
         net = CrystalNet3D(c)
-        return export_vtf(file, net.pge, net.types, repeatedges, colorname, string_atomtype, _representative_atom)
+        pge = perturb ? perturbate_positions(net.pge) : net.pge
+        return export_vtf(file, pge, net.types, repeatedges, colorname, string_atomtype, _representative_atom)
     end
-    return export_vtf(file, c.pge, c.types, repeatedges, colorname, string_atomtype, _representative_atom)
+    pge = perturb ? perturbate_positions(c.pge) : c.pge
+    return export_vtf(file, pge, c.types, repeatedges, colorname, string_atomtype, _representative_atom)
 end
 
 
