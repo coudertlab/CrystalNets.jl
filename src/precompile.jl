@@ -749,8 +749,9 @@ function _precompile_()
 
     # topology.jl
     for D in 1:3
-        @enforce precompile(Tuple{typeof(CrystalNets.check_symmetry_with_collisions), Vector{collision}})
+        @enforce precompile(Tuple{Type{CrystalNets.CheckSymmetryWithCollisions}, Vector{collision}})
         for T in reverse(inttypes)
+            @enforce precompile(Tuple{CrystalNets.CheckSymmetryWithCollisions, pge{D,T}, SVector{D,T}, Nothing, Nothing})
             @enforce precompile(Tuple{typeof(CrystalNets.check_dimensionality), cnet{D,T}})
             @enforce precompile(Tuple{typeof(CrystalNets.possible_translations), cnet{D,T}})
             @enforce precompile(Tuple{typeof(CrystalNets.find_all_valid_translations), cnet{D,T}, Vector{collision}})
