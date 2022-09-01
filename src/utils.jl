@@ -313,6 +313,7 @@ end
 function representative_atom(t::Symbol, default::Int=0)
     at = get(atomic_numbers, t, 0)
     at == 0 || return t, at
+    t === :* && return t, default
     styp = string(t)
     @toggleassert length(styp) ≥ 2
     t = islowercase(styp[2]) ? Symbol(styp[1:2]) : Symbol(styp[1])
@@ -519,6 +520,10 @@ function isoverfloworinexact(@nospecialize(e))
     if e isa TaskFailedException
         result = e.task.result
         return result isa OverflowError || result isa InexactError
+    end
+    if e isa CompositeException
+        all(isoverfloworinexact, e) && return true
+        return false
     end
     return false
 end

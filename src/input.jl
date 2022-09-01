@@ -153,6 +153,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
         popvecstring!(parsed, "symmetry_equiv_pos_as_xyz") : 
         haskey(parsed, "space_group_symop_operation_xyz") ?
             popvecstring!(parsed, "space_group_symop_operation_xyz") : String[]
+    all(contains('?'), equivalentpositions) && empty!(equivalentpositions)
     initiallyemptyequivalentpositions = isempty(equivalentpositions)
     refid = find_refid(equivalentpositions)
     hall = find_hall_number(
