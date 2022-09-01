@@ -45,7 +45,6 @@ function possible_translations(c::CrystalNet{D,T}) where {D,T}
     sortedpos = copy(c.pge.pos)
     origin = popfirst!(sortedpos)
     @toggleassert iszero(origin)
-    sort!(sortedpos, by=norm)
     for t in sortedpos
         @toggleassert t == back_to_unit.(t)
         max_den, i_max_den = findmax(denominator.(t))
@@ -53,7 +52,7 @@ function possible_translations(c::CrystalNet{D,T}) where {D,T}
         nz = count(iszero, t)
         push!(ts, (nz, i_max_den, max_den, t))
     end
-    return sort!(ts; by=(x->(x[1], x[2], x[3])))
+    return sort!(ts; by=(x->(x[1], x[2], x[3], norm(x[4]))))
 end
 
 
@@ -70,7 +69,7 @@ See also: [`possible_translations`](@ref), `PeriodicGraphEmbeddings.check_valid_
 """
 function find_all_valid_translations(shrunk_net::CrystalNet{D,T}, collisions) where {D,T}
     ret = NTuple{D, Vector{Tuple{Int, Int, SVector{D,T}}}}(ntuple(_->[], Val(D)))
-    check_symmetry = check_symmetry_with_collisions(collisions)
+    check_symmetry = CheckSymmetryWithCollisions(collisions)
     for (nz, i_max_den, max_den, t) in possible_translations(shrunk_net)
         vmap = check_symmetry(shrunk_net.pge, t, nothing, shrunk_net.types)
         if vmap isa Vector{PeriodicVertex{D}}
@@ -278,10 +277,17 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     sortedcol = SVector{D,Rational{T}}[SVector{D,Rational{T}}(poscol[i]) for i in I_kept]
 
     vmap = Vector{Int}(undef, n)
-    for (i, pos) in enumerate(poscol)
-        j = searchsortedfirst(sortedcol, pos)
-        @toggleassert j <= length(sortedcol) && sortedcol[j] == pos
-        vmap[i] = j
+    if isempty(collisions) # implies issorted(sortedcol)
+        for (i, pos) in enumerate(poscol)
+            j = searchsortedfirst(sortedcol, pos)
+            @toggleassert j <= length(sortedcol) && sortedcol[j] == pos
+            vmap[i] = j
+        end
+    else
+        rev_dict = Dict{SVector{D,Rational{T}},Int}(pos => j for (j, pos) in enumerate(sortedcol))
+        for (i, pos) in enumerate(poscol)
+            vmap[i] = rev_dict[pos]
+        end
     end
 
     edges = PeriodicEdge{D}[]
@@ -325,7 +331,13 @@ function minimize(net::CrystalNet, collisions::Vector{CollisionNode})
 end
 minimize(net::CrystalNet) = minimize(net, CollisionNode[])[1]
 
+"""
+    findfirstbasis(offsets::AbstractVector{<:StaticVector{N,<:Rational{T}}}) where {N,T})
 
+Given a list of rational translations, return a new unit cell for the periodic space
+spanned by these translations, as well as the integer coordinates of the input translations
+in this new basis.
+"""
 function findfirstbasis(offsets)
     newbasis = normal_basis_rational(offsets)
     invbasis = inv(newbasis)
@@ -408,8 +420,7 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
     origin = net.pge.pos[u]
     newpos = Vector{SVector{D,T}}(undef, n) # positions of the kept representatives
     newpos[1] = zero(SVector{D,T})
-    offsets = Vector{SVector{D,Int32}}(undef, n) # offsets of the new representatives with
-    # respect to the original one, in the original basis
+    offsets = Vector{SVector{D,Int32}}(undef, n) # offsets of the new representatives w.r.t. the original one, in the original basis
     offsets[1] = zero(SVector{D,Int32})
     vmap = Vector{Int}(undef, n) # bijection from the old to the new node number
     vmap[1] = u
@@ -537,22 +548,22 @@ function partition_by_coordination_sequence(graph, symmetries::AbstractSymmetryG
     return categories[sortorder], unique_reprs[sortorder]
 end
 
-
-function check_symmetry_with_collisions(collisions)
-    function check_symmetry(pge::PeriodicGraphEmbedding{D,T}, t::SVector{D,T}, r, vtypes) where {D,T}
-        vmap = check_valid_symmetry(pge, t, r, vtypes, true)
-        vmap isa Nothing && return nothing
-        n = length(pge.pos)
-        m = n - length(collisions)
-        for (i, node) in enumerate(collisions)
-            j = vmap[m+i].v
-            m + i == j && continue
-            j ≤ m && return nothing # a non-collision node is mapped to a collision node
-            collisions[j-m] == CollisionNode(node, [x.v for x in vmap]) || return nothing
-        end
-        return vmap
+struct CheckSymmetryWithCollisions
+    collisions::Vector{CollisionNode}
+end
+function (cswc::CheckSymmetryWithCollisions)(pge::PeriodicGraphEmbedding{D,T}, t::SVector{D,T}, r, vtypes) where {D,T}
+    collisions = cswc.collisions
+    vmap = check_valid_symmetry(pge, t, r, vtypes, isempty(collisions))
+    vmap isa Nothing && return nothing
+    n = length(pge.pos)
+    m = n - length(collisions)
+    for (i, node) in enumerate(collisions)
+        j = vmap[m+i].v
+        m + i == j && continue
+        j ≤ m && return nothing # a non-collision node is mapped to a collision node
+        collisions[j-m] == CollisionNode(node, [x.v for x in vmap]) || return nothing
     end
-    check_symmetry
+    return vmap
 end
 
 
@@ -571,7 +582,7 @@ See also: [`candidate_key`](@ref)
 function find_candidates(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}) where {D,T}
     L = D*D
     if D == 3
-        check_symmetry = check_symmetry_with_collisions(collisions)
+        check_symmetry = CheckSymmetryWithCollisions(collisions)
         symmetries = find_symmetries(net.pge, net.types, check_symmetry)
         categories, unique_reprs = partition_by_coordination_sequence(net.pge.g, symmetries)
     else
@@ -953,7 +964,7 @@ end
 function topological_key(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}) where {D,T}
     candidates, category_map = find_candidates(net, collisions)
     v, minimal_basis = popfirst!(candidates)
-    n = nv(net.pge.g)
+    n = length(net.pge)
     _edgs = [(n + 1, 0, zero(SVector{D,T}))]
     minimal_vmap, minimal_edgs = candidate_key(net, v, minimal_basis, _edgs)
     for (v, basis) in candidates
@@ -969,6 +980,8 @@ function topological_key(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}
 
     newbasis, edges = findbasis(minimal_edgs)
     graph = PeriodicGraph{D}(n, edges)
+
+    @toggleassert quotient_graph(graph) == quotient_graph(net.pge.g[minimal_vmap])
 
     if !isempty(collisions)
         graph = expand_collisions(collisions, graph, minimal_vmap)
