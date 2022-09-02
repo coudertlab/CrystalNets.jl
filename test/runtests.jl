@@ -95,6 +95,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     end
 
     CrystalNets.toggle_warning(false)
+
     @test mofdataset["MIL-53.cif"] == determine_topology(joinpath(cifs, "MIL-53.cif"); kwargs...)
     @test_throws ArgumentError determine_topology(joinpath(cifs, "MIL-53.cif"); kwargs..., bonding=Bonding.Input)
 
@@ -119,13 +120,15 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     @test wemfif[AllNodes].name == "dia"
     @test wemfif[PE].name == "crs"
     CrystalNets.toggle_warning(true)
+
+    # test cell minimization with collision nodes
+    nott112 = determine_topology(joinpath(cifs, "NOTT-112.cif"); kwargs..., bonding=Bonding.Input)
+    @test startswith(string(nott112), "AllNodes, PEM: ntt\nSingleNodes, Standard: nts\nPE: ")
 end
 
 @testset "Archive" begin
     @info "Checking that all known topologies are recognized (this can take a few minutes)."
-    if Threads.nthreads() == 1
-        @info "Use multiple threads to reduce this time"
-    end
+    Threads.nthreads() == 1 && @info "Use multiple threads to reduce this time"
     reverse_archive = collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
     failurelock = ReentrantLock()
     failures = 0
@@ -139,18 +142,18 @@ end
         if !test
             lock(failurelock) do
                 failures += 1
-                # The following will throw as non-boolean, hence printing the failing test
-                @test "$id failed (Archive)"
+                @error "$id failed (Archive)"
             end
         end
     end
     Test.get_testset().n_passed += length(reverse_archive) - failures
+    @test failures == 0
 end
 
 @testset "Module" begin
     targets = ["pcu", "afy, AFY", "apc, APC", "bam", "bcf", "cdp", "cnd", "ecb", "fiv",
     "ftd", "ftj", "ins", "kgt", "mot", "moz", "muh", "pbz", "qom", "sig",
-    "sma", "sod-f", "sod-h", "utj", "utp"]
+    "sma", "sod-f", "sod-h", "utj", "utp", "nts"]
     failurelock = ReentrantLock()
     failures = 0
     Threads.@threads for target in targets
@@ -164,14 +167,14 @@ end
             if topological_genome(CrystalNet(graph)).name != target
                 lock(failurelock) do
                     failures += 1
-                    # The following will throw as non-boolean, hence printing the failing test
-                    @test "$target failed (Module) with g = $(string(graph))"
+                    @error "$target failed (Module) with g = $(string(graph))"
                 end
             end
         end
     end
 
     Test.get_testset().n_passed += length(targets) - failures
+    @test failures == 0
     cifs, crystalnetsdir = _finddirs()
     @test topological_genome(CrystalNet(redirect_stderr(devnull) do;
             parse_chemfile(joinpath(cifs, "Moganite.cif"))
