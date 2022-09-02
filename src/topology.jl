@@ -978,10 +978,18 @@ function topological_key(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}
         end
     end
 
+    # rev_vmap = Vector{Int}(undef, n)
+    # for (i, j) in enumerate(minimal_vmap)
+    #     rev_vmap[j] = i
+    # end
+
     newbasis, edges = findbasis(minimal_edgs)
     graph = PeriodicGraph{D}(n, edges)
 
     @toggleassert quotient_graph(graph) == quotient_graph(net.pge.g[minimal_vmap])
+
+    # tmpnet = CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(graph, net.pge.pos[minimal_vmap], net.pge.cell), net.types[minimal_vmap], net.options)
+    # export_vtf("/tmp/tmpnet.vtf", tmpnet, 3)
 
     if !isempty(collisions)
         graph = expand_collisions(collisions, graph, minimal_vmap)

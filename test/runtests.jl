@@ -153,7 +153,7 @@ end
 @testset "Module" begin
     targets = ["pcu", "afy, AFY", "apc, APC", "bam", "bcf", "cdp", "cnd", "ecb", "fiv",
     "ftd", "ftj", "ins", "kgt", "mot", "moz", "muh", "pbz", "qom", "sig",
-    "sma", "sod-f", "sod-h", "utj", "utp", "nts"]
+    "sma", "sod-f", "sod-h", "utj", "utp", "nts", "lth"]
     failurelock = ReentrantLock()
     failures = 0
     Threads.@threads for target in targets
