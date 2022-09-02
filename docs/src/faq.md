@@ -50,6 +50,29 @@ Note that `Auto` is equivalent to both `AllNodes` and `SingleNodes` when the [`S
 
 See [below](@ref ToposProStandard) for the reason why the `Standard` topology is **xbi** and not ToposPro's "3,4,8T15".
 
+## CrystalNets.jl incorrectly detects bonds or reports a periodic structure as "non-periodic"
+
+You can use the [Visualization](@ref) tutorial to identify which bonds are incorrectly
+detected or missing.
+
+Check that the input file is clean: if an atom is represented in multiple possible
+positions for instance (as is common in CIF files), CrystalNets.jl could mistake them as
+multiple atoms, which may break some heuristics of the bond-detection algorithm. Solvent
+residues may also be incorrectly bonded in some circumstances and should be removed. The
+`ignore_atoms` keyword argument in the [`Options`] may be useful in this regard.
+
+You may want to provide a different `structure` keyword argument in the [`Options`](@ref)
+taken among the possible instances of [`StructureType`](@ref). These can modify the
+default heuristics for bond-guessing: for example, using `structure=StructureType.MOF`
+gives metals a larger radius for the purpose of guessing bonds.
+
+There are several customizable heuristics for bond-guessing available among the
+[`Options`](@ref). Of particular interest are `cutoff_coeff`, `ignore_homoatomic_bonds` and
+several of the options in the "Miscellaneous" section.
+
+If nothing works, the last solution consists in providing an input file with explicit bonds
+set, and use the `bonding=Input` keyword argument to [`Options`](@ref).
+
 ## The topology has a name given by ToposPro but CrystalNets.jl yields "UNKNOWN ..."
 
 In CrystalNets.jl, a net is identified if the graph of the crystal is [isomorphic](https://en.wikipedia.org/wiki/Graph_isomorphism) to the net. This correspondence is exact and the algorithm can only fail in case of unstable nets, which are reported as such. To do so, CrystalNets.jl actually solves the more complex [graph canonicalization problem](https://en.wikipedia.org/wiki/Graph_canonization) which consists in finding a "genome" (a sequence of numbers) provably unique for each net and such that two isomorphic nets have the same genome. Each genome is then associated with a name. See [this article](https://doi.org/10/dbg89q) for more information on the implementation in the program Systre, from which CrystalNets.jl is derived.
