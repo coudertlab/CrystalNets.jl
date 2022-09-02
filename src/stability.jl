@@ -28,13 +28,13 @@ Base.length(c::CollisionNode) = c.num
 Remove all colliding vertices and replace them by one new vertex per `CollisionNode`, whose
 neighbours are that of the vertices within.
 """
-function shrink_collisions(net::CrystalNet{D,T}, collisions::Vector{UnitRange{Int}}) where {D,T}
-    first_colliding = first(first(collisions))
-    m = length(collisions)
+function shrink_collisions(net::CrystalNet{D,T}, collision_ranges::Vector{UnitRange{Int}}) where {D,T}
+    first_colliding = first(first(collision_ranges))
+    m = length(collision_ranges)
     n = first_colliding + m - 1
 
     collision_vmap = collect(1:length(net.types))
-    for (i, node) in enumerate(collisions)
+    for (i, node) in enumerate(collision_ranges)
         @toggleassert all(==(net.pge.pos[first(node)]), @view net.pge.pos[node])
         collision_vmap[node] .= first_colliding + i - 1
     end
@@ -51,7 +51,7 @@ function shrink_collisions(net::CrystalNet{D,T}, collisions::Vector{UnitRange{In
     @toggleassert nv(newgraph) == n
 
     newpos = net.pge.pos[1:first_colliding]
-    append!(newpos, net.pge.pos[first(collisions[i])] for i in 2:m)
+    append!(newpos, net.pge.pos[first(collision_ranges[i])] for i in 2:m)
     newtypes = net.types[1:first_colliding-1]
     append!(newtypes, :* for i in 1:m) # type of collision nodes will be Symbol('*')
 
@@ -195,7 +195,7 @@ end
 """
     order_collision(graph::PeriodicGraph, colliding)
 
-Given collision node (in the form of the corresponding list of colliding vertices), find
+Given collision nodes (in the form of the corresponding list of colliding vertices), find
 an ordering of them which is independent of the current ordering of these vertices and of
 vertices which are neither in the collision node nor any of its neighbours.
 Return an empty list if it fails.
@@ -275,6 +275,9 @@ Return the resulting graph.
 """
 function expand_collisions(collisions::Vector{CollisionNode}, graph::PeriodicGraph{D}, vmap) where D
     n, m, num_withcolliding, num_nocolliding, collisions = collision_utils(collisions, vmap)
+    newtypes = Symbol[j > num_nocolliding ? :O : :C for j in vmap]
+    export_vtf("/tmp/cgraph.vtf", CrystalNet3D(Cell(), newtypes, graph, Options()), 5)
+
     # collisions are now sorted according to vmap, both in the list and for each subgraph
 
     @toggleassert nv(graph) == num_withcolliding
@@ -294,6 +297,8 @@ function expand_collisions(collisions::Vector{CollisionNode}, graph::PeriodicGra
     end
     graph = graph[perm]
     newgraph = graph[1:num_nocolliding] # subgraph of the non-colliding nodes keeping the order
+    newvmap = Vector{Int}(undef, n)
+    newvmap[1:num_nocolliding] = vmap[1:num_nocolliding]
 
     # At this point, the graph has all the collision nodes stacked at its end, but kept in
     # the same order as that given by the topological genome of the graph.
@@ -393,26 +398,35 @@ function CollisionNode(c::CollisionNode, rev_vmap)
 end
 
 
+"""
+    collect_collisions(net::CrystalNet)
+
+Return a tuple `(collision_sites, collision_vertices)` where
+- `collision_sites` is the list a ranges of vertices that share a same position in `net`.
+- `collision_vertices` is the list of all such vertices.
+"""
 function collect_collisions(net::CrystalNet)
-    sortedpos = issorted(net.pge.pos) ? net.pge.pos : sort(net.pge.pos)
-    @toggleassert all(pos -> all(x -> 0 ≤ x < 1, pos), net.pge.pos)
-    collision_sites = Vector{Int}[]
-    collision_vertices = Int[]
-    flag_collision = false
-    for i in 2:length(sortedpos)
-        if sortedpos[i-1] == sortedpos[i]
-            if flag_collision
-                push!(collision_sites[end], i)
+    issorted(net.pge.pos) || error("Internal error: unsorted positions while collecting collisions")
+    positions = net.pge.pos
+    @toggleassert all(pos -> all(x -> 0 ≤ x < 1, pos), positions)
+    collision_sites = UnitRange{Int}[] # each is a list of vertices at the same position
+    collision_vertices = Int[] # list of vertices on a collision site
+    start_collision = 0 # if not 0, first index of a node in a collision
+    n = length(positions)
+    for i in 2:n
+        if positions[i-1] == positions[i]
+            if start_collision != 0
                 push!(collision_vertices, i)
             else
-                push!(collision_sites, [i-1, i])
                 push!(collision_vertices, i-1, i)
-                flag_collision = true
+                start_collision = i-1
             end
-        else
-            flag_collision = false
+        elseif start_collision != 0
+            push!(collision_sites, start_collision:(i-1))
+            start_collision = 0
         end
     end
+    start_collision == 0 || push!(collision_sites, start_collision:n)
     return collision_sites, collision_vertices
 end
 
@@ -429,8 +443,8 @@ C) for each collision site either:
    - the site is made of at most 4 vertices, or
    - no 2 vertices on the site share the same exact set of neighbours out of the site.
 
-In this case, return the list of corresponding `CollisionNode`, the list being empty if the
-net is truly stable. Otherwise, return `nothing`.
+In this case, return the `CollisionNodeList` with the corresponding `CollisionNode`s, the
+list being empty if the net is truly stable. Otherwise, return `nothing`.
 
 Also return an updated net where the vertices in a `CollisionNode` are collapsed into a new
 vertex, appearing after the non-colliding vertices.
@@ -481,9 +495,9 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
         end
     end
     @toggleassert idx == n - length(collision_vertices) + 1
-    collisions = Vector{UnitRange{Int}}(undef, length(collision_sites))
+    collision_ranges = Vector{UnitRange{Int}}(undef, length(collision_sites))
     for (k, node) in enumerate(collision_sites)
-        collisions[k] = idx:(idx+length(node)-1)
+        collision_ranges[k] = idx:(idx+length(node)-1)
         for x in node
             vmap[idx] = x
             idx += 1
@@ -503,6 +517,6 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     # net.pge.pos[1] should always be [0,0,0]
 
     newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, net.options)
-    newnodes = [CollisionNode(newnet.pge.g, node) for node in collisions]
-    return shrink_collisions(newnet, collisions), newnodes
+    newnodes = [CollisionNode(newnet.pge.g, node) for node in collision_ranges]
+    return shrink_collisions(newnet, collision_ranges), newnodes
 end
