@@ -674,6 +674,13 @@ function Base.show(io::IO, x::CrystalNet)
     nothing
 end
 
+function PeriodicGraphs.make_supercell(net::CrystalNet{N,T}, t) where {N,T}
+    N == 0 && return copy(net)
+    pge = make_supercell(net.pge, t)
+    newtypes = repeat(net.types, prod(t))
+    return CrystalNet{N,T}(pge, newtypes, Options(net.options; _pos=SVector{3,Float64}[]))
+end
+
 function separate_components(c::Crystal{T}) where T
     graph = PeriodicGraph3D(c.pge.g)
     dimensions = PeriodicGraphs.dimensionality(graph)
