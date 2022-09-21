@@ -386,10 +386,12 @@ end
     for n in 2:4
         for m in 0:div(n*(n-1), 2)
             @info "Testing collision node canonicalization for n = $n; m = $m"
-            seen = SimpleGraph[]
+            seen = Set{String}()
             for _ in 1:500
-                g = SimpleGraph(n, m; seed=-1)
-                any(==(g), seen) && continue
+                g = SimpleGraph(n, m)
+                strg = string(g)
+                strg in seen && continue
+                push!(seen, strg)
                 seencolors = Set{Vector{Int}}()
                 seensubnodes = Set{Vector{Vector{Int}}}()
                 for _ in 1:300
