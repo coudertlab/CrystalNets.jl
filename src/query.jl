@@ -37,7 +37,7 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
             newnet = CrystalNet{D,widen(T)}(net; ignore_types=false)
             return topological_genome(newnet)
         end
-        _collisions isa Nothing && return TopologicalGenome(shrunk_net.pge.g, nothing, true)
+        _collisions isa Nothing && return TopologicalGenome(PeriodicGraph{D}(), nothing, true)
         collisions = _collisions
     end
 

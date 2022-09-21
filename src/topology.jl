@@ -301,10 +301,11 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     newcollisions = [CollisionNode(collisions[i], vmap) for i in kept_collisions]
     for newnode in newcollisions
         if !allunique(newnode.neighs)
-            newcollisions = nothing
-            break
+            # contravenes rule B of collision_nodes(::CrystalNet))
+            return c, nothing
         end
     end
+    # @show newcollisions
 
     graph = PeriodicGraph{D}(edges)
     return CrystalNet{D,Rational{T}}(cell, c.types[I_kept], sortedcol, graph, c.options), newcollisions
@@ -325,7 +326,7 @@ function minimize(net::CrystalNet, collisions::Vector{CollisionNode})
     all(isempty.(translations)) && return net, collisions
     mat = minimal_volume_matrix(translations)
     _net, collisions = reduce_with_matrix(net, mat, collisions)
-    @toggleassert all(isempty.(find_all_valid_translations(_net, collisions)))
+    collisions isa Vector{CollisionNode} && @toggleassert all(isempty.(find_all_valid_translations(_net, collisions)))
     return _net, collisions
 end
 minimize(net::CrystalNet) = minimize(net, CollisionNode[])[1]
