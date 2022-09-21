@@ -440,8 +440,8 @@ different topological genomes. In practice, this happens when:
 A) there is no edge between two collision sites and
 B) there is no edge between a collision site and two representatives of the same vertex and
 C) for each collision site either:
-   - the site is made of at most 4 vertices, or
-   - no 2 vertices on the site share the same exact set of neighbours out of the site.
+   α) the site is made of at most 4 vertices, or
+   β) no 2 vertices on the site share the same exact set of neighbours out of the site.
 
 In this case, return the `CollisionNodeList` with the corresponding `CollisionNode`s, the
 list being empty if the net is truly stable. Otherwise, return `nothing`.
@@ -459,16 +459,14 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     for site in collision_sites
         known_neighbors = Dict{Int,SVector{D,Int}}()
         known_nlist = Set{Vector{PeriodicVertex{D}}}()
-        uniquenlist = true
+        uniquenlist = true # set while condition C)β) holds
         for u in site
             this_nlist = PeriodicVertex{D}[]
             for x in neighbors(net.pge.g, u)
                 get!(known_neighbors, x.v, x.ofs) == x.ofs || return net, nothing # condition B
                 x.v ∈ site && continue
                 x.v ∈ collision_vertices_set && return net, nothing # condition A
-                if uniquenlist
-                    push!(this_nlist, x)
-                end
+                uniquenlist && push!(this_nlist, x)
             end
             if uniquenlist
                 if this_nlist ∈ known_nlist
@@ -515,6 +513,8 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     end
     offset_representatives!(newgraph, .-offsets)
     # net.pge.pos[1] should always be [0,0,0]
+
+    @toggleassert iszero(first(net.pge.pos))
 
     newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, net.options)
     newnodes = [CollisionNode(newnet.pge.g, node) for node in collision_ranges]
