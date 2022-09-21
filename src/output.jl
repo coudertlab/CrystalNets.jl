@@ -156,7 +156,7 @@ function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir()
     #     Chemfiles.set_property!(residues[i], "chainid", string(i))
     #     Chemfiles.add_residue!(frame, residues[i])
     # end
-    ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(c.pge.cell)
+    ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(crystal.pge.cell)
     Chemfiles.set_cell!(frame, Chemfiles.UnitCell(Float64[_a, _b, _c], Float64[_α, _β, _γ]))
     recenter::SVector{3,Float64} = minimum(reduce(hcat, crystal.pge.pos); dims=2)
     for i in 1:length(crystal.types)
