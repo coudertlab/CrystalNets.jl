@@ -75,7 +75,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
 @testset "MOF examples" begin
     cifs, crystalnetsdir = _finddirs()
     kwargs = (; structure=StructureType.MOF, clusterings=[Clustering.Auto,Standard,PE,PEM])
-    println(stderr, "The following warning about warnings altering performance is expected")
+    println(stderr, "The following warning about altering performance is expected")
     mofdataset = determine_topology_dataset(joinpath(cifs, "MOFs"), false; kwargs...)
 
     @testset "Dataset analysis" begin
@@ -160,6 +160,10 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     # test cell minimization with collision nodes
     nott112 = determine_topology(joinpath(cifs, "NOTT-112.cif"); kwargs..., bonding=Bonding.Input)
     @test startswith(string(nott112), "AllNodes, PEM: ntt\nSingleNodes, Standard: nts\nPE: ")
+
+    # test input bonding when different symmetric images of the same atoms have different bonds
+    fowwar = determine_topology(joinpath(cifs, "FOWWAR.cif"); kwargs..., bonding=Bonding.Input, clusterings=[Clustering.Standard])
+    @test string(fowwar) == "Standard: UNKNOWN 3 1 1 0 0 1 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 2 5 0 0 0 2 6 0 0 0 3 6 0 0 0 3 7 0 0 0 4 5 1 0 0 4 7 0 -1 0 5 5 0 1 1 5 8 0 0 0 6 6 0 0 1 6 8 0 1 0 7 7 0 1 1 7 8 1 1 0"
 end
 
 @testset "Archive" begin

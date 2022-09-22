@@ -1161,9 +1161,9 @@ function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vec
                 @warn "Remaining bonds of suspicious lengths. Proceeding anyway."
             end
         end
-    end
 
-    remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds, options.ignore_homometallic_bonds)
+        remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds, options.ignore_homometallic_bonds)
+    end
 
     if isempty(attributions)
         crystalnothing = Crystal{Nothing}(cell, types, pos, graph, options)

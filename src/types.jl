@@ -88,7 +88,7 @@ function sortprune_bondlist!(bondlist::Vector{Tuple{Int,Float32}})
     k = 0
     for (i, (j, _)) in enumerate(bondlist)
         if j == k
-            push!(toremove, i)
+            push!(toremove, i-1)
         else
             k = j
         end
@@ -214,27 +214,27 @@ function expand_symmetry(c::CIF)
     if isempty(cif.cell.equivalents)
         return CIF(cif.cifinfo, deepcopy(cif.cell), cif.ids, cif.types, cif.pos, cif.bonds)
     end
+    maxid = maximum(cif.ids; init=1)
 
     if isempty(cif.bonds)
         oldbonds = Vector{Tuple{Int,Float32}}[]
         knownbondlengths = true
         bonds = Vector{Tuple{Int,Float32}}[]
     else
-        maxid = maximum(cif.ids)
         @toggleassert minimum(cif.ids) ≥ 1
         rev_id = [Int[] for _ in 1:maxid]
-        for (i, idi) in enumerate(cif.ids)
-            push!(rev_id[idi], i)
+        for (i, k) in enumerate(cif.ids)
+            push!(rev_id[k], i)
         end
+        # For each id k, oldbonds[k] is the list of (j, d) where j is the id of an atom
+        # bonded to k with distance d.
         oldbonds = [Tuple{Int,Float32}[] for _ in 1:maxid]
-        for (idi, revidi) in enumerate(rev_id)
-            bondsidi = oldbonds[idi]
-            for i in revidi
-                for (j, d) in cif.bonds[i]
-                    push!(bondsidi, (cif.ids[j], d))
-                end
+        for (k, revidk) in enumerate(rev_id)
+            bondsk = oldbonds[k]
+            for i in revidk
+                append!(bondsk, (cif.ids[j], d) for (j, d) in cif.bonds[i])
             end
-            sortprune_bondlist!(bondsidi)
+            sortprune_bondlist!(bondsk)
         end
         knownbondlengths = !any(any(x -> iszero(x[2]), b) for b in oldbonds)
         bonds = [Tuple{Int,Float32}[] for _ in 1:length(cif.ids)]
@@ -248,34 +248,45 @@ function expand_symmetry(c::CIF)
     end
 
     n = length(cif.ids)
+    @toggleassert allunique(cif.ids)
     newids::Vector{Int} = copy(cif.ids)
     newpos::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     smallmat = Float64.(cif.cell.mat)
+    symmetric_aliases = [BitSet(i) for i in 1:maxid]
     buffer, ortho, safemin = prepare_periodic_distance_computations(smallmat)
     #=@inbounds=# for equiv in cif.cell.equivalents
-        image = zeros(Int, n)
-        for i in 1:length(cif.ids)
+        image = zeros(Int, n) # image[i] is the index of the position of the image of i
+        for i in 1:n
             v = newpos[i]
             p = Vector(equiv.mat*v .+ equiv.ofs)
             p .-= floor.(p)
-            for j in 1:length(newpos)
-                buffer .= newpos[j] .- p
+            imi = 0
+            for (j, posj) in enumerate(newpos)
+                buffer .= posj .- p
                 if periodic_distance!(buffer, smallmat, ortho, safemin) < 0.55
-                    image[i] = j
+                    imi = j
                     break
                 end
             end
-            if image[i] == 0
+            if imi == 0
                 push!(newpos, p)
                 push!(newids, cif.ids[i])
                 isempty(bonds) || push!(bonds, Tuple{Int,Float32}[])
-                image[i] = length(newpos)
+                imi = length(newpos)
+            elseif imi ≤ n
+                bitset = symmetric_aliases[cif.ids[i]]
+                id_imi = cif.ids[imi]
+                if symmetric_aliases[id_imi] !== bitset
+                    union!(bitset, symmetric_aliases[id_imi])
+                    symmetric_aliases[id_imi] = bitset
+                end
             end
+            image[i] = imi
         end
         if !knownbondlengths
             for (i, bondi) in enumerate(cif.bonds), (j, _) in bondi
-                imi = image[newids[i]]
-                imj = image[newids[j]]
+                imi = image[i]
+                imj = image[j]
                 add_to_bondlist!(bonds[imi], imj, 0f0)
                 add_to_bondlist!(bonds[imj], imi, 0f0)
             end
@@ -283,6 +294,24 @@ function expand_symmetry(c::CIF)
     end
 
     if knownbondlengths && !isempty(bonds)
+        for i in 1:n
+            id_i = cif.ids[i]
+            bitset = symmetric_aliases[id_i]
+            min_bitset = minimum(bitset)
+            if id_i == min_bitset
+                new_oldbonds = Tuple{Int,Float32}[]
+                for id_j in bitset
+                    for (k, d) in oldbonds[id_j]
+                        append!(new_oldbonds, (j, d) for j in symmetric_aliases[k])
+                    end
+                end
+                sortprune_bondlist!(new_oldbonds)
+                oldbonds[id_i] = new_oldbonds
+            else
+                oldbonds[id_i] = oldbonds[min_bitset]
+            end
+        end
+
         m = length(newids)
         for i in 1:m
             for j in (i+1):m
