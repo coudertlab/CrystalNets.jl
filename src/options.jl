@@ -367,8 +367,8 @@ These boolean options have a default value that may be determined by [`Bonding`]
   its neighbors. Default is true.
 - `unify_sbu_decomposition`: apply the same rule to decompose both periodic and finite SBUs.
   Default is false.
-- `force_warn`: force printing warning and information even during `..._dataset` and
-  `..._topologies` function calls. Default is false.
+- `force_warn`: force printing warning and information even during `..._dataset` function
+  calls. Default is false.
 
 ## Internal fields
 These fields are for internal use and should not be modified by the user:

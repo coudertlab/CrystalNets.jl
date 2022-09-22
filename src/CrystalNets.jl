@@ -48,6 +48,7 @@ using StaticArrays
 using Graphs
 
 import Logging
+using ProgressMeter
 
 const DOWARN = Base.RefValue{Bool}(false)
 const DOEXPORT = Base.RefValue{Bool}(false)

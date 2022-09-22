@@ -319,8 +319,8 @@ guess_topology(path; kwargs...) = guess_topology(path, Options(structure=Structu
 
 
 """
-    determine_topology_dataset(path, save, autoclean, options::Options)
-    determine_topology_dataset(path, save=true, autoclean=true; kwargs...)
+    determine_topology_dataset(path, save, autoclean, showprogress, options::Options)
+    determine_topology_dataset(path, save=true, autoclean=true, showprogress=true; kwargs...)
 
 Given a path to a directory containing structure input files, compute the
 topology of each structure within the directory.
@@ -328,7 +328,7 @@ Return a dictionary linking each file name to the result.
 The result is a [`TopologyResult`](@ref), containing the topological genome, the name if
 known and the stability of the net. In case of error, the exception is reported.
 
-It is strongly recommended to toggle warnings off (through [`toggle_warning`](@ref)) and
+Warnings will be toggled off (unless `force_warn` is set) and it is stongly recommended
 not to export any file since those actions may critically reduce performance,
 especially for numerous files.
 
@@ -342,8 +342,11 @@ is removed at the end if the computation was successful.
 
 If `save` is set and `autoclean` is unset, the directory of temporary files will
 be renamed into "\\\$path/../results_\\\$i.OLD\\\$j".
+
+If `showprogress` is set, a progress bar will be displayed representing the number of
+processed files.
 """
-function determine_topology_dataset(path, save, autoclean, options::Options)
+function determine_topology_dataset(path, save, autoclean, showprogress, options::Options)
     if isdirpath(path)
         path = dirname(path)
     end
@@ -380,6 +383,7 @@ function determine_topology_dataset(path, save, autoclean, options::Options)
     end
     resultdir::String
     files::Vector{String}
+    progress = Progress(length(files); dt=0.2, enabled=showprogress, showspeed=true)
 
     @threads for file in files
         f = joinpath(path, file)
@@ -401,6 +405,7 @@ function determine_topology_dataset(path, save, autoclean, options::Options)
                 println(io, newname, '/', genome)
             end
         end
+        showprogress && next!(progress)
     end
 
     ret = Pair{String,TopologyResult}[]
@@ -437,9 +442,9 @@ function determine_topology_dataset(path, save, autoclean, options::Options)
     end
     return result
 end
-function determine_topology_dataset(path, save=true, autoclean=true; kwargs...)
+function determine_topology_dataset(path, save=true, autoclean=true, showprogress=true; kwargs...)
     opts, restore_warns = db_options(; kwargs...)
-    ret = determine_topology_dataset(path, save, autoclean, opts)
+    ret = determine_topology_dataset(path, save, autoclean, showprogress, opts)
     restore_warns && (DOWARN[] = true)
     ret
 end
@@ -447,8 +452,8 @@ end
 
 
 """
-    guess_topology_dataset(path, save, autoclean, options::Options)
-    guess_topology_dataset(path, save=true, autoclean=true; kwargs...)
+    guess_topology_dataset(path, save, autoclean, showprogress, options::Options)
+    guess_topology_dataset(path, save=true, autoclean=true, showprogress=true; kwargs...)
 
 Given a path to a directory containing structure input files, guess the topology of each
 structure within the directory using [`guess_topology`](@ref).
@@ -464,8 +469,11 @@ especially for numerous files.
 
 The `save` and `autoclean` arguments work identically to their counterpart for
 [`determine_topology_dataset`](@ref).
+
+If `showprogress` is set, a progress bar will be displayed representing the number of
+processed files.
 """
-function guess_topology_dataset(path, save, autoclean, options::Options)
+function guess_topology_dataset(path, save, autoclean, showprogress, options::Options)
     if isdirpath(path)
         path = dirname(path)
     end
@@ -502,6 +510,7 @@ function guess_topology_dataset(path, save, autoclean, options::Options)
     end
     resultdir::String
     files::Vector{String}
+    progress = Progress(length(files); dt=0.2, enabled=showprogress, showspeed=true)
 
     @threads for file in files
         f = joinpath(path, file)
@@ -515,6 +524,7 @@ function guess_topology_dataset(path, save, autoclean, options::Options)
         open(joinpath(resultdir, string(threadid())), "a") do results
             println(results, file, '/', genome)
         end
+        showprogress && next!(progress)
     end
 
     ret = Pair{String,TopologicalGenome}[]
@@ -550,9 +560,9 @@ function guess_topology_dataset(path, save, autoclean, options::Options)
     end
     return result
 end
-function guess_topology_dataset(path, save=true, autoclean=true; kwargs...)
+function guess_topology_dataset(path, save=true, autoclean=true, showprogress=true; kwargs...)
     opts, restore_warns = db_options(; structure=StructureType.Guess, kwargs...)
-    ret = guess_topology_dataset(path, save, autoclean, opts)
+    ret = guess_topology_dataset(path, save, autoclean, showprogress, opts)
     restore_warns && (DOWARN[] = true)
     ret
 end
