@@ -102,8 +102,8 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
         @test mil101[PE].name == "mtn-e-a"
 
         mof5 = mofdataset["MOF-5.cif"]
-        @test first(mof5) == [AllNodes, SingleNodes, PEM] => "tbo"
-        @test last(collect(mof5)) == [PE] => last(mof5)
+        @test first(mof5) == ([AllNodes, SingleNodes, Standard, PEM] => parse(TopologicalGenome, "tbo"))
+        @test last(collect(mof5)) == ([PE] => last(mof5))
         @test mof5[SingleNodes].name == mof5[AllNodes].name == mof5[Standard].name == "tbo"
 
         mof14 = mofdataset["MOF-14.cif/1"]
@@ -151,7 +151,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     @test allunique(ewetuw)
     @test ewetuw[SingleNodes].name == "fit"
     @test unique!(sort!(degree(ewetuw[PE].genome))) == [3, 5, 6]
-    @assert allunique(unique!(sort!(degree(x.genome))) for x in ewetuw)
+    @assert allunique(unique!(sort!(degree(last(x).genome))) for x in ewetuw)
 
     wemfif = determine_topology(joinpath(cifs, "WEMFIF_clean.cif"); kwargs...)
     @test wemfif[AllNodes] == wemfif[SingleNodes] == wemfif[Standard] == wemfif[PEM]
