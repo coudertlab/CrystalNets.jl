@@ -176,6 +176,15 @@ function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir()
     close(output)
 end
 
+function _export_trimmed_and_attributions(crystal::Crystal{Nothing}, clusters::Clusters)
+    export_default(crystal, "trimmed", crystal.options.name, crystal.options.export_trimmed)
+    if !isempty(crystal.options.export_attributions)
+        path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")
+        export_attributions(Crystal{Clusters}(crystal, clusters), path)
+        println("Attributions of atoms into SBUs represented represented at ", replace(path, ('\\'=>'/')))
+    end
+    nothing
+end
 
 """
     export_arc(path, arc=CRYSTAL_NETS_ARCHIVE)

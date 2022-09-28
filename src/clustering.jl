@@ -1298,13 +1298,12 @@ function order_atomtype(sym)
     return anum
 end
 
-function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters, onlynv::Bool=false, bypassexport=false)
+function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters, onlynv::Bool, bypassexport::Bool)
     structure = crystal.options.structure
     clustering = only(crystal.options.clusterings)
     if clustering == Clustering.EachVertex || structure == StructureType.Zeolite
-        if crystal.options.split_O_vertex
-            return split_O_vertices(crystal)
-        end
+        bypassexport || _export_trimmed_and_attributions(crystal, clusters)
+        crystal.options.split_O_vertex && return split_O_vertices(crystal)
         return onlynv ? crystal : Crystal{Nothing}(crystal; _pos=crystal.pge.pos)
     end
     edgs = PeriodicEdge3D[]
@@ -1341,20 +1340,18 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters, onlyn
     n = length(clusters.sbus)
     graph = PeriodicGraph3D(n, edgs)
     if ne(graph) == 0
-        if !isempty(crystal.options.export_trimmed)
-            @ifwarn @warn "Could not export trimmed crystal: the resulting structure is empty."
+        @ifwarn begin
+            if !isempty(crystal.options.export_trimmed)
+                @warn "Could not export trimmed crystal: the resulting structure is empty."
+            end
+            if !isempty(crystal.options.export_attributions)
+                @warn "Could not export attributions: the resulting structure is empty."
+            end
         end
         return Crystal{Nothing}(PeriodicGraphEmbedding{3,Float64}(crystal.pge.cell), Symbol[],
                                  Options(crystal.options; _pos=SVector{3,Float64}[]))
     end
-    if !onlynv && !bypassexport
-        export_default(crystal, "trimmed", crystal.options.name, crystal.options.export_trimmed)
-        if !isempty(crystal.options.export_attributions)
-            path = tmpexportname(crystal.options.export_attributions, "attribution_", crystal.options.name, ".pdb")
-            export_attributions(Crystal{Clusters}(crystal, clusters), path)
-            println("Attributions of atoms into SBUs represented represented at ", replace(path, ('\\'=>'/')))
-        end
-    end
+    bypassexport || _export_trimmed_and_attributions(crystal, clusters)
 
     sbus = clusters.sbus[split_special_sbu!(graph, clusters.sbus, crystal.pge.g, crystal.types, crystal.options.split_O_vertex)]
     n = length(sbus)
@@ -1399,7 +1396,7 @@ function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Tupl
             return true, T === Clusters ? c.clusters : Clusters(length(c.types))
         end
         newc = Crystal{Nothing}(c; clusterings=[Clustering.Auto], export_attributions=false, export_input=false)
-        if nv(_collapse_clusters(newc, clusters, true).pge.g) <= 1
+        if nv(_collapse_clusters(newc, clusters, true, true).pge.g) <= 1
             return true, T === Clusters ? c.clusters : Clusters(length(c.types))
         end
         return false, clusters
