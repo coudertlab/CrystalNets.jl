@@ -37,7 +37,7 @@ export CrystalNet,
        Clustering,
        ClusterKinds
 
-import LinearAlgebra: det, norm, rank, cross
+using LinearAlgebra: det, dot, norm, rank, cross
 using Base.Threads
 import Serialization
 
@@ -78,15 +78,6 @@ end
 function __init__()
     toggle_warning("--no-warn" ∉ ARGS)
     toggle_export("--no-export" ∉ ARGS)
-    @static if abspath(PROGRAM_FILE) == @__FILE__
-        global DOWARN
-        if DOWARN[]
-            @info "Proceed to a full installation (see README.md) for better performance."
-        end
-        @show "EXECUTING JULIA MAIN"
-        ret_code = CrystalNets.julia_main()
-        exit(ret_code)
-    end
     nothing
 end
 
@@ -107,3 +98,8 @@ include("precompile.jl")
 end # module CrystalNets
 
 nothing
+
+@static if abspath(PROGRAM_FILE) == @__FILE__
+    CrystalNets.DOWARN[] && @info "Proceed to a full installation (see README.md) for better performance."
+    exit(CrystalNets.julia_main())
+end
