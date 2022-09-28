@@ -50,7 +50,7 @@ macro ifwarn(ex)
             @static if VERSION < v"1.7-"
                 $(esc(ex))
             else
-                with_logger(minimal_logger) do
+                Base.with_logger(minimal_logger) do
                     $(esc(ex))
                 end
             end
