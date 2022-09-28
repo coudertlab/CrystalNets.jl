@@ -1171,17 +1171,21 @@ function Base.setindex!(x::TopologyResult, ::Nothing, c::_Clustering)
 end
 
 
-function Base.show(io::IO, x::TopologyResult)
+function Base.keys(x::TopologyResult)
     rev_vmap = zeros(Int, 8)
     for (i, j) in enumerate(x.uniques)
         rev_vmap[j] = i
     end
-    samenet = [[k] for k in x.uniques]
+    samenet = [[clustering_from_num(k)] for k in x.uniques]
     for (i, j) in enumerate(x.attributions)
         (j == 0 || j == i) && continue
-        push!(samenet[rev_vmap[j]], i)
+        push!(samenet[rev_vmap[j]], clustering_from_num(i))
     end
+    return samenet
+end
 
+function Base.show(io::IO, ::MIME"text/plain", x::TopologyResult)
+    samenet = keys(x)
     if length(samenet) == 1 && length(samenet[1]) == 1 && x.uniques[1] == 1 # Auto
         print(io, x.results[1])
         return
@@ -1189,22 +1193,34 @@ function Base.show(io::IO, x::TopologyResult)
 
     compact = get(io, :compact, false)
     for (k, l) in enumerate(samenet)
-        join(io, (string(clustering_from_num(k)) for k in l), compact ? ',' : ", ")
+        join(io, (string(k) for k in l), compact ? ',' : ", ")
         print(io, ": ")
-        show(io, x.results[l[1]])
+        show(io, x.results[Int(l[1])])
         k == length(samenet) || (compact ? print(io, " | ") : println(io))
     end
 end
+Base.show(io::IO, x::TopologyResult) = show(io, MIME"text/plain"(), x)
 
-function Base.iterate(x::TopologyResult, state::Int=1)
-    next = iterate(x.uniques, state)
-    if next isa Tuple{Int8,Int}
-        return x.results[next[1]], next[2]
-    end
-    nothing
+struct ValuesTopologyResult <: AbstractVector{TopologicalGenome}
+    x::TopologyResult
 end
-Base.eltype(::Type{TopologyResult}) = TopologicalGenome
+Base.values(x::TopologyResult) = ValuesTopologyResult(x)
+Base.valtype(::Type{TopologyResult}) = TopologicalGenome
+Base.size(vx::ValuesTopologyResult) = (length(vx.x),)
+Base.getindex(vx::ValuesTopologyResult, i::Int) = vx.x[i]
+
+function Base.iterate(x::TopologyResult, (p, i)=(pairs(x), nothing))
+    next = i isa Nothing ? iterate(p) : iterate(p, i)
+    next isa Nothing && return nothing
+    return next[1], (p, next[2])
+end
+
+Base.eltype(::Type{TopologyResult}) = Pair{Vector{_Clustering},TopologicalGenome}
+
 Base.length(x::TopologyResult) = length(x.uniques)
+Base.isempty(x::TopologyResult) = isempty(x.uniques)
+Base.firstindex(::TopologyResult) = 1
+Base.lastindex(x::TopologyResult) = length(x)
 
 function Base.parse(::Type{TopologyResult}, s::AbstractString)
     splits = split(s, " | ")

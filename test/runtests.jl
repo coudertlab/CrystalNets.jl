@@ -102,6 +102,8 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
         @test mil101[PE].name == "mtn-e-a"
 
         mof5 = mofdataset["MOF-5.cif"]
+        @test first(mof5) == [AllNodes, SingleNodes, PEM] => "tbo"
+        @test last(collect(mof5)) == [PE] => last(mof5)
         @test mof5[SingleNodes].name == mof5[AllNodes].name == mof5[Standard].name == "tbo"
 
         mof14 = mofdataset["MOF-14.cif/1"]
