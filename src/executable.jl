@@ -491,7 +491,7 @@ function main(args)
         if length(genomes) == 1
             id = genomes[1][2]
             println(id)
-            all(x -> isnothing(x.name), id) && return 1
+            all(x -> isnothing(x.name), values(id)) && return 1
             return 0
         end
 
@@ -510,6 +510,6 @@ function main(args)
 end
 
 
-Base.@ccallable function julia_main()::Cint
+function julia_main()::Cint
     main(ARGS)
 end
