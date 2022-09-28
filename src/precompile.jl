@@ -1,7 +1,3 @@
-using CrystalNets, PeriodicGraphs, ArgParse, LinearAlgebra,
-      StaticArrays, Logging, Tokenize, BigRationals
-import Chemfiles
-
 macro enforce(expr) # strong @assert
     msg = string(expr)
     return :($(esc(expr)) ? $(nothing) : throw(AssertionError($msg)))
@@ -327,7 +323,6 @@ function _precompile_dependencies()
     end
     @enforce precompile(Tuple{typeof(Base.Broadcast.materialize),Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{1}, Nothing, typeof(CrystalNets.parsestrip), Tuple{Vector{String}}}})
     @enforce precompile(Tuple{typeof(CrystalNets.invalid_input_error),String,ErrorException,Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}})
-    @enforce precompile(Tuple{typeof(CrystalNets.julia_main)})
 
     @enforce precompile(Tuple{typeof(CrystalNets.parse_chemfile),String})
     @enforce precompile(Tuple{typeof(CrystalNets.parse_chemfile),String,Bool})
@@ -418,6 +413,7 @@ function _precompile_()
     end
     @enforce precompile(Tuple{typeof(CrystalNets.export_attributions), crystclust, String})
     @enforce precompile(Tuple{typeof(CrystalNets.export_attributions), crystclust})
+    @enforce precompile(Tuple{typeof(CrystalNets._export_trimmed_and_attributions), cryst, clust})
     @enforce precompile(Tuple{typeof(CrystalNets.export_arc), String, Dict{String,String}})
     @enforce precompile(Tuple{typeof(CrystalNets.export_arc), String, Nothing})
     @enforce precompile(Tuple{typeof(CrystalNets.export_arc), String})
@@ -568,8 +564,6 @@ function _precompile_()
     @enforce precompile(Tuple{typeof(CrystalNets.identify_clustering), crystclust, structure, clustering})
     @enforce precompile(Tuple{typeof(CrystalNets.order_atomtype), Symbol})
     @enforce precompile(Tuple{typeof(CrystalNets._collapse_clusters), cryst, clust, Bool, Bool})
-    @enforce precompile(Tuple{typeof(CrystalNets._collapse_clusters), cryst, clust, Bool})
-    @enforce precompile(Tuple{typeof(CrystalNets._collapse_clusters), cryst, clust})
     @enforce precompile(Tuple{typeof(CrystalNets._find_clusters), cryst, Bool, Bool})
     @enforce precompile(Tuple{typeof(CrystalNets._find_clusters), crystclust, Bool, Bool})
     @enforce precompile(Tuple{typeof(CrystalNets.find_clusters), cryst})

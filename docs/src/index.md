@@ -112,7 +112,7 @@ using CrystalNets
 const root = dirname(dirname(pathof(CrystalNets)))
 
 create_app(root, INSTALLATION_PATH;
-           precompile_statements_file=abspath(root, "src", "precompile.jl"),
+           precompile_statements_file=abspath(root, "src", "precompile_statements.jl"),
            filter_stdlibs=true)
 ```
 
