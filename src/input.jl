@@ -79,7 +79,7 @@ function parse_cif(file)
                 loopisspecified = false
                 loopspec = String[]
                 lastword = ""
-            elseif j-i > 4 && l[i:i+4] == "data_"
+            elseif j-i ≥ 4 && l[i:i+4] == "data_"
                 @ifwarn if haskey(all_data, "data") && haskey(all_data, "atom_site_fract_x")
                     @error "The CIF file may contain multiple inputs: only keeping the last one."
                 end
@@ -87,9 +87,9 @@ function parse_cif(file)
             else
                 complete_lastword::String = get(all_data, lastword, "")
                 if complete_lastword == ""
-                    k::Int = findprev(isequal('\n'), l, i)
-                    n::Int = count("\n", l[1:k])
-                    error(lazy"Unknown word \"$(l[i:j])\" at line $(n+1), position $(i-k):$(j-k)")
+                    k::Int = something(findprev(isequal('\n'), l, i), 0)
+                    n::Int = count("\n", l[1:k]) + 1
+                    error(lazy"Unknown word \"$(l[i:j])\" at line $n, position $(i-k):$(j-k)")
                 end
                 all_data[lastword] = complete_lastword*' '*l[i:j]
             end

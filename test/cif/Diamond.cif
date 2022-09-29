@@ -1,4 +1,4 @@
-data_global
+data_
 _chemical_name_mineral 'Diamond'
 loop_
 _publ_author_name
