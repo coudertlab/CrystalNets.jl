@@ -554,14 +554,15 @@ end
 function (cswc::CheckSymmetryWithCollisions)(pge::PeriodicGraphEmbedding{D,T}, t::SVector{D,T}, r, vtypes) where {D,T}
     collisions = cswc.collisions
     vmap = check_valid_symmetry(pge, t, r, vtypes, isempty(collisions))
-    vmap isa Nothing && return nothing
+    (vmap isa Nothing || isempty(collisions)) && return vmap
     n = length(pge.pos)
     m = n - length(collisions)
+    vmapv = [x.v for x in vmap]
     for (i, node) in enumerate(collisions)
-        j = vmap[m+i].v
+        j = vmapv[m+i]
         m + i == j && continue
         j ≤ m && return nothing # a non-collision node is mapped to a collision node
-        collisions[j-m] == CollisionNode(node, [x.v for x in vmap]) || return nothing
+        collisions[j-m] == CollisionNode(node, vmapv) || return nothing
     end
     return vmap
 end
@@ -985,6 +986,7 @@ function topological_key(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}
 
     newbasis, edges = findbasis(minimal_edgs)
     graph = PeriodicGraph{D}(n, edges)
+    # return graph, collisions, minimal_vmap
 
     @toggleassert quotient_graph(graph) == quotient_graph(net.pge.g[minimal_vmap])
 

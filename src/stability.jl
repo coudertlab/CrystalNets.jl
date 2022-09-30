@@ -7,7 +7,7 @@ Store the structure of a collision node through the subgraph `g` extracted with 
 edges bond to the vertices in the node.
 
 The `num` field corresponds to the number of vertices in `g` that collide in the initial
-graph, while the `neighs` field stores the indices of their neighbor out of the collision
+graph, while the `neighs` field stores the indices of their neighbors out of the collision
 site.
 
 The colliding vertices are the `num` first vertices of `g`, the others are the neighbors.
@@ -18,7 +18,7 @@ struct CollisionNode
     num::Int
     neighs::Vector{Int}
 end
-(Base.:(==))(c1::CollisionNode, c2::CollisionNode) = c1.num == c2.num && c1.g == c2.g
+(Base.:(==))(c1::CollisionNode, c2::CollisionNode) = c1.num == c2.num && c1.g == c2.g && c1.neighs == c2.neighs
 Base.hash(c::CollisionNode, h::UInt) = hash(c.g, hash(c.num, hash(c.neighs, h)))
 Base.length(c::CollisionNode) = c.num
 
@@ -206,7 +206,8 @@ vertices in the range.
 """
 function order_collision(graph::PeriodicGraph{D}, colliding) where D
     m = length(colliding)
-    neigh_per_v = [Int[] for _ in 1:m]
+    neigh_per_v = [Int[] for _ in 1:m] # for each colliding vertex, its non-colliding neighbors
+    # subgraph is the graph extracted by only keeping the bonds between the colliding vertices
     subgraph = SimpleGraph(m)
     for (i, (nlist, u)) in enumerate(zip(neigh_per_v, colliding))
         for x in neighbors(graph, u)
@@ -220,6 +221,9 @@ function order_collision(graph::PeriodicGraph{D}, colliding) where D
         sort!(nlist)
     end
     I = sortperm(neigh_per_v)
+    # subnodes is a list of sublists of colliding vertex indices, such that all indices in
+    # a sublist correspond to vertices sharing the same non-colliding neighbors.
+    # subnodes is sorted by the lexicographical order of the corersponding lists of neighbors.
     subnodes = Vector{Int}[[I[1]]]
     last_list = neigh_per_v[I[1]]
     for _i in 2:length(I)
@@ -238,124 +242,29 @@ function order_collision(graph::PeriodicGraph{D}, colliding) where D
     return _order_collision(subgraph, subnodes)
 end
 
-
-function collision_utils(collisions::Vector{CollisionNode}, num_withcolliding::Int, rev_vmap=nothing)
-    m = length(collisions)
-    num_nocolliding = num_withcolliding - m
-    n = num_nocolliding + sum(length, collisions)
-    new_collisions = collisions
-
-    if rev_vmap isa Vector{Int}
-        colliding_nodes = rev_vmap[(num_nocolliding+1):num_withcolliding]
-        new_collisions = [CollisionNode(collisions[i], rev_vmap) for i in sortperm(colliding_nodes)]
-        # The order of collisions and is made independent of the initial representation
-    end
-
-    return n, m, num_withcolliding, num_nocolliding, new_collisions
-end
-
-function collision_utils(collisions::Vector{CollisionNode}, vmap::Vector{Int})
-    num_withcolliding = length(vmap)
-    rev_vmap = Vector{Int}(undef, num_withcolliding)
-    for (i, j) in enumerate(vmap)
-        rev_vmap[j] = i
-    end
-    return collision_utils(collisions, num_withcolliding, rev_vmap)
-end
-
 """
-    expand_collisions(collisions::Vector{CollisionNode}, graph::PeriodicGraph, vmap)
+    unsorted_node(graph::PeriodicGraph, node::UnitRange{Int})
 
-Expand each collision node into the appropriate number of vertices so that the resulting
-graph is isomorphic to the initial one, in a manner that only depends on the current graph.
-Return the resulting graph.
+Create a CollisionNode corresponding to the input `node` in `graph`.
 
-`vmap` is the map of vertices between `initial_graph` (with collapsed collision nodes) and
-`graph`
+Colliding vertices are put first in the CollisionNode (see the definition of a
+[`CollisionNode`](@ref)) but otherwise the order of vertices is kept the same as in the
+initial graph.
 """
-function expand_collisions(collisions::Vector{CollisionNode}, graph::PeriodicGraph{D}, vmap) where D
-    n, m, num_withcolliding, num_nocolliding, collisions = collision_utils(collisions, vmap)
-
-    # collisions are now sorted according to vmap, both in the list and for each subgraph
-
-    @toggleassert nv(graph) == num_withcolliding
-    @toggleassert length(vmap) == nv(graph)
-
-    # We now push all the collision nodes to the end
-    perm = Vector{Int}(undef, num_withcolliding)
-    current_idx_colliding = 1
-    for (i, j) in enumerate(vmap)
-        if j > num_nocolliding # vertex i in the current graph is a collision node
-            perm[num_nocolliding + current_idx_colliding] = i
-            current_idx_colliding += 1
-        else
-            idx = i + 1 - current_idx_colliding
-            perm[idx] = i
-        end
-    end
-    graph = graph[perm]
-    newgraph = graph[1:num_nocolliding] # subgraph of the non-colliding nodes keeping the order
-    newvmap = Vector{Int}(undef, n)
-    newvmap[1:num_nocolliding] = vmap[1:num_nocolliding]
-
-    # At this point, the graph has all the collision nodes stacked at its end, but kept in
-    # the same order as that given by the topological genome of the graph.
-
-    add_vertices!(newgraph, n - num_nocolliding)
-    offsetcounter = num_nocolliding
-    for (i, node) in enumerate(collisions)
-        k = length(node)
-        # bonds internal to the collision site
-        for j in 1:k
-            for x in neighbors(node.g, j)
-                x.v ≤ k || continue
-                add_edge!(newgraph, offsetcounter + j, PeriodicVertex{D}(offsetcounter + x.v))
-            end
-        end
-        # other bonds
-        for (j, x) in enumerate(neighbors(graph, num_nocolliding + i))
-            # x is a (non-colliding) neighbour of the collision node
-            for y in neighbors(node.g, length(node) + j)
-                add_edge!(newgraph, offsetcounter + y.v, x)
-            end
-        end
-        offsetcounter += length(node)
-    end
-
-    # newgraph contains all vertices from initial_graph
-    # The non-colliding ones are ordered like in graph, the others are stacked in the order
-    # of their collision node in graph, each colliding subgraph sorted with order_collision.
-
-    return newgraph
-end
-
-
-"""
-    CollisionNode(graph::PeriodicGraph, node::UnitRange{Int}, vmap=nothing)
-
-Return a canonical `CollisionNode` identifying the collision node.
-This depends on the order of its neighbours, which is given by their order in the graph or
-in `vmap` if provided.
-"""
-function CollisionNode(graph::PeriodicGraph, node::UnitRange{Int}, rev_vmap=nothing)
-    return CollisionNode(unsorted_node(graph, node), rev_vmap)
-end
-
 function unsorted_node(graph::PeriodicGraph, node::UnitRange{Int})
-    neighbors_of_node_set = Set{Int}()
+    neighbors_of_node_set = BitSet()
     for u in node
-        for x in neighbors(graph, u)
-            push!(neighbors_of_node_set, x.v)
-        end
+        union!(neighbors_of_node_set, x.v for x in neighbors(graph, u))
     end
     setdiff!(neighbors_of_node_set, node)
-    neighbors_of_node = collect(neighbors_of_node_set)
+    neighbors_of_node = sort!(collect(neighbors_of_node_set))
 
+    # newmap[u] is the index of vertex u in the returned CollisionNode
     newmap = Vector{Int}(undef, nv(graph))
+    l = length(node)
     for (i, u) in enumerate(node)
         newmap[u] = i
     end
-    l = length(node)
     for (i, u) in enumerate(neighbors_of_node)
         newmap[u] = l + i
     end
@@ -363,16 +272,22 @@ function unsorted_node(graph::PeriodicGraph, node::UnitRange{Int})
     edgs = PeriodicEdge{0}[]
     for u in node
         v = newmap[u]
-        for x in neighbors(graph, u)
-            push!(edgs, PeriodicEdge{0}(v, newmap[x.v], ()))
-        end
+        append!(edgs, PeriodicEdge{0}(v, newmap[x.v], ()) for x in neighbors(graph, u))
     end
 
-    newgraph = PeriodicGraph{0}(edgs)
-
-    return CollisionNode(newgraph, length(node), neighbors_of_node)
+    return CollisionNode(PeriodicGraph{0}(edgs), length(node), neighbors_of_node)
 end
 
+"""
+    CollisionNode(c::CollisionNode, rev_vmap)
+
+Return a collision node representing the same colliding vertices than in `c`, but ordered
+according the order of their neighbors, given by `rev_vmap`.
+In other words, if `rev_vmap[i] == 1` and vertex `i` is a neighbor of vertices in `c`,
+those vertices will be ordered first (compared to other vertices in the same bracket).
+
+If `rev_vmap === nothing`, assume `∀i, rev_vmap[i] == i`.
+"""
 function CollisionNode(c::CollisionNode, rev_vmap)
     sorted_neighbors = rev_vmap isa Vector{Int} ? rev_vmap[c.neighs] : c.neighs
     I = sortperm(sorted_neighbors)
@@ -393,6 +308,17 @@ function CollisionNode(c::CollisionNode, rev_vmap)
     perm[1:l] = neworder
 
     return CollisionNode(newgraph[perm], l, sorted_neighbors)
+end
+
+"""
+    CollisionNode(graph::PeriodicGraph, node::UnitRange{Int}, vmap=nothing)
+
+Return a canonical `CollisionNode` identifying the collision node.
+This depends on the order of its neighbours, which is given by their order in the graph or
+in `vmap` if provided.
+"""
+function CollisionNode(graph::PeriodicGraph, node::UnitRange{Int}, rev_vmap=nothing)
+    return CollisionNode(unsorted_node(graph, node), rev_vmap)
 end
 
 
@@ -517,4 +443,99 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, net.options)
     newnodes = [CollisionNode(newnet.pge.g, node) for node in collision_ranges]
     return shrink_collisions(newnet, collision_ranges), newnodes
+end
+
+
+
+
+function collision_utils(collisions::Vector{CollisionNode}, num_withcolliding::Int, rev_vmap=nothing)
+    m = length(collisions)
+    num_nocolliding = num_withcolliding - m
+    n = num_nocolliding + sum(length, collisions)
+    new_collisions = collisions
+
+    if rev_vmap isa Vector{Int}
+        colliding_nodes = rev_vmap[(num_nocolliding+1):num_withcolliding]
+        new_collisions = [CollisionNode(collisions[i], rev_vmap) for i in sortperm(colliding_nodes)]
+        # The order of collisions and is made independent of the initial representation
+    end
+
+    return n, m, num_withcolliding, num_nocolliding, new_collisions
+end
+
+function collision_utils(collisions::Vector{CollisionNode}, vmap::Vector{Int})
+    num_withcolliding = length(vmap)
+    rev_vmap = Vector{Int}(undef, num_withcolliding)
+    for (i, j) in enumerate(vmap)
+        rev_vmap[j] = i
+    end
+    return collision_utils(collisions, num_withcolliding, rev_vmap)
+end
+
+"""
+    expand_collisions(collisions::Vector{CollisionNode}, graph::PeriodicGraph, vmap)
+
+Expand each collision node into the appropriate number of vertices so that the resulting
+graph is isomorphic to the initial one, in a manner that only depends on the current graph.
+Return the resulting graph.
+
+`vmap` is the map of vertices between `initial_graph` (with collapsed collision nodes) and
+`graph`
+"""
+function expand_collisions(collisions::Vector{CollisionNode}, graph::PeriodicGraph{D}, vmap) where D
+    n, m, num_withcolliding, num_nocolliding, collisions = collision_utils(collisions, vmap)
+    # newtypes = Symbol[j > num_nocolliding ? :O : :C for j in vmap]
+    # export_vtf("/tmp/cgraph.vtf", CrystalNet3D(Cell(), newtypes, graph, Options()), 5)
+
+    # collisions are now sorted according to vmap, both in the list and for each subgraph
+
+    @toggleassert nv(graph) == num_withcolliding
+    @toggleassert length(vmap) == nv(graph)
+
+    # We now push all the collision nodes to the end
+    perm = Vector{Int}(undef, num_withcolliding)
+    current_idx_colliding = 1
+    for (i, j) in enumerate(vmap)
+        if j > num_nocolliding # vertex i in the current graph is a collision node
+            perm[num_nocolliding + current_idx_colliding] = i
+            current_idx_colliding += 1
+        else
+            idx = i + 1 - current_idx_colliding
+            perm[idx] = i
+        end
+    end
+    graph = graph[perm]
+    newgraph = graph[1:num_nocolliding] # subgraph of the non-colliding nodes keeping the order
+    newvmap = Vector{Int}(undef, n)
+    newvmap[1:num_nocolliding] = vmap[1:num_nocolliding]
+
+    # At this point, the graph has all the collision nodes stacked at its end, but kept in
+    # the same order as that given by the topological genome of the graph.
+
+    add_vertices!(newgraph, n - num_nocolliding)
+    offsetcounter = num_nocolliding
+    for (i, node) in enumerate(collisions)
+        k = length(node)
+        # bonds internal to the collision site
+        for j in 1:k
+            for x in neighbors(node.g, j)
+                x.v ≤ k || continue
+                add_edge!(newgraph, offsetcounter + j, PeriodicVertex{D}(offsetcounter + x.v))
+            end
+        end
+        # other bonds
+        for (j, x) in enumerate(neighbors(graph, num_nocolliding + i))
+            # x is a (non-colliding) neighbour of the collision node
+            for y in neighbors(node.g, length(node) + j)
+                add_edge!(newgraph, offsetcounter + y.v, x)
+            end
+        end
+        offsetcounter += length(node)
+    end
+
+    # newgraph contains all vertices from initial_graph
+    # The non-colliding ones are ordered like in graph, the others are stacked in the order
+    # of their collision node in graph, each colliding subgraph sorted with order_collision.
+
+    return newgraph
 end

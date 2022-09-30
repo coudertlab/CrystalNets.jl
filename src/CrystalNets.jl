@@ -38,6 +38,7 @@ export CrystalNet,
        ClusterKinds
 
 using LinearAlgebra: det, dot, norm, rank, cross
+import LinearAlgebra
 using Base.Threads
 import Serialization
 
