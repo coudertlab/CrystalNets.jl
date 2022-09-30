@@ -275,8 +275,6 @@ Return the resulting graph.
 """
 function expand_collisions(collisions::Vector{CollisionNode}, graph::PeriodicGraph{D}, vmap) where D
     n, m, num_withcolliding, num_nocolliding, collisions = collision_utils(collisions, vmap)
-    newtypes = Symbol[j > num_nocolliding ? :O : :C for j in vmap]
-    export_vtf("/tmp/cgraph.vtf", CrystalNet3D(Cell(), newtypes, graph, Options()), 5)
 
     # collisions are now sorted according to vmap, both in the list and for each subgraph
 
