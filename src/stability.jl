@@ -23,6 +23,23 @@ Base.hash(c::CollisionNode, h::UInt) = hash(c.g, hash(c.num, hash(c.neighs, h)))
 Base.length(c::CollisionNode) = c.num
 
 """
+    CollisionList <: AbstractVector{CollisionNode}
+
+List of [`CollisionNode`](@ref).
+
+Also contains a `priority` field
+"""
+struct CollisionList <: AbstractVector{CollisionNode}
+    list::Vector{CollisionNode}
+    priorities::Vector{Int}
+end
+Base.size(cl::CollisionList) = (length(cl.list),)
+Base.getindex(cl::CollisionList, i::Int) = cl.list[i]
+function CollisionList(list::Vector{CollisionNode}, types::Vector{Symbol})
+    error("TODO:")
+end
+
+"""
     shrink_collisions(net::CrystalNet, collisions)
 
 Remove all colliding vertices and replace them by one new vertex per `CollisionNode`, whose
@@ -58,138 +75,86 @@ function shrink_collisions(net::CrystalNet{D,T}, collision_ranges::Vector{UnitRa
     return CrystalNet{D,T}(net.pge.cell, newtypes, newpos, newgraph, net.options)
 end
 
+macro makepriority(n)
+    esc(:(return (J, $n%Int8 .+ degs)))
+end
+macro makepriority(n, m)
+    esc(:(return (J, $n%Int8 .+ (degs .== $m%Int8))))
+end
 
-function _order_collision(subgraph, subnodes)
+"""
+    get_priority(subgraph::SimpleGraph)
+
+Return `priority`, a `Vector{Int}` such that all non-colliding neighbors of vertex `i` in
+`subgraph` (before permutation) are attributed `priority[i]`.
+Also return a permutation of vertices of `subgraph` that makes priority non-decreasing.
+"""
+function get_priority(subgraph::SimpleGraph)
     m = nv(subgraph)
-    if m == 2 # 2
-        return [1, 2]
-    end
-
-    if m == 3
-        length(subnodes) == 1 && return sortperm(degree(subgraph))
-        @toggleassert length(subnodes) == 2 # 1-2 or 2-1
-        singled = length(subnodes[1]) == 1 ? subnodes[1][1] : subnodes[2][1]
-        v = get(neighbors(subgraph, singled), 1, singled == 1 ? 2 : 1)
-        remaining = 6 - singled - v
-        return length(subnodes[1]) == 1 ? [singled, v, remaining] : [v, remaining, singled]
-    end
-
-    # m == 4
-    degs = degree(subgraph)
-    @toggleassert all(<(4), degs)
+    degs = Int8.(degree(subgraph))
     J = sortperm(degs)
-    num = length(subnodes)
-
-    if num == 1
-        if degs[J[1]] == degs[J[4]]
-            if degs[1] == 1 # 1-1-1-1
-                neigh1 = only(neighbors(subgraph, 1))
-                other1 = ifelse(neigh1 == 2, 3, 2)
-                other2 = 10 - neigh1 - other1 - 1
-                @toggleassert only(neighbors(subgraph, other1)) == other2
-                return [1, neigh1, other1, other2]
-            end
-            if degs[1] == 2 # 2-2-2-2
-                neighs1 = neighbors(subgraph, 1)
-                neighl = neighs1[1]
-                neighr = neighs1[2]
-                neigho = 10 - 1 - neighl - neighr
-                @toggleassert issetequal(neighbors(subgraph, neigho), [neighl, neighr])
-                return [neighl, 1, neighr, neigho]
-            end
-        end
-        if degs[J] == [1, 1, 2, 2]
-            neigha = only(neighbors(subgraph, J[1]))
-            neighb = only(neighbors(subgraph, J[2]))
-            @toggleassert issetequal(neighbors(subgraph, neigha), [J[1], neighb])
-            return [J[1], J[2], neigha, neighb]
-        end
-        return J
+    m == 2 && @makepriority 0 # 00 or 11: 0-1
+    sortdeg = degs[J]
+    if m == 3
+        first(sortdeg) == last(sortdeg) && @makepriority 2 2 # 000 or 222: 2-3
+        @makepriority (3 + sortdeg[1]) # 011 or 112: 3-6
     end
-
-    if num == 2
-        if length(subnodes[1]) == 2 # 2-2
-            a, b = subnodes[1]
-            rem_edge!(subgraph, a, b)
-            c, d = subnodes[2]
-            rem_edge!(subgraph, c, d)
-            if degree(subgraph, b) < degree(subgraph, a)
-                a, b = b, a
-            end
-            if (degree(subgraph, b) == 1 && only(neighbors(subgraph, b)) == c) ||
-                degree(subgraph, d) < degree(subgraph, c)
-                c, d = d, c
-            end
-            return [a, b, c, d]
-        end
-        # 1-3 or 3-1
-        i1 = length(subnodes[1]) == 1 ? 1 : 2
-        (t, others) = only(subnodes[i1]), subnodes[3-i1]
-        u, v, w = others[sortperm(degs[others])]
-        @toggleassert issetequal([u,v,w,t], 1:4)
-        nts = neighbors(subgraph, t)
-        dt = length(nts)
-        if dt == 1
-            nt = only(nts)
-            if degs[v] == degs[w]
-                if degs[w] == 1
-                    @toggleassert degs[u] == 1
-                    if nt == w
-                        w, v = v, w
-                    end
-                    if nt == v
-                        u, v = v, u
-                    end
-                elseif nt == v
-                    w, v = v, w
-                end
-            end
-        elseif dt == 2
-            if degs[u] == degs[v] 
-                if degs[u] == 1
-                    @toggleassert degs[w] == degs[v]+1 == 2
-                    @toggleassert w ∈ nts
-                    if v ∈ nts
-                        u, v = v, u
-                    end
-                else
-                    @toggleassert degs[u] == 2
-                    if degs[v] == 2
-                        @toggleassert degs[w] == 2
-                        ww = 10 - t - nts[1] - nts[2]
-                        if ww == u
-                            u, w = w, u
-                        elseif ww == v
-                            v, w = w, v
-                        end
-                    end
-                end
-            end
-        end
-        return i1 == 1 ? [t, u, v, w] : [u, v, w, t]
+    @toggleassert m == 4
+    first(sortdeg) == last(sortdeg) && @makepriority 7 # 0000 or 1111 or 2222 or 3333: 7-10
+    last(sortdeg) == 1 && @makepriority 11 # 0011: 11-12
+    if last(sortdeg) == 2
+        sortdeg[3] == 1 && @makepriority 13 # 0112: 13-15
+        sortdeg[1] == 0 && @makepriority 16 2 # 0222: 16-17
+        @makepriority 17 # 1122: 18-19
     end
+    @toggleassert last(sortdeg) == 3
+    sortdeg[2] == 1 && @makepriority 20 3 # 1113: 20-21
+    sortdeg[1] == 1 && @makepriority 21 # 1223: 22-24
+    @toggleassert sortdeg[1] == 2
+    @makepriority 23 # 2233: 25-26
+end
 
-    @toggleassert num == 3 # 1-1-2 or 1-2-1 or 2-1-1
-    n2 = length(subnodes[1]) == 2 ? 1 : length(subnodes[2]) == 2 ? 2 : 3
-    xi, xj = subnodes[n2]
-    rem_edge!(subgraph, xi, xj)
-    xk = only(subnodes[n2 == 1 ? 2 : 1])
-    xl = only(subnodes[n2 == 1 ? 3 : 5-n2])
-    rem_edge!(subgraph, xk, xl)
-    neighk = neighbors(subgraph, xk)
-    if length(neighk) == 1
-        if only(neighk) == xi
-            xi, xj = xj, xi
-        end
-    else
-        neighls = neighbors(subgraph, xl)
-        if length(neighls) == 1 && neighls[1] == xi
-            xi, xj = xj, xi
+"""
+    _order_collision!((priority, perm)::Tuple{Vector{Int8},Vector{Int}}, subnodes::Vector{Vector{Int}})
+
+Modify `perm` to contain a permutation of the vertices of `subgraph` uniquely determined by
+the connectivity of the vertex within `subgraph` first, and by its neighbors next.
+
+`subgraph` should be the graph of bonds between vertices of the colliding node. It is not
+explicitly passed as argument, but should satisfy `perm, priority == get_priority(subgraph)`
+`subnodes[i]` is a list of colliding vertex indices sharing the same set of non-colliding
+neighbors. `subnodes` itself is sorted, see `_extract_subnodes`.
+"""
+function _order_collision!((perm, priority)::Tuple{Vector{Int},Vector{Int8}}, subnodes::Vector{Vector{Int}})
+    m = length(priority)
+    equivalents = UnitRange{Int}[]
+    last_priority = priority[perm[1]]
+    new = true
+    for i in 2:m
+        this_priority = priority[perm[i]]
+        if this_priority == last_priority
+            if new
+                push!(equivalents, (i-1):i)
+                new = false
+            else
+                equivalents[end] = (first(equivalents[end])):i
+            end
+        else
+            new = true
         end
     end
-    return n2 == 1 ? [xi, xj, only(subnodes[2]), only(subnodes[3])] :
-           n2 == 2 ? [only(subnodes[1]), xi, xj, only(subnodes[3])] :
-                     [only(subnodes[1]), only(subnodes[2]), xi, xj]
+    (isempty(equivalents) || length(subnodes) == 1) && return nothing
+
+    neighbor_priority = Vector{Int}(undef, m)
+    for (k, node) in enumerate(subnodes)
+        for j in node
+            neighbor_priority[j] = k
+        end
+    end
+    for eq in equivalents
+        sort!(@view(perm[eq]); by=Base.Fix1(getindex, neighbor_priority))
+    end
+    nothing
 end
 
 
@@ -197,7 +162,7 @@ function _extract_subnodes(neigh_per_v::Vector{Vector{Int}})
     I = sortperm(neigh_per_v; by=x->(length(x), x))
     # subnodes is a list of sublists of colliding vertex indices, such that all indices in
     # a sublist correspond to vertices sharing the same non-colliding neighbors.
-    # subnodes is sorted by the lexicographical order of the corersponding lists of neighbors.
+    # subnodes is itself sorted by the lexicographical order of the lists of neighbors.
     subnodes = Vector{Int}[[I[1]]]
     last_list = neigh_per_v[I[1]]
     for _i in 2:length(I)
@@ -210,23 +175,7 @@ function _extract_subnodes(neigh_per_v::Vector{Vector{Int}})
             last_list = nlist
         end
     end
-    I, subnodes
-end
-
-function _order_collision(c::CollisionNode)
-    m = c.num
-    subgraph = SimpleGraph(collect(Edge(u, v) for (u, (v, _)) in edges(c.g) if u ≤ m && v ≤ m))
-    neigh_per_v = [Int[] for _ in 1:m]
-    for (i, nlist) in enumerate(neigh_per_v)
-        for (x, _) in neighbors(c.g, i)
-            x > m && push!(nlist, x)
-        end
-    end
-    I, subnodes = _extract_subnodes(neigh_per_v)
-    length(subnodes) == m && return I
-
-    m > 4 && return Int[]
-    return _order_collision(subgraph, subnodes)
+    subnodes
 end
 
 """
@@ -235,7 +184,8 @@ end
 Given collision nodes (in the form of the corresponding list of colliding vertices), find
 an ordering of them which is independent of the current ordering of these vertices and of
 vertices which are neither in the collision node nor any of its neighbours.
-Return an empty list if it fails.
+Return a this ordering and a priority list for each colliding vertex, or two empty lists if
+it fails.
 
 This function assumes that no vertex in the node has a neighbour in another collision node
 and that there are no two representatives of the same vertex that are neighbour to some
@@ -257,11 +207,27 @@ function order_collision(graph::PeriodicGraph{D}, colliding) where D
         end
         sort!(nlist)
     end
-    I, subnodes = _extract_subnodes(neigh_per_v)
-    length(subnodes) == m && return I
+    subnodes = _extract_subnodes(neigh_per_v)
+    m > 4 && return Int[], Int8[]
+    priorities = get_priority(subgraph)
+    _order_collision!(priorities, subnodes)
+    return priorities
+end
 
-    m > 4 && return Int[]
-    return _order_collision(subgraph, subnodes)
+function order_collision(c::CollisionNode)
+    m = c.num
+    subgraph = SimpleGraph(collect(Edge(u, v) for (u, (v, _)) in edges(c.g) if u ≤ m && v ≤ m))
+    neigh_per_v = [Int[] for _ in 1:m]
+    for (i, nlist) in enumerate(neigh_per_v)
+        for (x, _) in neighbors(c.g, i)
+            x > m && push!(nlist, x)
+        end
+    end
+    subnodes = _extract_subnodes(neigh_per_v)
+    m > 4 && return Int[], Int8[]
+    priorities = get_priority(subgraph)
+    _order_collision!(priorities, subnodes)
+    return priorities
 end
 
 """
@@ -324,7 +290,7 @@ function CollisionNode(c::CollisionNode, rev_vmap)
     newgraph = c.g[newmap]
     n = nv(newgraph)
     @toggleassert n == length(sorted_neighbors) + l
-    neworder = order_collision(newgraph, 1:l)
+    neworder, _ = order_collision(newgraph, 1:l)
     @toggleassert !isempty(neworder)
     perm = collect(1:nv(newgraph))
     perm[1:l] = neworder
@@ -385,9 +351,7 @@ A net is still considered stable if the collisions in equilibrium placement cann
 different topological genomes. In practice, this happens when:
 A) there is no edge between two collision sites and
 B) there is no edge between a collision site and two representatives of the same vertex and
-C) for each collision site either:
-   α) the site is made of at most 4 vertices, or
-   β) no 2 vertices on the site share the same exact set of neighbours out of the site.
+C) for each collision site, the site is made of at most 4 vertices
 
 In this case, return the `CollisionNodeList` with the corresponding `CollisionNode`s, the
 list being empty if the net is truly stable. Otherwise, return `nothing`.
@@ -403,26 +367,15 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     # Check that conditions A, B and C are respected
     collision_vertices_set = BitSet(collision_vertices)
     for site in collision_sites
+        length(site) > 4 && return net, nothing # condition C
         known_neighbors = Dict{Int,SVector{D,Int}}()
-        known_nlist = Set{Vector{PeriodicVertex{D}}}()
-        uniquenlist = true # set while condition C)β) holds
         for u in site
-            this_nlist = PeriodicVertex{D}[]
             for x in neighbors(net.pge.g, u)
                 get!(known_neighbors, x.v, x.ofs) == x.ofs || return net, nothing # condition B
                 x.v ∈ site && continue
                 x.v ∈ collision_vertices_set && return net, nothing # condition A
-                uniquenlist && push!(this_nlist, x)
-            end
-            if uniquenlist
-                if this_nlist ∈ known_nlist
-                    uniquenlist = false
-                else
-                    push!(known_nlist, this_nlist)
-                end
             end
         end
-        !uniquenlist && length(site) > 4 && return net, nothing # condition C
     end
 
     # Reorder the vertices of the net so that those belonging to a collision node are

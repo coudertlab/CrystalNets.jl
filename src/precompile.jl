@@ -718,7 +718,7 @@ function _precompile_()
             @enforce precompile(Tuple{typeof(CrystalNets.shrink_collisions), cnet{D,T}, Vector{UnitRange{Int}}})
         end
     end
-    @enforce precompile(Tuple{typeof(CrystalNets._order_collision), SimpleGraph{Int}, Vector{Vector{Int}}})
+    @enforce precompile(Tuple{typeof(CrystalNets._order_collision!), Tuple{Vector{Int},Vector{Int8}}, Vector{Vector{Int}}})
     for D in 1:3
         @enforce precompile(Tuple{typeof(CrystalNets.order_collision), PeriodicGraph{D}, UnitRange{Int}})
     end
