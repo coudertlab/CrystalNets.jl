@@ -192,6 +192,43 @@ function _order_collision(subgraph, subnodes)
                      [only(subnodes[1]), only(subnodes[2]), xi, xj]
 end
 
+
+function _extract_subnodes(neigh_per_v::Vector{Vector{Int}})
+    I = sortperm(neigh_per_v; by=x->(length(x), x))
+    # subnodes is a list of sublists of colliding vertex indices, such that all indices in
+    # a sublist correspond to vertices sharing the same non-colliding neighbors.
+    # subnodes is sorted by the lexicographical order of the corersponding lists of neighbors.
+    subnodes = Vector{Int}[[I[1]]]
+    last_list = neigh_per_v[I[1]]
+    for _i in 2:length(I)
+        i = I[_i]
+        nlist = neigh_per_v[i]
+        if nlist == last_list
+            push!(last(subnodes), i)
+        else
+            push!(subnodes, [i])
+            last_list = nlist
+        end
+    end
+    I, subnodes
+end
+
+function _order_collision(c::CollisionNode)
+    m = c.num
+    subgraph = SimpleGraph(collect(Edge(u, v) for (u, (v, _)) in edges(c.g) if u ≤ m && v ≤ m))
+    neigh_per_v = [Int[] for _ in 1:m]
+    for (i, nlist) in enumerate(neigh_per_v)
+        for (x, _) in neighbors(c.g, i)
+            x > m && push!(nlist, x)
+        end
+    end
+    I, subnodes = _extract_subnodes(neigh_per_v)
+    length(subnodes) == m && return I
+
+    m > 4 && return Int[]
+    return _order_collision(subgraph, subnodes)
+end
+
 """
     order_collision(graph::PeriodicGraph, colliding)
 
@@ -220,22 +257,7 @@ function order_collision(graph::PeriodicGraph{D}, colliding) where D
         end
         sort!(nlist)
     end
-    I = sortperm(neigh_per_v)
-    # subnodes is a list of sublists of colliding vertex indices, such that all indices in
-    # a sublist correspond to vertices sharing the same non-colliding neighbors.
-    # subnodes is sorted by the lexicographical order of the corersponding lists of neighbors.
-    subnodes = Vector{Int}[[I[1]]]
-    last_list = neigh_per_v[I[1]]
-    for _i in 2:length(I)
-        i = I[_i]
-        nlist = neigh_per_v[i]
-        if nlist == last_list
-            push!(last(subnodes), i)
-        else
-            push!(subnodes, [i])
-            last_list = nlist
-        end
-    end
+    I, subnodes = _extract_subnodes(neigh_per_v)
     length(subnodes) == m && return I
 
     m > 4 && return Int[]
