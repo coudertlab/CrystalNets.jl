@@ -6,7 +6,7 @@ authors:
   - given-names: Lionel
     family-names: Zoubritzky
 repository-code: "https://github.com/coudertlab/CrystalNets.jl"
-url: "http://molsim.info/CrystalNets.jl/"
+url: "https://molsim.info/CrystalNets.jl/"
 license: MIT
 version: 1.0.0
 identifiers:
