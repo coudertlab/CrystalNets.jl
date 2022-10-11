@@ -1146,7 +1146,7 @@ function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vec
                 end
                 bonds = guess_bonds(pos, types, mat, options)
                 guessed_bonds = true
-                graph = PeriodicGraph3D(n, edges_from_bonds(bonds, mat, pos))
+                graph = PeriodicGraph3D(length(types), edges_from_bonds(bonds, mat, pos))
             end
             invalidatoms = fix_valence!(graph, pos, types, passH, passO, passCN, mat, Val(true), options)
             remaining_not_fixed = !isempty(invalidatoms)
@@ -1170,7 +1170,7 @@ function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vec
         export_default(crystalnothing, "input", name, options.export_input)
         return crystalnothing
     else
-        crystalclusters = Crystal{Clusters}(cell, types, regroup_sbus(graph, attributions),
+        crystalclusters = Crystal{Clusters}(cell, types, first(regroup_sbus(graph, attributions)),
                                             pos, graph, options)
         export_default(crystalclusters, "input", name, options.export_input)
         return crystalclusters
