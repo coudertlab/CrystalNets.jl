@@ -170,7 +170,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     @test string(fowwar) == "Standard: UNKNOWN 3 1 1 0 0 1 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 2 5 0 0 0 2 6 0 0 0 3 6 0 0 0 3 7 0 0 0 4 5 1 0 0 4 7 0 -1 0 5 5 0 1 1 5 8 0 0 0 6 6 0 0 1 6 8 0 1 0 7 7 0 1 1 7 8 1 1 0"
 
     # Test non-periodic input
-    calfig = determine_topology(joinpath(cifs, "CALFIG.cif"); kwargs...)
+    calfig = determine_topology(joinpath(cifs, "CALFIG.cif"); kwargs..., clusterings=[Clustering.Auto])
     @test string(calfig) == "non-periodic"
 end
 
