@@ -753,20 +753,37 @@ function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
     ret = Vector{CrystalNet{D}}(undef, length(crystals))
     encountered = Dict{PeriodicGraph3D,Int}()
     idx = 1
+    clusts = falses(length(instances(Clustering._Clustering)))
     for c in crystals
         clustering = only(c.options.clusterings)
+        k = Int(clustering)
+        if clusts[k]
+            resize!(ret, length(ret)-1)
+            continue
+        end
+        clusts[k] = true
         structure = c.options.structure
         if clustering == Clustering.Auto && (structure == StructureType.MOF || structure == StructureType.Cluster)
+            hadalln = clusts[Int(Clustering.AllNodes)]
+            hadsinglen = clusts[Int(Clustering.SingleNodes)]
+            resize!(ret, length(ret)+1-hadalln-hadsinglen)
+            hadalln && hadsinglen && continue
             alln = Crystal{Nothing}(c; clusterings=[Clustering.AllNodes])
-            pge = PeriodicGraphEmbedding(c.pge.g, c.pge.pos, c.pge.cell)
-            singlen = allnodes_to_singlenodes(Crystal{Nothing}(pge, c.types, Options(c.options; clusterings=[Clustering.SingleNodes])))
-            resize!(ret, length(ret)+1)
-            _collect_net!(ret, encountered, idx, alln, Clustering.AllNodes)
-            _collect_net!(ret, encountered, idx+1, singlen, Clustering.SingleNodes)
-            idx += 1
+            if !hadalln
+                clusts[Int(Clustering.AllNodes)] = true
+                _collect_net!(ret, encountered, idx, alln, Clustering.AllNodes)
+                idx += 1
+            end
+            if !hadsinglen
+                clusts[Int(Clustering.SingleNodes)] = true
+                pge = PeriodicGraphEmbedding(c.pge.g, c.pge.pos, c.pge.cell)
+                singlen = allnodes_to_singlenodes(Crystal{Nothing}(pge, c.types, Options(c.options; clusterings=[Clustering.SingleNodes])))
+                _collect_net!(ret, encountered, idx, singlen, Clustering.SingleNodes)
+                idx += 1
+            end
         elseif clustering == Clustering.PE
             _collect_net!(ret, encountered, idx, pem_to_pe(c), clustering)
-        elseif clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNode ∘ PEM
+        elseif clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNodes ∘ PEM
             _collect_net!(ret, encountered, idx, allnodes_to_singlenodes(c), clustering)
         else
             _collect_net!(ret, encountered, idx, c, clustering)
@@ -836,7 +853,9 @@ function UnderlyingNets(c::Crystal)
         return groups
     end
     @repeatgroups begin
-        for (vmap, component) in components[D]
+        for (i, (vmap, comp)) in enumerate(components[D])
+            component = Crystal(comp.pge, comp.types, comp.clusters,
+                                Options(comp.options; name=string(comp.options.name,'_',i)))
             crystals = collapse_clusters(component)
             nets = collect_nets(crystals, Val(D))
             push!(groups, (vmap, nets))
