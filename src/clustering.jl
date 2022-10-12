@@ -1957,7 +1957,7 @@ function allnodes_to_singlenodes(cryst::Crystal{Nothing})
             end
         end
     end
-    clustername = only(cryst.options.clusterings) == Clustering.Standard ? "standard" : "singlenodes"
+    clustername = only(cryst.options.clusterings) == Clustering.Standard ? "Standard" : "SingleNodes"
     if !any(organics)
         c = trimmed_crystal(cryst)
         export_default(c, lazy"clusters_$clustername", c.options.name, c.options.export_clusters)

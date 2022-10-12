@@ -86,13 +86,16 @@ function tmpexportname(path, pre, name, ext)
     if name isa Nothing
         return tempname(path; cleanup=false)*ext
     end
-    i = 0
-    pre = pre*(name::String)*'_'
-    x = pre*string(i)*ext
+    pre0 = pre*(name::String)
+    fastpath = joinpath(path, pre0*ext)
+    ispath(fastpath) || return fastpath
     paths = Set{String}(readdir(path; sort=false, join=false))
+    i = 1
+    pre1 = pre0*"_other"
+    x = pre1*string(i)*ext
     while x ∈ paths
         i += 1
-        x = pre*string(i)*ext
+        x = pre1*string(i)*ext
     end
     return joinpath(path, x)
 end
