@@ -779,8 +779,8 @@ function collect_nets(crystals::Vector{Crystal{Nothing}}, ::Val{D}) where D
                 pge = PeriodicGraphEmbedding(c.pge.g, c.pge.pos, c.pge.cell)
                 singlen = allnodes_to_singlenodes(Crystal{Nothing}(pge, c.types, Options(c.options; clusterings=[Clustering.SingleNodes])))
                 _collect_net!(ret, encountered, idx, singlen, Clustering.SingleNodes)
-                idx += 1
             end
+            !hadalln && hadsinglen && (idx -= 1)
         elseif clustering == Clustering.PE
             _collect_net!(ret, encountered, idx, pem_to_pe(c), clustering)
         elseif clustering == Clustering.SingleNodes || clustering == Clustering.Standard # Standard = SingleNodes ∘ PEM
