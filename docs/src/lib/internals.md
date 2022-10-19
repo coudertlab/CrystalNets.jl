@@ -85,7 +85,6 @@ CrystalNets.allnodes_to_singlenodes
 CrystalNets.shrink_collisions
 CrystalNets.order_collision
 CrystalNets.expand_collisions
-CrystalNets.CollisionNode(graph::PeriodicGraph, node::UnitRange{Int}, vmap=nothing)
 CrystalNets.collision_nodes
 ```
 

@@ -211,12 +211,13 @@ end
     Threads.@threads for target in targets
         @info "Testing $target"
         graph = PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE[target])
-        n = PeriodicGraphs.nv(graph)
-        for k in 1:50
+        for k in 1:10
+            superg = make_supercell(graph, max.(1, rand(0:3, 3)))
+            n = PeriodicGraphs.nv(superg)
             r = randperm(n)
             offsets = [SVector{3,Int}([rand(-3:3) for _ in 1:3]) for _ in 1:n]
-            graph = swap_axes!(offset_representatives!(graph[r], offsets), randperm(3))
-            if topological_genome(CrystalNet(graph)).name != target
+            newgraph = swap_axes!(offset_representatives!(superg[r], offsets), randperm(3))
+            if topological_genome(CrystalNet(newgraph)).name != target
                 lock(failurelock) do
                     failures += 1
                     @error "$target failed (Module) with g = $(string(graph))"

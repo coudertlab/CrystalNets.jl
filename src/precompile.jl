@@ -378,7 +378,7 @@ function _precompile_()
     unets = CrystalNets.UnderlyingNets
     genome = CrystalNets.TopologicalGenome
     result = CrystalNets.TopologyResult
-    collisions = Vector{CrystalNets.CollisionNode}
+    collisions = CrystalNets.CollisionList
     collision = CrystalNets.CollisionNode
     smat{D,T,L} = SMatrix{D,D,Rational{T},L}
 
@@ -722,15 +722,12 @@ function _precompile_()
     for D in 1:3
         @enforce precompile(Tuple{typeof(CrystalNets.order_collision), PeriodicGraph{D}, UnitRange{Int}})
     end
-    @enforce precompile(Tuple{typeof(CrystalNets.collision_utils), Vector{collision}, Int, Nothing})
-    @enforce precompile(Tuple{typeof(CrystalNets.collision_utils), Vector{collision}, Int, Vector{Int}})
-    @enforce precompile(Tuple{typeof(CrystalNets.collision_utils), Vector{collision}, Int})
-    @enforce precompile(Tuple{typeof(CrystalNets.collision_utils), Vector{collision}, Vector{Int}})
+    @enforce precompile(Tuple{typeof(CrystalNets.collision_utils), collisions, Vector{Int}})
     for D in 1:3
-        @enforce precompile(Tuple{typeof(CrystalNets.expand_collisions), Vector{collision}, PeriodicGraph{D}, Vector{Int}})
+        @enforce precompile(Tuple{typeof(CrystalNets.expand_collisions), collisions, PeriodicGraph{D}, Vector{Int}})
         @enforce precompile(Tuple{typeof(CrystalNets.unsorted_node), PeriodicGraph{D}, UnitRange{Int}})
-        @enforce precompile(Tuple{Type{collision}, PeriodicGraph{D}, UnitRange{Int}, Nothing})
-        @enforce precompile(Tuple{Type{collision}, PeriodicGraph{D}, UnitRange{Int}})
+        # @enforce precompile(Tuple{Type{collision}, PeriodicGraph{D}, UnitRange{Int}, Nothing})
+        # @enforce precompile(Tuple{Type{collision}, PeriodicGraph{D}, UnitRange{Int}})
     end
     @enforce precompile(Tuple{Type{collision}, collision, Vector{Int}})
     for D in 1:3
@@ -742,15 +739,15 @@ function _precompile_()
 
     # topology.jl
     for D in 1:3
-        @enforce precompile(Tuple{Type{CrystalNets.CheckSymmetryWithCollisions}, Vector{collision}})
+        @enforce precompile(Tuple{Type{CrystalNets.CheckSymmetryWithCollisions}, collisions})
         for T in reverse(inttypes)
             @enforce precompile(Tuple{CrystalNets.CheckSymmetryWithCollisions, pge{D,T}, SVector{D,T}, Nothing, Nothing})
             @enforce precompile(Tuple{typeof(CrystalNets.check_dimensionality), cnet{D,T}})
             @enforce precompile(Tuple{typeof(CrystalNets.possible_translations), cnet{D,T}})
-            @enforce precompile(Tuple{typeof(CrystalNets.find_all_valid_translations), cnet{D,T}, Vector{collision}})
+            @enforce precompile(Tuple{typeof(CrystalNets.find_all_valid_translations), cnet{D,T}, collisions})
             @enforce precompile(Tuple{typeof(CrystalNets.minimal_volume_matrix), NTuple{D, Vector{Tuple{Int,Int,pos{D,T}}}}})
-            @enforce precompile(Tuple{typeof(CrystalNets.reduce_with_matrix), cnet{D,T}, smat{D,T,D*D}, Vector{collision}})
-            @enforce precompile(Tuple{typeof(CrystalNets.minimize), cnet{D,T}, Vector{collision}})
+            @enforce precompile(Tuple{typeof(CrystalNets.reduce_with_matrix), cnet{D,T}, smat{D,T,D*D}, collisions})
+            @enforce precompile(Tuple{typeof(CrystalNets.minimize), cnet{D,T}, collisions})
             @enforce precompile(Tuple{typeof(CrystalNets.findfirstbasis), ppos{D,T}})
             @enforce precompile(Tuple{typeof(CrystalNets.findbasis), Vector{Tuple{Int,Int,pos{D,T}}}})
             @enforce precompile(Tuple{typeof(CrystalNets.candidate_key), cnet{D,T}, Int, smat{D,T,D*D}, Vector{Tuple{Int,Int,pos{D,T}}}})
@@ -770,8 +767,8 @@ function _precompile_()
         @enforce precompile(Tuple{typeof(CrystalNets.extract_through_symmetry), Dict{Int,Vector{smat{3,T,9}}}, NoSymmetryGroup})
         @enforce precompile(Tuple{typeof(CrystalNets.extract_through_symmetry), Dict{Int,Vector{smat{3,T,9}}}, symmgroup{T}})
         for D in 1:3
-            @enforce precompile(Tuple{typeof(CrystalNets.find_candidates), cnet{D,T}, Vector{collision}})
-            @enforce precompile(Tuple{typeof(CrystalNets.topological_key), cnet{D,T}, Vector{collision}})
+            @enforce precompile(Tuple{typeof(CrystalNets.find_candidates), cnet{D,T}, collisions})
+            @enforce precompile(Tuple{typeof(CrystalNets.topological_key), cnet{D,T}, collisions})
             @enforce precompile(Tuple{typeof(CrystalNets.topological_key), cnet{D,T}})
         end
     end
@@ -780,13 +777,13 @@ function _precompile_()
     @enforce precompile(Tuple{typeof(CrystalNets.recognize_topology), String, Dict{String,String}})
     @enforce precompile(Tuple{typeof(CrystalNets.recognize_topology), String})
     for T in inttypes
-        @enforce precompile(Tuple{typeof(CrystalNets.topological_genome), cnet{0,T}, Vector{collision}})
+        @enforce precompile(Tuple{typeof(CrystalNets.topological_genome), cnet{0,T}, collisions})
     end
     for D in 1:3
         @enforce precompile(Tuple{typeof(CrystalNets.recognize_topology), PeriodicGraph{D}, Dict{String,String}})
         @enforce precompile(Tuple{typeof(CrystalNets.recognize_topology), PeriodicGraph{D}})
         for T in reverse(inttypes)
-            @enforce precompile(Tuple{typeof(CrystalNets.topological_genome), cnet{D,T}, Vector{collision}})
+            @enforce precompile(Tuple{typeof(CrystalNets.topological_genome), cnet{D,T}, collisions})
             @enforce precompile(Tuple{typeof(CrystalNets.topological_genome), cnet{D,T}})
         end
     end

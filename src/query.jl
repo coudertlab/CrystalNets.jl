@@ -19,7 +19,7 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
     end
     shrunk_net, _collisions = collision_nodes(net)
     _collisions isa Nothing && return TopologicalGenome(net.pge.g, nothing, true)
-    collisions::Vector{CollisionNode} = _collisions
+    collisions::CollisionList = _collisions
 
     if !net.options.skip_minimize
         flag = true
@@ -50,7 +50,7 @@ end
 
 topological_genome(net::CrystalNet{0,T}) where {T} = TopologicalGenome(net.options.error)
 
-function topological_genome(net::CrystalNet{D,T}, collisions::Vector{CollisionNode})::TopologicalGenome where {D,T}
+function topological_genome(net::CrystalNet{D,T}, collisions::CollisionList)::TopologicalGenome where {D,T}
     try
         g::PeriodicGraph{D} = topological_key(net, collisions)
         unstable = g.width[] == -2

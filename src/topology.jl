@@ -234,9 +234,9 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     end
 
     imat = T.(inv(mat)) # The inverse should only have integer coefficients
-    poscol = (imat,) .* c.pge.pos
+    poscol = (imat,) .* c.pge.pos # position in the new reference, will be in [0,1)
     n = length(poscol)
-    offset = Vector{SVector{D,Int}}(undef, n)
+    offset = Vector{SVector{D,Int}}(undef, n) # offsets in the new reference
     for (i, pos) in enumerate(poscol)
         ofs = floor.(Int, pos)
         offset[i] = ofs
@@ -245,6 +245,10 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     I_sort = sort(1:n; by=i->(poscol[i], hash_position(offset[i])))
     _i = popfirst!(I_sort)
     @toggleassert iszero(offset[_i])
+
+    # I_kept is the list of index of the vertices kept in the extracted subnet, in the
+    # order in which they will appear in that subnet. This order corresponds to that which
+    # sorts the vertices by position, then puts unstable nodes at the end.
     I_kept = Int[_i]
     last_sortedcol = poscol[_i]
 
@@ -271,12 +275,16 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
             end
         end
         I_kept = I_kept[reorder]
+        reverse!(@view I_kept[end-idx+1:end])
     end
 
     sortedcol = SVector{D,Rational{T}}[SVector{D,Rational{T}}(poscol[i]) for i in I_kept]
+    # @toggleassert allunique(sortedcol)
 
-    vmap = Vector{Int}(undef, n)
+    local vmap::Vector{Int}
     if isempty(collisions) # implies issorted(sortedcol)
+        vmap = Vector{Int}(undef, n)
+        # @toggleassert issorted(sortedcol)
         for (i, pos) in enumerate(poscol)
             j = searchsortedfirst(sortedcol, pos)
             @toggleassert j <= length(sortedcol) && sortedcol[j] == pos
@@ -284,28 +292,26 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
         end
     else
         rev_dict = Dict{SVector{D,Rational{T}},Int}(pos => j for (j, pos) in enumerate(sortedcol))
-        for (i, pos) in enumerate(poscol)
-            vmap[i] = rev_dict[pos]
-        end
+        vmap = [rev_dict[pos] for pos in poscol]
     end
 
     edges = PeriodicEdge{D}[]
     for i in 1:length(I_kept)
-        ofs_i = offset[I_kept[i]]
-        for neigh in neighbors(c.pge.g, I_kept[i])
+        img = I_kept[i]
+        ofs_i = offset[img]
+        for neigh in neighbors(c.pge.g, img)
             ofs_x = offset[neigh.v]
             push!(edges, (i, vmap[neigh.v], ofs_x - ofs_i .+ imat*neigh.ofs))
         end
     end
 
-    newcollisions = [CollisionNode(collisions[i], vmap) for i in kept_collisions]
+    newcollisions = CollisionList(collisions, vmap, I_kept, kept_collisions)
     for newnode in newcollisions
         if !allunique(newnode.neighs)
             # contravenes rule B of collision_nodes(::CrystalNet))
             return c, nothing
         end
     end
-    # @show newcollisions
 
     graph = PeriodicGraph{D}(edges)
     return CrystalNet{D,Rational{T}}(cell, c.types[I_kept], sortedcol, graph, c.options), newcollisions
@@ -321,15 +327,15 @@ If `collisions` is given, also return the corresponding collisions after minimiz
 The computed unit cell may depend on the representation of the input, i.e. it is not
 topologicallly invariant.
 """
-function minimize(net::CrystalNet, collisions::Vector{CollisionNode})
+function minimize(net::CrystalNet, collisions::CollisionList)
     translations = find_all_valid_translations(net, collisions)
     all(isempty.(translations)) && return net, collisions
     mat = minimal_volume_matrix(translations)
     _net, collisions = reduce_with_matrix(net, mat, collisions)
-    collisions isa Vector{CollisionNode} && @toggleassert all(isempty.(find_all_valid_translations(_net, collisions)))
+    collisions isa CollisionList && @toggleassert all(isempty.(find_all_valid_translations(_net, collisions)))
     return _net, collisions
 end
-minimize(net::CrystalNet) = minimize(net, CollisionNode[])[1]
+minimize(net::CrystalNet) = minimize(net, CollisionList(net.pge.g, UnitRange{Int}[]))[1]
 
 """
     findfirstbasis(offsets::AbstractVector{<:StaticVector{N,<:Rational{T}}}) where {N,T})
@@ -549,9 +555,10 @@ function partition_by_coordination_sequence(graph, symmetries::AbstractSymmetryG
 end
 
 struct CheckSymmetryWithCollisions
-    collisions::Vector{CollisionNode}
+    collisions::CollisionList
 end
 function (cswc::CheckSymmetryWithCollisions)(pge::PeriodicGraphEmbedding{D,T}, t::SVector{D,T}, r, vtypes) where {D,T}
+    # TODO: take priority into account
     collisions = cswc.collisions
     vmap = check_valid_symmetry(pge, t, r, vtypes, isempty(collisions))
     (vmap isa Nothing || isempty(collisions)) && return vmap
@@ -580,7 +587,7 @@ Also return a `category_map` linking each vertex to its category number, as defi
 
 See also: [`candidate_key`](@ref)
 """
-function find_candidates(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}) where {D,T}
+function find_candidates(net::CrystalNet{D,T}, collisions::CollisionList) where {D,T}
     L = D*D
     if D == 3
         check_symmetry = CheckSymmetryWithCollisions(collisions)
@@ -959,10 +966,10 @@ function topological_key(net::CrystalNet{D}) where D
         net.pge.g.width[] = -2 # internal error code
         return net.pge.g
     end
-    return topological_key(newnet, collisions::Vector{CollisionNode})
+    return topological_key(newnet, collisions::CollisionList)
 end
 
-function topological_key(net::CrystalNet{D,T}, collisions::Vector{CollisionNode}) where {D,T}
+function topological_key(net::CrystalNet{D,T}, collisions::CollisionList) where {D,T}
     candidates, category_map = find_candidates(net, collisions)
     v, minimal_basis = popfirst!(candidates)
     n = length(net.pge)
