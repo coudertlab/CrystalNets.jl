@@ -23,56 +23,17 @@ function capture_out(name)
     return result, written
 end
 
-const safeARCHIVE = deepcopy(CrystalNets.CRYSTAL_NETS_ARCHIVE)
-const safeREVERSE = deepcopy(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
+const safeARCHIVE = deepcopy(CrystalNets.CRYSTALNETS_ARCHIVE)
+const safeREVERSE = deepcopy(CrystalNets.REVERSE_CRYSTALNETS_ARCHIVE)
 function __reset_archive!(safeARCHIVE, safeREVERSE)
-    empty!(CrystalNets.CRYSTAL_NETS_ARCHIVE)
-    empty!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE)
-    merge!(CrystalNets.CRYSTAL_NETS_ARCHIVE, safeARCHIVE)
-    merge!(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE, safeREVERSE)
+    empty!(CrystalNets.CRYSTALNETS_ARCHIVE)
+    empty!(CrystalNets.REVERSE_CRYSTALNETS_ARCHIVE)
+    merge!(CrystalNets.CRYSTALNETS_ARCHIVE, safeARCHIVE)
+    merge!(CrystalNets.REVERSE_CRYSTALNETS_ARCHIVE, safeREVERSE)
     nothing
 end
 
 import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
-
-
-# @testset "Unstable nets" begin
-#     minimize_to_unstable = PeriodicGraph("2 1 1 0 1 1 3 0 0 1 4 0 0 1 5 0 0 1 6 0 0 2 2 0 1 2 3 1 0 2 4 1 0 2 5 0 0 2 6 0 0")
-#     net_minimize_to_unstable = topological_genome(CrystalNet(minimize_to_unstable))
-#     @test string(net_minimize_to_unstable) == "unstable 2"
-
-
-#     mini1 = PeriodicGraph2D(PeriodicGraph("1  1 2 0  1 3 0  5 2 0  5 3 0  2 3 1"))
-#     mini2 = PeriodicGraph("2  1 4 0 0  1 2 0 0  1 3 0 0  2 3 0 1  4 5 0 0  4 6 0 0  5 6 1 0")
-#     mini3_3 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
-#     mini3_2 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
-#     small = PeriodicGraph("3 1 2 1 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 1 6 0 0 0 1 7 0 0 0 2 3 0 0 0 2 4 0 0 0 2 5 0 0 0 2 6 0 0 0 2 7 0 0 0 3 4 0 1 0 3 5 0 0 0 3 6 0 0 0 3 8 0 0 0 4 5 0 0 0 4 6 0 0 0 4 8 0 0 0 5 6 0 0 1 5 9 0 0 0 6 9 0 0 0 7 8 0 0 0 8 9 0 0 0")
-
-#     unstabletry = Union{PeriodicGraph2D,PeriodicGraph3D}[minimize_to_unstable, mini3_2, mini3_3, small]
-
-#     failurelock = ReentrantLock()
-#     failures = 0
-#     Threads.@threads for graph in unstabletry
-#         genome = topological_genome(CrystalNet(graph))
-#         @test !genome.unstable
-#         for k in 1:10
-#             supercell = make_supercell(graph, rand(1:3, 3))
-#             n = nv(supercell)
-#             r = randperm(n)
-#             offsets = [SVector{3,Int}([rand(-3:3) for _ in 1:3]) for _ in 1:n]
-#             newgraph = swap_axes!(offset_representatives!(supercell[r], offsets), randperm(3))
-#             if topological_genome(CrystalNet(newgraph)) != genome
-#                 lock(failurelock) do
-#                     failures += 1
-#                     @error "Unstable graph $graph failed (Module) with g = $(string(newgraph))"
-#                 end
-#                 break
-#             end
-#         end
-#     end
-#     Test.get_testset().n_passed += length(unstabletry) - failures
-#     @test failures == 0
-# end
 
 @testset "MOF examples" begin
     cifs, crystalnetsdir = _finddirs()
@@ -89,7 +50,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
 
         jxust1 = mofdataset["JXUST-1.cif"]
         @test jxust1[SingleNodes] == jxust1[AllNodes]
-        @test PeriodicGraph(jxust1[SingleNodes]) == PeriodicGraph(REVERSE_CRYSTAL_NETS_ARCHIVE["pcu"])
+        @test PeriodicGraph(jxust1[SingleNodes]) == PeriodicGraph(REVERSE_CRYSTALNETS_ARCHIVE["pcu"])
 
         mil53 = mofdataset["MIL-53.cif"]
         @test string(mil53[SingleNodes]) == mil53[Standard].name == "bpq"
@@ -177,7 +138,7 @@ end
 @testset "Archive" begin
     @info "Checking that all known topologies are recognized (this can take a few minutes)."
     Threads.nthreads() == 1 && @info "Use multiple threads to reduce this time"
-    reverse_archive = collect(CrystalNets.CRYSTAL_NETS_ARCHIVE)
+    reverse_archive = collect(CrystalNets.CRYSTALNETS_ARCHIVE)
     failurelock = ReentrantLock()
     failures = 0
     Threads.@threads for (genome, id) in reverse_archive
@@ -189,12 +150,8 @@ end
         end
         if !test
             lock(failurelock) do
-                if id == "lth"
-                    @warn "Expected failure: lth (Archive)"
-                else
-                    failures += 1
-                    @error "$id failed (Archive)"
-                end
+                failures += 1
+                @error "$id failed (Archive)"
             end
         end
     end
@@ -205,15 +162,15 @@ end
 @testset "Module" begin
     targets = ["pcu", "afy, AFY", "apc, APC", "bam", "bcf", "cdp", "cnd", "ecb", "fiv",
     "ftd", "ftj", "ins", "kgt", "mot", "moz", "muh", "pbz", "qom", "sig",
-    "sma", "sod-f", "sod-h", "utj", "utp", "nts"#=, "lth"=#]
+    "sma", "sod-f", "sod-h", "utj", "utp", "nts", "lth"]
     failurelock = ReentrantLock()
     failures = 0
     Threads.@threads for target in targets
         @info "Testing $target"
-        graph = PeriodicGraph(CrystalNets.REVERSE_CRYSTAL_NETS_ARCHIVE[target])
+        graph = PeriodicGraph(CrystalNets.REVERSE_CRYSTALNETS_ARCHIVE[target])
         for k in 1:10
-            superg = make_supercell(graph, max.(1, rand(0:3, 3)))
-            n = PeriodicGraphs.nv(superg)
+            superg = make_supercell(graph, clamp.(rand(0:fld(30, nv(graph)), 3), 1, 5))
+            n = nv(superg)
             r = randperm(n)
             offsets = [SVector{3,Int}([rand(-3:3) for _ in 1:3]) for _ in 1:n]
             newgraph = swap_axes!(offset_representatives!(superg[r], offsets), randperm(3))
@@ -236,7 +193,7 @@ end
 
 # # The following testset is too long to be run on CI
 # @testset "Full-randomization test 3D" begin
-#     reverse_archive3D = Tuple{String,String}[(g, id) for (g, id) in CrystalNets.CRYSTAL_NETS_ARCHIVE if g[1] == '3']
+#     reverse_archive3D = Tuple{String,String}[(g, id) for (g, id) in CrystalNets.CRYSTALNETS_ARCHIVE if g[1] == '3']
 #     failurelock = ReentrantLock()
 #     failures = 0
 #     Threads.@threads for (genome, id) in reverse_archive3D
@@ -394,50 +351,40 @@ end
     end
 end
 
-#=
-@testset "Collision node canonicalization" begin
-    for n in 2:4
-        for m in 0:div(n*(n-1), 2)
-            @info "Testing collision node canonicalization for n = $n; m = $m"
-            seen = Set{String}()
-            for _ in 1:500
-                g = SimpleGraph(n, m)
-                strg = string(g)
-                strg in seen && continue
-                push!(seen, strg)
-                seencolors = Set{Vector{Int}}()
-                seensubnodes = Set{Vector{Vector{Int}}}()
-                for _ in 1:300
-                    colors = rand(1:n, n)
-                    sort!(colors) # allowed since the order of vertices is random
-                    colors ∈ seencolors && continue
-                    push!(seencolors, colors)
-                    subnodes = [Int[] for _ in 1:n]
-                    for i in 1:n
-                        push!(subnodes[colors[i]], i)
-                    end
-                    filter!(!isempty, subnodes)
-                    length(subnodes) == n && continue
-                    subnodes ∈ seensubnodes && continue
-                    push!(seensubnodes, subnodes)
-                    perm, priority = CrystalNets.get_priority(g)
-                    CrystalNets._order_collision!((perm, priority), subnodes)
-                    sig = g[perm]
-                    for r in permutations(1:n)
-                        newcolors = colors[r]
-                        newsubnodes = [Int[] for _ in 1:n]
-                        for i in 1:n
-                            push!(newsubnodes[newcolors[i]], i)
-                        end
-                        filter!(!isempty, newsubnodes)
-                        g2 = g[r]
-                        perm2, priority2 = CrystalNets.get_priority(g2)
-                        CrystalNets._order_collision!((perm2, priority2), newsubnodes)
-                        @test sig == g2[perm2]
-                    end
+@testset "Unstable nets" begin
+    minimize_to_unstable = PeriodicGraph("2 1 1 0 1 1 3 0 0 1 4 0 0 1 5 0 0 1 6 0 0 2 2 0 1 2 3 1 0 2 4 1 0 2 5 0 0 2 6 0 0")
+    net_minimize_to_unstable = topological_genome(CrystalNet(minimize_to_unstable))
+    @test string(net_minimize_to_unstable) == "unstable 2"
+
+
+    mini2 = PeriodicGraph("2  1 4 0 0  1 2 0 0  1 3 0 0  2 3 0 1  4 5 0 0  4 6 0 0  5 6 1 0")
+    mini3_3 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
+    mini3_2 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
+    small = PeriodicGraph("3 1 2 1 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 1 6 0 0 0 1 7 0 0 0 2 3 0 0 0 2 4 0 0 0 2 5 0 0 0 2 6 0 0 0 2 7 0 0 0 3 4 0 1 0 3 5 0 0 0 3 6 0 0 0 3 8 0 0 0 4 5 0 0 0 4 6 0 0 0 4 8 0 0 0 5 6 0 0 1 5 9 0 0 0 6 9 0 0 0 7 8 0 0 0 8 9 0 0 0")
+
+    unstabletry = Union{PeriodicGraph2D,PeriodicGraph3D}[mini2, mini3_2, mini3_3, small]
+
+    failurelock = ReentrantLock()
+    failures = 0
+    Threads.@threads for graph in unstabletry
+        genome = topological_genome(CrystalNet(graph))
+        @test !genome.unstable
+        N = ndims(graph)
+        for k in 1:40
+            supercell = make_supercell(graph, rand(1:3, N))
+            n = nv(supercell)
+            r = randperm(n)
+            offsets = [SVector{N,Int}([rand(-3:3) for _ in 1:N]) for _ in 1:n]
+            newgraph = swap_axes!(offset_representatives!(supercell[r], offsets), randperm(N))
+            if topological_genome(CrystalNet(newgraph)) != genome
+                lock(failurelock) do
+                    failures += 1
+                    @error "Unstable graph $graph failed (Module) with g = $(string(newgraph))"
                 end
+                break
             end
         end
     end
+    Test.get_testset().n_passed += length(unstabletry) - failures
+    @test failures == 0
 end
-=#
