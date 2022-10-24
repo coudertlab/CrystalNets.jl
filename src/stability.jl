@@ -71,42 +71,17 @@ the net
 """
 struct CollisionList <: AbstractVector{CollisionNode}
     list::Vector{CollisionNode}
-    priorities::Vector{Union{Vector{Int8},EmptyList{Int8}}}
 end
 
 Base.size(cl::CollisionList) = (length(cl.list),)
 Base.getindex(cl::CollisionList, i::Int) = cl.list[i]
 
 function CollisionList(g::PeriodicGraph, collision_ranges::Vector{UnitRange{Int}})
-    priorities = Union{Vector{Int8},EmptyList{Int8}}[EmptyList{Int8}() for _ in 1:nv(g)]
-    list = Vector{CollisionNode}(undef, length(collision_ranges))
-    for (k, node) in enumerate(collision_ranges)
-        newnode = CollisionNode(unsorted_node(g, node), nothing)
-        list[k] = newnode
-        perm, ps = order_collision(newnode)
-        @toggleassert perm == 1:length(perm)
-        for i in 1:newnode.num
-            p = ps[i]
-            for (j, _) in neighbors(newnode.g, i)
-                plist = priorities[j]
-                if plist isa EmptyList
-                    priorities[j] = [p]
-                else
-                    push!(plist, p)
-                end
-            end
-        end
-    end
-    for x in priorities
-        x isa Vector{Int8} && sort!(x)
-    end
-    return CollisionList(list, priorities)
+    return CollisionList([CollisionNode(unsorted_node(g, node), nothing) for node in collision_ranges])
 end
 
-function CollisionList(collisions::CollisionList, vmap::Vector{Int}, I_kept::Vector{Int}, kept_collisions::Vector{Int})
-    list = [CollisionNode(collisions.list[i], vmap) for i in kept_collisions]
-    priorities = collisions.priorities[I_kept]
-    return CollisionList(list, priorities)
+function CollisionList(collisions::CollisionList, vmap::Vector{Int}, kept_collisions::Vector{Int})
+    return CollisionList([CollisionNode(collisions.list[i], vmap) for i in kept_collisions])
 end
 
 """

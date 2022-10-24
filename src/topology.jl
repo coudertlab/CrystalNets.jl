@@ -305,7 +305,7 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
         end
     end
 
-    newcollisions = CollisionList(collisions, vmap, I_kept, kept_collisions)
+    newcollisions = CollisionList(collisions, vmap, kept_collisions)
     for newnode in newcollisions
         if !allunique(newnode.neighs)
             # contravenes rule B of collision_nodes(::CrystalNet))
@@ -559,7 +559,6 @@ struct CheckSymmetryWithCollisions
     collisions::CollisionList
 end
 function (cswc::CheckSymmetryWithCollisions)(pge::PeriodicGraphEmbedding{D,T}, t::SVector{D,T}, r, vtypes) where {D,T}
-    # TODO: take priority into account
     collisions = cswc.collisions
     vmap = check_valid_symmetry(pge, t, r, vtypes, isempty(collisions))
     (vmap isa Nothing || isempty(collisions)) && return vmap
