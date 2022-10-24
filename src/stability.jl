@@ -140,9 +140,10 @@ function shrink_collisions(net::CrystalNet{D,T}, collision_ranges::Vector{UnitRa
     newpos = net.pge.pos[1:first_colliding]
     append!(newpos, net.pge.pos[first(collision_ranges[i])] for i in 2:m)
     newtypes = net.types[1:first_colliding-1]
-    append!(newtypes, :* for i in 1:m) # type of collision nodes will be Symbol('*')
+    append!(newtypes, :* for i in 1:m) # type of collision nodes will be Symbol("*")
+    opts = permute_mapping(net.options, collision_vmap)
 
-    return CrystalNet{D,T}(net.pge.cell, newtypes, newpos, newgraph, net.options)
+    return CrystalNet{D,T}(net.pge.cell, newtypes, newpos, newgraph, opts)
 end
 
 macro makepriority(n)
@@ -451,7 +452,8 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
 
     @toggleassert iszero(first(net.pge.pos))
 
-    newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, net.options)
+    opts = rev_permute_mapping(net.options, vmap, length(net.types))
+    newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, opts)
     # newnodes = [CollisionNode(newnet.pge.g, node) for node in collision_ranges]
     newnodes = CollisionList(newnet.pge.g, collision_ranges)
     return shrink_collisions(newnet, collision_ranges), newnodes
@@ -492,6 +494,8 @@ Return the resulting graph.
 
 `vmap` is the map of vertices between `initial_graph` (with collapsed collision nodes) and
 `graph`
+
+Also return the permutations of nodes of `graph` prior to expansion.
 """
 function expand_collisions(collisions::CollisionList, graph::PeriodicGraph{D}, vmap) where D
     n, num_withcolliding, num_nocolliding, collisions = collision_utils(collisions, vmap)
@@ -546,5 +550,5 @@ function expand_collisions(collisions::CollisionList, graph::PeriodicGraph{D}, v
     # The non-colliding ones are ordered like in graph, the others are stacked in the order
     # of their collision node in graph, each colliding subgraph sorted with order_collision.
 
-    return newgraph
+    return newgraph, perm
 end

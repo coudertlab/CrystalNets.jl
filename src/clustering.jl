@@ -140,10 +140,11 @@ function trim_monovalent(crystal::Crystal{T}) where T
     vmap = _trim_monovalent!(graph)
     types = crystal.types[vmap]
     pge = PeriodicGraphEmbedding3D(graph, crystal.pge.pos[vmap], crystal.pge.cell)
+    opts = rev_permute_mapping(crystal.options, vmap, length(crystal.types))
     if T === Nothing
-        return Crystal{Nothing}(pge, types, crystal.options)
+        return Crystal{Nothing}(pge, types, opts)
     else
-        return Crystal{Clusters}(pge, types, crystal.clusters[vmap], crystal.options)
+        return Crystal{Clusters}(pge, types, crystal.clusters[vmap], opts)
     end
 end
 
@@ -1378,7 +1379,17 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters, onlyn
         sort!(newname; by=first, rev=true)
         types[i] = length(sbu) == 1 ? crystal.types[first(sbu).v] : Symbol(join(last.(newname)))
     end
-    ret = Crystal{Nothing}(crystal.pge.cell, types, pos, graph, Options(crystal.options; _pos=pos))
+    opts = Options(crystal.options; _pos=pos)
+    if !isnothing(crystal.options.track_mapping)
+        vmap = zeros(Int, length(crystal.types))
+        for (i, sbu) in enumerate(sbus)
+            for x in sbu
+                vmap[x.v] = i
+            end
+        end
+        opts = permute_mapping(opts, vmap)
+    end
+    ret = Crystal{Nothing}(crystal.pge.cell, types, pos, graph, opts)
     return ret
 end
 
@@ -1934,7 +1945,17 @@ function regroup_vmap(cryst, vmap, isolate, msg)
         sort!(newname; by=first, rev=true)
         types[i] = Symbol(join(last.(newname)))
     end
-    ret = trimmed_crystal(Crystal{Nothing}(cryst.pge.cell, types, pos, graph, Options(cryst.options; _pos=pos)))
+    opts = Options(cryst.options; _pos=pos)
+    if !isnothing(cryst.options.track_mapping)
+        newvmap = zeros(Int, length(cryst.types))
+        for (i, sbu) in enumerate(clusters.sbus)
+            for x in sbu
+                newvmap[x.v] = i
+            end
+        end
+        opts = permute_mapping(opts, newvmap)
+    end
+    ret = trimmed_crystal(Crystal{Nothing}(cryst.pge.cell, types, pos, graph, opts))
     export_default(ret, lazy"clusters_$msg", cryst.options.name, cryst.options.export_clusters)
     return ret
 end

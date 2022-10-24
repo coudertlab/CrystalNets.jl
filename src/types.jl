@@ -510,16 +510,17 @@ function trimmed_crystal(c::Crystal{Nothing})
     types = c.types[vmap]
     pge = PeriodicGraphEmbedding(graph, c.pge.pos[vmap], c.pge.cell)
     opts = isempty(c.options._pos) ? c.options : Options(c.options; _pos=pge.pos)
-    return Crystal{Nothing}(pge, types, opts)
+    return Crystal{Nothing}(pge, types, rev_permute_mapping(opts, vmap, length(c.types)))
 end
 
 
 function Base.getindex(c::Crystal{T}, vmap::AbstractVector{<:Integer}) where T
     types = c.types[vmap]
+    opts = rev_permute_mapping(c.options, vmap, length(c.types))
     if T === Nothing
-        return Crystal{Nothing}(c.pge[vmap], types, c.options)
+        return Crystal{Nothing}(c.pge[vmap], types, opts)
     else
-        return Crystal{Clusters}(c.pge[vmap], types, c.clusters[vmap], c.options)
+        return Crystal{Clusters}(c.pge[vmap], types, c.clusters[vmap], opts)
     end
 end
 
@@ -643,7 +644,7 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
     pge, s = SortedPeriodicGraphEmbedding{T}(copy(graph), placement, cell)
     types = Symbol[types[s[i]] for i in 1:n]
     # @toggleassert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
-    return CrystalNet{D,T}(pge, types, options)
+    return CrystalNet{D,T}(pge, types, rev_permute_mapping(options, s))
 end
 
 function CrystalNet{D,T}(cell::Cell, opts::Options) where {D,T<:Real}
@@ -663,7 +664,7 @@ function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
     placement = equilibrium(graph) # from PeriodicGraphEquilibriumPlacement.jl
     pge, s = SortedPeriodicGraphEmbedding(copy(graph), placement, cell)
-    return CrystalNet{D}(pge, types[s], options)
+    return CrystalNet{D}(pge, types[s], rev_permute_mapping(options, s))
 end
 
 function CrystalNet{D}(graph::PeriodicGraph{D}, options::Options) where D
@@ -730,21 +731,22 @@ end
 function _collect_net!(ret::Vector{<:CrystalNet{D}}, encountered, idx, c, clustering) where D
     vmap, graph = trim_topology(c.pge.g)
     types = c.types[vmap]
-    remove_metal_cluster_bonds!(graph, types, c.options)
+    opts = rev_permute_mapping(c.options, vmap, length(c.types))
+    remove_metal_cluster_bonds!(graph, types, opts)
     remove_homoatomic_bonds!(graph, types, c.options.ignore_homoatomic_bonds, false)
     j = get!(encountered, c.pge.g, idx)
     if j == idx
-        export_default(Crystal{Nothing}(c.pge.cell, types, c.pge.pos[vmap], graph, c.options),
+        export_default(Crystal{Nothing}(c.pge.cell, types, c.pge.pos[vmap], graph, opts),
             lazy"subnet_$clustering", c.options.name, c.options.export_subnets)
         ret[idx] = try
-            CrystalNet{D}(c.pge.cell, types, graph, c.options)
+            CrystalNet{D}(c.pge.cell, types, graph, opts)
         catch e
             (c.options.throw_error || isinterrupt(e)) && rethrow()
-            CrystalNet{D}(c.pge.cell, Options(c.options; error=(string(e)::String)))
+            CrystalNet{D}(c.pge.cell, Options(opts; error=(string(e)::String)))
         end
     else
         ref = ret[j]
-        ret[idx] = typeof(ref)(ref.pge.cell, ref.types, ref.pge.pos, ref.pge.g, c.options)
+        ret[idx] = typeof(ref)(ref.pge.cell, ref.types, ref.pge.pos, ref.pge.g, opts)
     end
     nothing
 end
@@ -940,8 +942,10 @@ function UnderlyingNets(g::SmallPseudoGraph, options::Options)
     @repeatgroups begin
         for vmap in get(dimensions, D, Vector{Int}[])
             nets = PeriodicGraph{D}(graph[vmap])
-            types = fill(Symbol(""), nv(nets))
-            push!(groups, (vmap, CrystalNet{D}[CrystalNet{D}(cell, types, nets, options)]))
+            n = nv(nets)
+            types = fill(Symbol(""), n)
+            opts = rev_permute_mapping(options, vmap, n)
+            push!(groups, (vmap, CrystalNet{D}[CrystalNet{D}(cell, types, nets, opts)]))
         end
     end
     return groups
@@ -1026,7 +1030,7 @@ function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
     if startswith(s, "FAILED")
         return TopologicalGenome(s[13:end])
     end
-    return TopologicalGenome(parse(PeriodicGraph, REVERSE_CRYSTAL_NETS_ARCHIVE[s]), s, false)
+    return TopologicalGenome(parse(PeriodicGraph, REVERSE_CRYSTALNETS_ARCHIVE[s]), s, false)
 end
 
 

@@ -377,6 +377,10 @@ These fields are for internal use and should not be modified by the user:
 - `_pos`: the positions of the centre of the clusters collapsed into vertices.
 - `error`: store the first error that occured when building the net.
 - `throw_error`: if set, throw the error instead of storing it in the `error` field.
+- `track_mapping`: if set to `true`, this field will contain, at the end of the computation,
+  the mapping from the vertices of the input to the vertices of the returned genome.
+  In the case of `determine_topology...` calls, the "input" is the file exported through
+  the `export_input` option. Default is false.
 """
 struct Options
     name::String # used for exports
@@ -423,6 +427,7 @@ struct Options
     dryrun::Union{Nothing,Dict{Symbol,Union{Nothing,Set{Symbol}}}}
     error::String
     throw_error::Bool
+    track_mapping::Union{Nothing,Vector{Int}}
 
     function Options(; name="unnamed",
                        bonding=Bonding.Auto,
@@ -460,6 +465,7 @@ struct Options
                        dryrun=nothing,
                        error="",
                        throw_error=false,
+                       track_mapping=nothing,
                     )
 
         _export_input = ifbooltempdirorempty(export_input)
@@ -518,6 +524,7 @@ struct Options
             dryrun,
             error,
             throw_error,
+            track_mapping,
         )
     end
 end
@@ -545,4 +552,26 @@ function Options(options::Options; kwargs...)
         base[kwarg] = val
     end
     return Options(; base...)
+end
+
+function permute_mapping(options::Options, vmap)
+    options.track_mapping isa Vector{Int} || return options
+    mapping::Vector{Int} = copy(options.track_mapping)
+    if isempty(mapping)
+        append!(mapping, vmap)
+    else
+        for (i, x) in enumerate(mapping)
+            x != 0 && (mapping[i] = vmap[x])
+        end
+    end
+    return Options(options; track_mapping=mapping)
+end
+
+function rev_permute_mapping(options::Options, rev_vmap, len=length(rev_vmap))
+    options.track_mapping isa Vector{Int} || return options
+    vmap = zeros(Int, len)
+    for (i, x) in enumerate(rev_vmap)
+        vmap[x] = i
+    end
+    return permute_mapping(options, vmap)
 end

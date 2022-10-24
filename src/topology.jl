@@ -314,7 +314,8 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     end
 
     graph = PeriodicGraph{D}(edges)
-    return CrystalNet{D,Rational{T}}(cell, c.types[I_kept], sortedcol, graph, c.options), newcollisions
+    opts = permute_mapping(c.options, vmap)
+    return CrystalNet{D,Rational{T}}(cell, c.types[I_kept], sortedcol, graph, opts), newcollisions
 end
 
 
@@ -480,7 +481,7 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
     @toggleassert allunique(edgs)
     if !flag_bestedgs # the current list of edges is equal to minimal_edgs
         @toggleassert minimal_edgs == edgs
-        return (Int[], Tuple{Int,Int,SVector{D,T}}[])
+        return (vmap, Tuple{Int,Int,SVector{D,T}}[])
     end
     return vmap, edgs
 end
@@ -974,14 +975,17 @@ function topological_key(net::CrystalNet{D,T}, collisions::CollisionList) where 
     v, minimal_basis = popfirst!(candidates)
     n = length(net.pge)
     _edgs = [(n + 1, 0, zero(SVector{D,T}))]
-    minimal_vmap, minimal_edgs = candidate_key(net, v, minimal_basis, _edgs)
+    _minimal_vmap, minimal_edgs = candidate_key(net, v, minimal_basis, _edgs)
+    minimal_vmaps = [_minimal_vmap]
     for (v, basis) in candidates
-        vmap, edgs = candidate_key(net, v, basis, minimal_edgs)
-        isempty(vmap) && continue
+        newvmap, edgs = candidate_key(net, v, basis, minimal_edgs)
+        isempty(newvmap) && continue
         @toggleassert edgs < minimal_edgs
-        if edgs < minimal_edgs
+        if isempty(edgs)
+            push!(minimal_vmaps, newvmap)
+        elseif edgs < minimal_edgs
             minimal_edgs = edgs
-            minimal_vmap = vmap
+            minimal_vmaps = [newvmap]
             minimal_basis = basis
         end
     end
@@ -991,17 +995,33 @@ function topological_key(net::CrystalNet{D,T}, collisions::CollisionList) where 
     #     rev_vmap[j] = i
     # end
 
-    newbasis, edges = findbasis(minimal_edgs)
-    graph = PeriodicGraph{D}(n, edges)
-    # return graph, collisions, minimal_vmap
+    newbasis, newedges = findbasis(minimal_edgs)
+    graph = PeriodicGraph{D}(n, newedges)
+    # return graph, collisions, minimal_vmaps
 
-    @toggleassert quotient_graph(graph) == quotient_graph(net.pge.g[minimal_vmap])
+    vmap = first(minimal_vmaps)
+    @toggleassert quotient_graph(graph) == quotient_graph(net.pge.g[vmap])
 
     # tmpnet = CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(graph, net.pge.pos[minimal_vmap], net.pge.cell), net.types[minimal_vmap], net.options)
     # export_vtf("/tmp/tmpnet.vtf", tmpnet, 3)
 
     if !isempty(collisions)
-        graph = expand_collisions(collisions, graph, minimal_vmap)
+        sort!(minimal_vmaps); unique!(minimal_vmaps)
+        first_minimal_vmap = pop!(minimal_vmaps)
+        ming, vmap = expand_collisions(collisions, graph, first_minimal_vmap)
+        for map in minimal_vmaps
+            newg, expanded_map = expand_collisions(collisions, graph, map)
+            if edges(newg) ≤ edges(ming)
+                ming = newg
+                vmap = expanded_map
+            end
+        end
+        graph = ming
+    end
+
+    if !isnothing(net.options.track_mapping)
+        map = rev_permute_mapping(net.options, vmap).track_mapping
+        @show map
     end
 
     # finalbasis = minimal_basis * newbasis
