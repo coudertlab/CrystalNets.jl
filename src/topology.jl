@@ -568,7 +568,6 @@ function (cswc::CheckSymmetryWithCollisions)(pge::PeriodicGraphEmbedding{D,T}, t
     vmapv = [x.v for x in vmap]
     for (i, node) in enumerate(collisions)
         j = vmapv[m+i]
-        m + i == j && continue
         j ≤ m && return nothing # a non-collision node is mapped to a collision node
         collisions[j-m] == CollisionNode(node, vmapv) || return nothing
     end
