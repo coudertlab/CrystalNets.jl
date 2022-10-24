@@ -42,7 +42,7 @@ CrystalNets.export_default
 ## Archive
 
 ```@docs
-REVERSE_CRYSTAL_NETS_ARCHIVE
+REVERSE_CRYSTALNETS_ARCHIVE
 CrystalNets.parse_arc
 CrystalNets.parse_arcs
 clean_default_archive!

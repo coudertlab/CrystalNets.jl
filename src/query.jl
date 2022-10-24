@@ -145,8 +145,8 @@ function topological_genome(group::UnderlyingNets)
 end
 
 """
-    recognize_topology(g::PeriodicGraph, arc=CRYSTAL_NETS_ARCHIVE)
-    recognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
+    recognize_topology(g::PeriodicGraph, arc=CRYSTALNETS_ARCHIVE)
+    recognize_topology(genome::AbstractString, arc=CRYSTALNETS_ARCHIVE)
 
 Attempt to recognize a topological genome from an archive of known genomes.
 
@@ -155,10 +155,10 @@ Attempt to recognize a topological genome from an archive of known genomes.
     To identify the topology of a `PeriodicGraph` or a `CrystalNet` `x`, query
     `topological_genome(x)` instead.
 """
-function recognize_topology(genome::AbstractString, arc=CRYSTAL_NETS_ARCHIVE)
+function recognize_topology(genome::AbstractString, arc=CRYSTALNETS_ARCHIVE)
     get(arc, genome, nothing)
 end
-function recognize_topology(genome::PeriodicGraph, arc=CRYSTAL_NETS_ARCHIVE)
+function recognize_topology(genome::PeriodicGraph, arc=CRYSTALNETS_ARCHIVE)
     recognize_topology(string(genome), arc)
 end
 

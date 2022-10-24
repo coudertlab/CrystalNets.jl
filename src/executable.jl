@@ -480,7 +480,7 @@ function main(args)
 
         if remove_from_archive
             if force || id isa String
-                delete!(CRYSTAL_NETS_VERSION, genome)
+                delete!(CRYSTALNETS_ARCHIVE_VERSION, genome)
                 export_arc(archive, false)
             else
                 return parse_error("""The genome "$genome" was unknown to the archive and thus could not be deleted. Use option --force to discard this error.""")

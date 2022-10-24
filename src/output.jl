@@ -187,15 +187,15 @@ function _export_trimmed_and_attributions(crystal::Crystal{Nothing}, clusters::C
 end
 
 """
-    export_arc(path, arc=CRYSTAL_NETS_ARCHIVE)
+    export_arc(path, arc=CRYSTALNETS_ARCHIVE)
 
 Export archive `arc` to the specified `path`. If unspecified, the exported archive is the
 current one.
 """
-function export_arc(path, arc=CRYSTAL_NETS_ARCHIVE)
+function export_arc(path, arc=CRYSTALNETS_ARCHIVE)
     mkpath(splitdir(path)[1])
     open(path, "w") do f
-        println(f, "Made by CrystalNets.jl v$CRYSTAL_NETS_VERSION")
+        println(f, "Made by CrystalNets.jl V", CRYSTALNETS_ARCHIVE_VERSION)
         if !isnothing(arc)
             println(f)
             pairs = sort(collect(arc); by=last)

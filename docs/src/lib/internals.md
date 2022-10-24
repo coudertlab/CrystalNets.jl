@@ -16,7 +16,7 @@ CrystalNets.CIF
 
 ```@docs
 CrystalNets.topological_key
-CrystalNets.CRYSTAL_NETS_ARCHIVE
+CrystalNets.CRYSTALNETS_ARCHIVE
 CrystalNets.minimize
 CrystalNets.candidate_key
 CrystalNets.possible_translations

@@ -295,9 +295,9 @@ function parse_arc(file)
     curr_key = ""
     counter = 1
     firstline = readline(file)
-    flag = startswith(firstline, "Made by CrystalNets.jl v")
+    flag = startswith(firstline, "Made by CrystalNets.jl V")
     if flag
-        flag = CRYSTAL_NETS_VERSION == VersionNumber(firstline[25:end])
+        flag = CRYSTALNETS_ARCHIVE_VERSION == @view firstline[25:end]
     end
     for l in eachline(file)
         if length(l) > 3 && l[1:3] == "key"

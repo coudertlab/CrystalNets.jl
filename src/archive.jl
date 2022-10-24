@@ -1,21 +1,21 @@
 ## Handling of the topological archive internally used to recognize topologies.
 using Pkg.Artifacts
 
-const CRYSTAL_NETS_VERSION = v"0.1.0"
+const CRYSTALNETS_ARCHIVE_VERSION = "2"
 const arc_location = artifact"archives"
 
 """
-    const CRYSTAL_NETS_ARCHIVE::Dict{String,String}
+    const CRYSTALNETS_ARCHIVE::Dict{String,String}
 
 The archive used to recognize known topologies.
 
 You probably don't need to access it directly: rely on [`recognize_topology`](@ref) to read
 and the various archive functions like [`add_to_current_archive!`](@ref) to write.
 """
-const CRYSTAL_NETS_ARCHIVE = if isdir(arc_location) && !isempty(readdir(arc_location))
+const CRYSTALNETS_ARCHIVE = if isdir(arc_location) && !isempty(readdir(arc_location))
     flag, parsed = parse_arcs(arc_location)
     if !flag
-        error("""CrystalNets.jl appears to have a broken installation (the archive version is older than that package's).
+        error("""CrystalNets.jl appears to have a broken installation (incompatible archive version).
         Please rebuild CrystalNets.jl with `import Pkg; Pkg.build("CrystalNets")`.
         """)
     end
@@ -30,13 +30,13 @@ else
 end
 
 """
-    const REVERSE_CRYSTAL_NETS_ARCHIVE::Dict{String,String}
+    const REVERSE_CRYSTALNETS_ARCHIVE::Dict{String,String}
 
-Reverse of [`CRYSTAL_NETS_ARCHIVE`](@ref).
+Reverse of [`CRYSTALNETS_ARCHIVE`](@ref).
 
 Can be used to query the topological genome of known nets, as in:
 ```jldoctest
-julia> REVERSE_CRYSTAL_NETS_ARCHIVE["dia"]
+julia> REVERSE_CRYSTALNETS_ARCHIVE["dia"]
 "3 1 2 0 0 0 1 2 0 0 1 1 2 0 1 0 1 2 1 0 0"
 
 julia> topological_genome(CrystalNet(PeriodicGraph(ans)))
@@ -50,11 +50,11 @@ dia
     julia> parse(TopologicalGenome, "pcu").genome
     PeriodicGraph3D(1, PeriodicEdge3D[(1, 1, (0,0,1)), (1, 1, (0,1,0)), (1, 1, (1,0,0))])
 
-    julia> string(parse(TopologicalGenome, "nbo").genome) == REVERSE_CRYSTAL_NETS_ARCHIVE["nbo"]
+    julia> string(parse(TopologicalGenome, "nbo").genome) == REVERSE_CRYSTALNETS_ARCHIVE["nbo"]
     true
     ```
 """
-const REVERSE_CRYSTAL_NETS_ARCHIVE = Dict{String,String}(id => (startswith(key, "unstable") ? key[10:end] : key) for (key, id) in CRYSTAL_NETS_ARCHIVE)
+const REVERSE_CRYSTALNETS_ARCHIVE = Dict{String,String}(id => (startswith(key, "unstable") ? key[10:end] : key) for (key, id) in CRYSTALNETS_ARCHIVE)
 
 export clean_default_archive!,
        set_default_archive!,
@@ -63,20 +63,20 @@ export clean_default_archive!,
        refresh_current_archive!,
        add_to_current_archive!,
        make_archive,
-       REVERSE_CRYSTAL_NETS_ARCHIVE
+       REVERSE_CRYSTALNETS_ARCHIVE
 
 function _reset_archive!()
-    global CRYSTAL_NETS_ARCHIVE
-    global REVERSE_CRYSTAL_NETS_ARCHIVE
+    global CRYSTALNETS_ARCHIVE
+    global REVERSE_CRYSTALNETS_ARCHIVE
     global arc_location
-    empty!(CRYSTAL_NETS_ARCHIVE)
-    merge!(CRYSTAL_NETS_ARCHIVE, last(parse_arcs(arc_location)))
-    empty!(REVERSE_CRYSTAL_NETS_ARCHIVE)
-    merge!(REVERSE_CRYSTAL_NETS_ARCHIVE, Dict{String,String}(last(x) => first(x) for x in CRYSTAL_NETS_ARCHIVE))
+    empty!(CRYSTALNETS_ARCHIVE)
+    merge!(CRYSTALNETS_ARCHIVE, last(parse_arcs(arc_location)))
+    empty!(REVERSE_CRYSTALNETS_ARCHIVE)
+    merge!(REVERSE_CRYSTALNETS_ARCHIVE, Dict{String,String}(last(x) => first(x) for x in CRYSTALNETS_ARCHIVE))
     nothing
 end
 
-function validate_archive(custom_arc)::Dict{String,String}
+function validate_archive(custom_arc, avoid_recompute=true)::Dict{String,String}
     arc = try
         Serialization.deserialize(custom_arc)
     catch
@@ -87,7 +87,7 @@ function validate_archive(custom_arc)::Dict{String,String}
     else
         try
             flag, parsed = parse_arc(custom_arc)
-            if flag
+            if flag && avoid_recompute
                 arc = parsed
             else
                 @ifwarn begin
@@ -185,7 +185,7 @@ Set the current archive as the new default archive.
     if you restart your Julia session.
 """
 function set_default_archive!(name="new")
-    global CRYSTAL_NETS_ARCHIVE
+    global CRYSTALNETS_ARCHIVE
     export_arc(joinpath(arc_location, name*".arc"))
 end
 
@@ -201,28 +201,28 @@ be emptied.
 !!! warning
     This empty archive will be kept and used for subsequent runs of CrystalNets.jl, even
     if you restart your Julia session. If you only want to empty the current archive,
-    do `empty!(CrystalNets.CRYSTAL_NETS_ARCHIVE)`.
+    do `empty!(CrystalNets.CRYSTALNETS_ARCHIVE)`.
 """
 function empty_default_archive!(; refresh=true)
-    global CRYSTAL_NETS_ARCHIVE
-    global REVERSE_CRYSTAL_NETS_ARCHIVE
+    global CRYSTALNETS_ARCHIVE
+    global REVERSE_CRYSTALNETS_ARCHIVE
     export_arc(arc_location, true)
     if refresh
-        empty!(CRYSTAL_NETS_ARCHIVE)
-        empty!(REVERSE_CRYSTAL_NETS_ARCHIVE)
+        empty!(CRYSTALNETS_ARCHIVE)
+        empty!(REVERSE_CRYSTALNETS_ARCHIVE)
     end
     nothing
 end
 
 
 function _change_current_archive!(newarc)
-    global CRYSTAL_NETS_ARCHIVE
-    global REVERSE_CRYSTAL_NETS_ARCHIVE
-    empty!(CRYSTAL_NETS_ARCHIVE)
-    empty!(REVERSE_CRYSTAL_NETS_ARCHIVE)
-    merge!(CRYSTAL_NETS_ARCHIVE, newarc)
-    merge!(REVERSE_CRYSTAL_NETS_ARCHIVE,
-           Dict{String,String}(last(x) => first(x) for x in CRYSTAL_NETS_ARCHIVE))
+    global CRYSTALNETS_ARCHIVE
+    global REVERSE_CRYSTALNETS_ARCHIVE
+    empty!(CRYSTALNETS_ARCHIVE)
+    empty!(REVERSE_CRYSTALNETS_ARCHIVE)
+    merge!(CRYSTALNETS_ARCHIVE, newarc)
+    merge!(REVERSE_CRYSTALNETS_ARCHIVE,
+           Dict{String,String}(last(x) => first(x) for x in CRYSTALNETS_ARCHIVE))
     nothing
 end
 
@@ -266,10 +266,10 @@ end
 
 
 function _update_archive!(id, genome)
-    global CRYSTAL_NETS_ARCHIVE
-    global REVERSE_CRYSTAL_NETS_ARCHIVE
-    CRYSTAL_NETS_ARCHIVE[genome] = id
-    REVERSE_CRYSTAL_NETS_ARCHIVE[id] = genome
+    global CRYSTALNETS_ARCHIVE
+    global REVERSE_CRYSTALNETS_ARCHIVE
+    CRYSTALNETS_ARCHIVE[genome] = id
+    REVERSE_CRYSTALNETS_ARCHIVE[id] = genome
     nothing
 end
 
@@ -295,8 +295,8 @@ function add_to_current_archive!(id::AbstractString, genome::AbstractString)
             If you really want to associate this id with this genome, use `CrystalNets._update_archive!(id, genome)`
             """))
     end
-    global CRYSTAL_NETS_ARCHIVE
-    for (x,y) in CRYSTAL_NETS_ARCHIVE
+    global CRYSTALNETS_ARCHIVE
+    for (x,y) in CRYSTALNETS_ARCHIVE
         if x == genome
             y == id && return
             throw(ArgumentError(lazy"""
