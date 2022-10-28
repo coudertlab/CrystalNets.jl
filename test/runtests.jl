@@ -186,9 +186,11 @@ end
     Test.get_testset().n_passed += length(targets) - failures
     @test failures == 0
     cifs, crystalnetsdir = _finddirs()
-    @test topological_genome(CrystalNet(redirect_stderr(devnull) do;
-            parse_chemfile(joinpath(cifs, "Moganite.cif"))
-          end)).name == "mog"
+    @test redirect_stderr(devnull) do;
+        c = parse_chemfile(joinpath(cifs, "Moganite.cif"))
+        superc = make_supercell(c, (3, 1, 2))
+        topological_genome(CrystalNet(c)).name == topological_genome(CrystalNet(superc)).name == "mog"
+    end
 end
 
 # # The following testset is too long to be run on CI

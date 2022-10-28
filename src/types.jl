@@ -524,6 +524,12 @@ function Base.getindex(c::Crystal{T}, vmap::AbstractVector{<:Integer}) where T
     end
 end
 
+function PeriodicGraphs.make_supercell(c::Crystal{Nothing}, t)
+    pge = make_supercell(c.pge, t)
+    newtypes = repeat(c.types, prod(t))
+    return Crystal{Nothing}(pge, newtypes, c.options)
+end
+
 ## CrystalNet
 
 # For the remainder of the file, we can work in 1D, 2D or 3D
