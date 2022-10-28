@@ -30,6 +30,7 @@ function parse_cif(file)
             if !loopisspecified
                 if l[i] != '_' # This indicates the start of the values
                     loop_n = length(loopspec)
+                    iszero(loop_n) && error("invalid _loop: followed by no field (starting with _)")
                     loopisspecified = true
                 else # The identifier is part of the loop specification
                     push!(loopspec, l[i+1:j])
