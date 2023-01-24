@@ -4,67 +4,6 @@ macro enforce(expr) # strong @assert
 end
 
 
-const __bodyfunction__ = Dict{Method,Any}()
-
-# Find keyword "body functions" (the function that contains the body
-# as written by the developer, called after all missing keyword-arguments
-# have been assigned values), in a manner that doesn't depend on
-# gensymmed names.
-# `mnokw` is the method that gets called when you invoke it without
-# supplying any keywords.
-function __lookup_kwbody__(mnokw::Method)
-    function getsym(arg)
-        isa(arg, Symbol) && return arg
-        @assert isa(arg, GlobalRef)
-        return arg.name
-    end
-
-    f = get(__bodyfunction__, mnokw, nothing)
-    if f === nothing
-        fmod = mnokw.module
-        # The lowered code for `mnokw` should look like
-        #   %1 = mkw(kwvalues..., #self#, args...)
-        #        return %1
-        # where `mkw` is the name of the "active" keyword body-function.
-        ast = Base.uncompressed_ast(mnokw)
-        if isa(ast, Core.CodeInfo) && length(ast.code) >= 2
-            callexpr = ast.code[end-1]
-            if isa(callexpr, Expr) && callexpr.head == :call
-                fsym = callexpr.args[1]
-                if isa(fsym, Symbol)
-                    f = getfield(fmod, fsym)
-                elseif isa(fsym, GlobalRef)
-                    if fsym.mod === Core && fsym.name === :_apply
-                        f = getfield(mnokw.module, getsym(callexpr.args[2]))
-                    elseif fsym.mod === Core && fsym.name === :_apply_iterate
-                        f = getfield(mnokw.module, getsym(callexpr.args[3]))
-                    else
-                        f = getfield(fsym.mod, fsym.name)
-                    end
-                else
-                    f = missing
-                end
-            else
-                f = missing
-            end
-        else
-            f = missing
-        end
-        __bodyfunction__[mnokw] = f
-    end
-    return f
-end
-
-# TODO: check whether it works
-function precompile_kwarg(@nospecialize(tt), @nospecialize(kwargtypes))
-    let fbody = try __lookup_kwbody__(which(tt)) catch; missing end
-        @enforce !ismissing(fbody)
-        ttu = Base.unwrap_unionall(tt)
-        newtt = Tuple{Core.Typeof(fbody), kwargtypes..., ttu.parameters...}
-        #=@enforce=# precompile(Base.rewrap_unionall(newtt, tt))
-    end
-end
-
 function _precompile_dependencies()
     # Tokenize
     @enforce precompile(Tuple{typeof(Base._collect),UnitRange{Int},Tokenize.Lexers.Lexer{IOBuffer, Tokenize.Tokens.Token},Base.HasEltype,Base.SizeUnknown})
@@ -95,11 +34,11 @@ function _precompile_dependencies()
     @enforce precompile(Tuple{typeof(Base.CoreLogging.shouldlog),Logging.ConsoleLogger,Base.CoreLogging.LogLevel,Module,Symbol,Symbol})
     @enforce precompile(Tuple{typeof(Logging.default_metafmt),Base.CoreLogging.LogLevel,Any,Any,Any,Any,Any})
     @enforce precompile(Tuple{typeof(Logging.termlength),SubString{String}})
-    let fbody = try __lookup_kwbody__(which(Base.CoreLogging.handle_message, (Logging.ConsoleLogger,Any,Any,Any,Any,Any,Any,Any,))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Any,typeof(Base.CoreLogging.handle_message),Logging.ConsoleLogger,Any,Any,Any,Any,Any,Any,Any,))
-        end
-    end
+    # let fbody = try __lookup_kwbody__(which(Base.CoreLogging.handle_message, (Logging.ConsoleLogger,Any,Any,Any,Any,Any,Any,Any,))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Any,typeof(Base.CoreLogging.handle_message),Logging.ConsoleLogger,Any,Any,Any,Any,Any,Any,Any,))
+    #     end
+    # end
 
     # ArgParse
     @enforce precompile(Tuple{Core.kwftype(typeof(ArgParse.Type)),Any,Type{ArgParse.ArgParseSettings}})
@@ -107,16 +46,16 @@ function _precompile_dependencies()
     @enforce precompile(Tuple{typeof(ArgParse.parse1_optarg!),ArgParse.ParserState,ArgParse.ArgParseSettings,ArgParse.ArgParseField,Any,AbstractString})
     @enforce precompile(Tuple{typeof(ArgParse.preparse!),Channel,ArgParse.ParserState,ArgParse.ArgParseSettings})
     @enforce precompile(Tuple{typeof(ArgParse.print_group),IO,Vector{T} where T,AbstractString,Int,Int,AbstractString,AbstractString,AbstractString})
-    let fbody = try __lookup_kwbody__(which(ArgParse.show_help, (ArgParse.ArgParseSettings,))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Any,typeof(ArgParse.show_help),ArgParse.ArgParseSettings,))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(any, (Function,Vector{ArgParse.ArgParseGroup},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Function,typeof(any),Function,Vector{ArgParse.ArgParseGroup},))
-        end
-    end
+    # let fbody = try __lookup_kwbody__(which(ArgParse.show_help, (ArgParse.ArgParseSettings,))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Any,typeof(ArgParse.show_help),ArgParse.ArgParseSettings,))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(any, (Function,Vector{ArgParse.ArgParseGroup},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Function,typeof(any),Function,Vector{ArgParse.ArgParseGroup},))
+    #     end
+    # end
 
     # LinearAlgebra
     @enforce precompile(Tuple{Type{Matrix{Float64}},LinearAlgebra.UniformScaling{Bool},Tuple{Int, Int}})
@@ -124,11 +63,11 @@ function _precompile_dependencies()
     @enforce precompile(Tuple{typeof(eltype),LinearAlgebra.Adjoint{Rational{Int}, Matrix{Rational{Int}}}})
     @enforce precompile(Tuple{typeof(isone),Matrix{Int32}})
     @enforce precompile(Tuple{typeof(hcat),Vector{Rational{Int}},LinearAlgebra.Adjoint{Rational{Int}, Matrix{Rational{Int}}}})
-    let fbody = try __lookup_kwbody__(which(LinearAlgebra.rank, (Matrix{Int},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Float64,Float64,typeof(LinearAlgebra.rank),Matrix{Int},))
-        end
-    end
+    # let fbody = try __lookup_kwbody__(which(LinearAlgebra.rank, (Matrix{Int},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Float64,Float64,typeof(LinearAlgebra.rank),Matrix{Int},))
+    #     end
+    # end
 
     # Base
     @enforce precompile(Tuple{Core.kwftype(typeof(Base.with_output_color)),NamedTuple{(:bold,), Tuple{Bool}},typeof(Base.with_output_color),Function,Symbol,IOContext{Base.TTY},String,Vararg{Any, N} where N})
@@ -163,43 +102,43 @@ function _precompile_dependencies()
     @enforce precompile(Tuple{typeof(setindex!),Dict{String, Tuple{Exception, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}}},Tuple{ArgumentError, Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}},String})
     @enforce precompile(Tuple{typeof(string),Int128,String,Vararg{Any, N} where N})
     @enforce precompile(Tuple{typeof(vcat),Vector{Expr},Vector{Expr}})
-    @static if VERSION >= v"1.6-"
-        let fbody = try __lookup_kwbody__(which(Base.print_within_stacktrace, (IOContext{Base.TTY},String,Vararg{Any, N} where N,))) catch missing end
-            if !ismissing(fbody)
-                @enforce precompile(fbody, (Symbol,Bool,typeof(Base.print_within_stacktrace),IOContext{Base.TTY},String,Vararg{Any, N} where N,))
-            end
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(all, (Function,Vector{String},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Function,typeof(all),Function,Vector{String},))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(any, (Function,Vector{AbstractString},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Function,typeof(any),Function,Vector{AbstractString},))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(sort!, (Vector{Int},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sort!),Vector{Int},))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(sortperm, (Vector{Symbol},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{Symbol},))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(sortperm, (Vector{Tuple{Int, Vector{Int}}},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{Tuple{Int, Vector{Int}}},))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(sortperm, (Vector{Vector{Int}},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{Vector{Int}},))
-        end
-    end
+    # @static if VERSION >= v"1.6-"
+    #     let fbody = try __lookup_kwbody__(which(Base.print_within_stacktrace, (IOContext{Base.TTY},String,Vararg{Any, N} where N,))) catch missing end
+    #         if !ismissing(fbody)
+    #             @enforce precompile(fbody, (Symbol,Bool,typeof(Base.print_within_stacktrace),IOContext{Base.TTY},String,Vararg{Any, N} where N,))
+    #         end
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(all, (Function,Vector{String},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Function,typeof(all),Function,Vector{String},))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(any, (Function,Vector{AbstractString},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Function,typeof(any),Function,Vector{AbstractString},))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(sort!, (Vector{Int},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sort!),Vector{Int},))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(sortperm, (Vector{Symbol},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{Symbol},))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(sortperm, (Vector{Tuple{Int, Vector{Int}}},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{Tuple{Int, Vector{Int}}},))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(sortperm, (Vector{Vector{Int}},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{Vector{Int}},))
+    #     end
+    # end
 
     # StaticArrays
     @enforce precompile(Tuple{Type{Vector{SVector{3, Float64}}},Vector{SubArray{Float64, 1, Matrix{Float64}, Tuple{Base.Slice{Base.OneTo{Int}}, Int}, true}}})
@@ -241,16 +180,16 @@ function _precompile_dependencies()
         @enforce precompile(Tuple{typeof(Base.Broadcast.materialize),Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(floor), Tuple{Base.RefValue{Type{Int}}, SVector{3, Rational{T}}}}})
         @enforce precompile(Tuple{typeof(append!),Vector{SMatrix{3, 3, Rational{T}, 9}},Vector{SMatrix{3, 3, Rational{T}, 9}}})
         @enforce precompile(Tuple{typeof(append!),Vector{SMatrix{3, 3, Rational{T}, 9}},Vector{SMatrix{3, 3, Rational{widen(T)}, 9}}})
-        let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Rational{T}}},))) catch missing end
-            if !ismissing(fbody)
-                @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Rational{T}}},))
-            end
-        end
-        let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Rational{Int128}}},))) catch missing end
-            if !ismissing(fbody)
-                @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Rational{T}}},))
-            end
-        end
+        # let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Rational{T}}},))) catch missing end
+        #     if !ismissing(fbody)
+        #         @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Rational{T}}},))
+        #     end
+        # end
+        # let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Rational{Int128}}},))) catch missing end
+        #     if !ismissing(fbody)
+        #         @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Rational{T}}},))
+        #     end
+        # end
         @enforce precompile(Tuple{typeof(sort!),Vector{Int},Base.Sort.QuickSortAlg,Base.Order.Perm{Base.Order.ForwardOrdering, Vector{SVector{3, Rational{T}}}}})
     end
     @enforce precompile(Tuple{typeof(Base.Broadcast.materialize),Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(//), Tuple{Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(round), Tuple{Base.RefValue{Type{Int128}}, Base.Broadcast.Broadcasted{StaticArrays.StaticArrayStyle{1}, Nothing, typeof(*), Tuple{Int128, SVector{3, Float64}}}}}, Int128}}})
@@ -263,31 +202,31 @@ function _precompile_dependencies()
     @enforce precompile(Tuple{typeof(which(StaticArrays._getindex,(AbstractArray,Tuple{Vararg{Size, N} where N},Any,)).generator.gen),Any,Any,Any,Any})
     @enforce precompile(Tuple{typeof(which(StaticArrays._map,(Any,Vararg{AbstractArray, N} where N,)).generator.gen),Any,Any,Any})
     @enforce precompile(Tuple{typeof(which(StaticArrays.combine_sizes,(Tuple{Vararg{Size, N} where N},)).generator.gen),Any,Any})
-    let fbody = try __lookup_kwbody__(which(LinearAlgebra.rank, (Base.ReshapedArray{Int, 2, SVector{3, Int}, Tuple{}},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Float64,Float64,typeof(LinearAlgebra.rank),Base.ReshapedArray{Int, 2, SVector{3, Int}, Tuple{}},))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Float64}},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Float64}},))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Rational{BigInt}}},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Rational{BigInt}}},))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Rational{Bool}}},))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Rational{Bool}}},))
-        end
-    end
-    let fbody = try __lookup_kwbody__(which(sprint, (Function,SVector{3, Int},Vararg{Any, N} where N,))) catch missing end
-        if !ismissing(fbody)
-            @enforce precompile(fbody, (Nothing,Int,typeof(sprint),Function,SVector{3, Int},Vararg{Any, N} where N,))
-        end
-    end
+    # let fbody = try __lookup_kwbody__(which(LinearAlgebra.rank, (Base.ReshapedArray{Int, 2, SVector{3, Int}, Tuple{}},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Float64,Float64,typeof(LinearAlgebra.rank),Base.ReshapedArray{Int, 2, SVector{3, Int}, Tuple{}},))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Float64}},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Float64}},))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Rational{BigInt}}},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Rational{BigInt}}},))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(sortperm, (Vector{SVector{3, Rational{Bool}}},))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Base.Sort.QuickSortAlg,Function,Function,Nothing,Base.Order.ForwardOrdering,typeof(sortperm),Vector{SVector{3, Rational{Bool}}},))
+    #     end
+    # end
+    # let fbody = try __lookup_kwbody__(which(sprint, (Function,SVector{3, Int},Vararg{Any, N} where N,))) catch missing end
+    #     if !ismissing(fbody)
+    #         @enforce precompile(fbody, (Nothing,Int,typeof(sprint),Function,SVector{3, Int},Vararg{Any, N} where N,))
+    #     end
+    # end
     @enforce precompile(Tuple{typeof(sort!),Vector{Int},Base.Sort.QuickSortAlg,Base.Order.Perm{Base.Order.ForwardOrdering, Vector{SVector{3, Float64}}}})
 
 
@@ -423,26 +362,26 @@ function _precompile_()
     @enforce precompile(Tuple{typeof(CrystalNets.recursive_readdir), String})
     @enforce precompile(Tuple{typeof(CrystalNets.tmpexportname), String, String, String, String})
     @enforce precompile(Tuple{typeof(CrystalNets.tmpexportname), String, String, Nothing, String})
-    for S in (Int, Nothing)
-        for D in 1:3
-            precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph{D}, String, String, String}, (S,))
-            @static if VERSION > v"1.8-"
-                precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph{D}, Base.LazyString, String, String}, (S,))
-            end
-            for T in inttypes
-                precompile_kwarg(Tuple{typeof(export_default), cnet{D, T}, String, String, String}, (S,))
-                @static if VERSION > v"1.8-"
-                    precompile_kwarg(Tuple{typeof(export_default), cnet{D, T}, Base.LazyString, String, String}, (S,))
-                end
-            end
-        end
-        precompile_kwarg(Tuple{typeof(export_default), cryst, String, String, String}, (S,))
-        precompile_kwarg(Tuple{typeof(export_default), crystclust, String, String, String}, (S,))
-        @static if VERSION > v"1.8-"
-            precompile_kwarg(Tuple{typeof(export_default), cryst, Base.LazyString, String, String}, (S,))
-            precompile_kwarg(Tuple{typeof(export_default), crystclust, Base.LazyString, String, String}, (S,))
-        end
-    end
+    # for S in (Int, Nothing)
+    #     for D in 1:3
+    #         precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph{D}, String, String, String}, (S,))
+    #         @static if VERSION > v"1.8-"
+    #             precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph{D}, Base.LazyString, String, String}, (S,))
+    #         end
+    #         for T in inttypes
+    #             precompile_kwarg(Tuple{typeof(export_default), cnet{D, T}, String, String, String}, (S,))
+    #             @static if VERSION > v"1.8-"
+    #                 precompile_kwarg(Tuple{typeof(export_default), cnet{D, T}, Base.LazyString, String, String}, (S,))
+    #             end
+    #         end
+    #     end
+    #     precompile_kwarg(Tuple{typeof(export_default), cryst, String, String, String}, (S,))
+    #     precompile_kwarg(Tuple{typeof(export_default), crystclust, String, String, String}, (S,))
+    #     @static if VERSION > v"1.8-"
+    #         precompile_kwarg(Tuple{typeof(export_default), cryst, Base.LazyString, String, String}, (S,))
+    #         precompile_kwarg(Tuple{typeof(export_default), crystclust, Base.LazyString, String, String}, (S,))
+    #     end
+    # end
     # precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph2D, String, String, String}, (kwargs,))
     # precompile_kwarg(Tuple{typeof(export_default), PeriodicGraph3D, String, String, String}, (kwargs,))
     @enforce precompile(Tuple{typeof(CrystalNets.string_atomtype), Symbol})
