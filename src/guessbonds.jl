@@ -43,12 +43,13 @@ bonded together.
 """
 function guess_bonds(pos, types, mat, options)
     # Algorithm from chemfiles, itself from VMD
+    n = length(pos)
+    bonds = [Tuple{Int,Float32}[] for _ in 1:n]
+    options.bonding == Bonding.NoBond && return bonds
     @ifwarn if options.bonding != Bonding.Guess
         @warn "Guessing bonds with custom algorithm (from Chemfiles and VMD). This may take a while for big structures and may be inexact."
         @info "To avoid guessing bonds, use a file format that contains the bonds."
     end
-    n = length(pos)
-    bonds = [Tuple{Int,Float32}[] for _ in 1:n]
     @toggleassert n == length(types)
     radii = Vector{Float32}(undef, n)
     for (i, typ) in enumerate(types)

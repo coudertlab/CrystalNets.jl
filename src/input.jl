@@ -1006,7 +1006,7 @@ function parse_as_cif(cif::CIF, options::Options, name::String)
         push!(pos, cif.pos[:,i])
         #push!(pos, cif.cell.mat * cif.pos[:,i])
     end
-    if isempty(cif.bonds) || options.bonding == Bonding.Guess
+    if isempty(cif.bonds) || options.bonding == Bonding.Guess || options.bonding == Bonding.NoBond
         if options.bonding == Bonding.Input
             throw(ArgumentError("Cannot use input bonds since there are none. Use another option for --bonds-detect or provide bonds in the CIF file."))
         end
@@ -1114,7 +1114,7 @@ function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vec
     mat = Float64.(cell.mat)
     graph = PeriodicGraph3D(n, edges_from_bonds(bonds, mat, pos))
 
-    if options.bonding != Bonding.Input
+    if options.bonding != Bonding.Input && options.bonding != Bonding.NoBond
         do_permutation, vmap = sanitize_removeatoms!(graph, pos, types, mat, options)
         if do_permutation
             types = types[vmap]
