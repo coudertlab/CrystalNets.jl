@@ -517,7 +517,7 @@ end
 """
     fix_atom_on_a_bond!(graph, pos, mat)
 
-Remove bonds that are intercepted by an atom. 
+Remove bonds that are intercepted by an atom.
 """
 function fix_atom_on_a_bond!(graph, pos, mat)
     for i in vertices(graph)
@@ -837,7 +837,7 @@ function _detect_bent_bond(graph, pos, s, d, mat)
     barycentre = (Δ1 .+ Δ2 .+ Δ3) ./3
     γ = angle(barycentre, Δsd)
     (γ > 160 || γ < 20) && return false
-    if norm(barycentre) < min(np1, np2, np3)/2 
+    if norm(barycentre) < min(np1, np2, np3)/2
         70 < dihedral(p2 .- p1, Δ2, Δsd) < 110 && return false
     end
     return true

@@ -4,8 +4,7 @@ import Base: ==
 
 function cell_with_warning(mat::StaticArray{Tuple{3,3},BigFloat})
     if !all(isfinite, mat) || iszero(det(mat))
-        @ifwarn @error lazy"Suspicious unit cell of matrix $(Float64.(mat)). Is the input really periodic? Using a cubic unit cell instead."
-        return Cell()
+        throw(ArgumentError(lazy"Suspicious unit cell of matrix $(Float64.(mat)). Please check that the unit cell format is given and readable by Chemfiles."))
     end
     return Cell(Cell(), mat)
 end
@@ -632,7 +631,7 @@ function CrystalNet{D,T}(net::CrystalNet{N}; kwargs...) where {D,T,N}
     else
         newpos = net.pge.pos
     end
-    pge = PeriodicGraphEmbedding{D,T}(copy(net.pge.g), newpos, net.pge.cell)
+    pge = PeriodicGraphEmbedding{D,T}(PeriodicGraph{D}(net.pge.g), newpos, net.pge.cell)
     CrystalNet{D,T}(pge, net.types, Options(net.options; kwargs...))
 end
 CrystalNet{D}(net::CrystalNet{R,T}; kwargs...) where {D,R,T} = CrystalNet{D,T}(net; kwargs...)
