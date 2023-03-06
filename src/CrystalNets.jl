@@ -68,7 +68,7 @@ end
 """
     toggle_export(to=nothing)
 
-Toggle exports on (if `to == true`) or off (if `to == false`).
+Toggle default exports on (if `to == true`) or off (if `to == false`).
 Without an argument, toggle on and off repeatedly at each call.
 """
 function toggle_export(to=nothing)
@@ -83,7 +83,6 @@ function __init__()
 end
 
 include("utils.jl")
-__precompile__(true)
 include("options.jl") # Computation options
 include("types.jl") # Main internal type definitions used to represent topologies
 include("input.jl") # Crystal file parsing and conversion to an internal type

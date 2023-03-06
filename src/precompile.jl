@@ -13,22 +13,37 @@ using SnoopPrecompile
 
     old_stdout = stdout
     old_stderr = stderr
+    @info "Precompilation of CrystalNets.jl may take more than 10 minutes"
     redirect_stdout(devnull)
     redirect_stderr(devnull)
 
     @precompile_all_calls begin
+        # dia
+        topological_genome("3 1 1 0 0 1 1 1 0 1 0 1 1 1 0 0", CrystalNets.Options())
+        # cpi
+        topological_genome("2 1 2 0 0 1 3 0 0 1 4 0 0 1 5 0 0 2 3 0 -1 2 5 1 -1 3 4 1 0 4 5 0 -1", CrystalNets.Options())
+        # unstable net
+        topological_genome(PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0"), CrystalNets.Options())
+        determine_topology(path_to_im19)
+        determine_topology(path_to_im19, CrystalNets.Options())
+
         # Rational{Int32}
-        im19 = determine_topology(path_to_im19; bonding=Bonding.Guess, structure=StructureType.MOF,
+        determine_topology(path_to_im19; bonding=Bonding.Guess, structure=StructureType.MOF,
                     clusterings=[Clustering.SingleNodes,Clustering.AllNodes,Clustering.PEM,Clustering.PE,Clustering.Standard,Clustering.Auto,Clustering.EachVertex],
                     export_input=tmpdir, export_trimmed=tmpdir, export_subnets=tmpdir, export_attributions=tmpdir, export_clusters=tmpdir)
+        net_im19 = parse_chemfile(path_to_im19; structure=StructureType.MOF, clusterings=[Clustering.SingleNodes])
+        topological_genome(CrystalNet(net_im19))
         # Rational{Int64}
         rro = determine_topology(path_to_rro; structure=StructureType.Zeolite,
                     clusterings=[Clustering.EachVertex,Clustering.PEM,Clustering.PE,Clustering.Standard,Clustering.Auto],
                     export_input=tmpdir, export_trimmed=tmpdir, export_subnets=tmpdir, export_attributions=tmpdir, export_clusters=tmpdir)
+        net_rro = parse_chemfile(path_to_rro)
+        topological_genome(CrystalNet(net_rro))
         # Rational{Int128}
         mil100 = determine_topology(path_to_mil100; structure=StructureType.Guess,
                     clusterings=[Clustering.EachVertex,Clustering.PEM,Clustering.PE,Clustering.Standard,Clustering.Auto],
                     export_input=tmpdir, export_trimmed=tmpdir, export_subnets=tmpdir, export_attributions=tmpdir, export_clusters=tmpdir)
+        print(mil100)
         # Rational{BigInt}
         sfv = topological_genome(CrystalNet(PeriodicGraph(REVERSE_CRYSTALNETS_ARCHIVE["*SFV"])))
         # 2D
