@@ -7,13 +7,12 @@ using SnoopPrecompile
     cifs = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif")
     path_to_im19 = joinpath(cifs, "IM-19.cif");
     path_to_rro = joinpath(cifs, "RRO.cif");
-    path_to_mil100 = joinpath(cifs, "MOFs", "MIL-100.cif");
+    # path_to_mil100 = joinpath(cifs, "MOFs", "MIL-100.cif");
     path_to_calfig = joinpath(cifs, "CALFIG.cif");
     path_to_abw = joinpath(cifs, "ABW.cif")
 
     old_stdout = stdout
     old_stderr = stderr
-    @info "Precompilation of CrystalNets.jl may take more than 10 minutes"
     redirect_stdout(devnull)
     redirect_stderr(devnull)
 
@@ -39,13 +38,13 @@ using SnoopPrecompile
                     export_input=tmpdir, export_trimmed=tmpdir, export_subnets=tmpdir, export_attributions=tmpdir, export_clusters=tmpdir)
         net_rro = parse_chemfile(path_to_rro)
         topological_genome(CrystalNet(net_rro))
+        print(net_rro)
         # Rational{Int128}
-        mil100 = determine_topology(path_to_mil100; structure=StructureType.Guess,
-                    clusterings=[Clustering.EachVertex,Clustering.PEM,Clustering.PE,Clustering.Standard,Clustering.Auto],
-                    export_input=tmpdir, export_trimmed=tmpdir, export_subnets=tmpdir, export_attributions=tmpdir, export_clusters=tmpdir)
-        print(mil100)
-        # Rational{BigInt}
-        sfv = topological_genome(CrystalNet(PeriodicGraph(REVERSE_CRYSTALNETS_ARCHIVE["*SFV"])))
+        # mil100 = determine_topology(path_to_mil100; structure=StructureType.Guess,
+        #             clusterings=[Clustering.EachVertex,Clustering.PEM,Clustering.PE,Clustering.Standard,Clustering.Auto],
+        #             export_input=tmpdir, export_trimmed=tmpdir, export_subnets=tmpdir, export_attributions=tmpdir, export_clusters=tmpdir)
+        # # Rational{BigInt}
+        # sfv = topological_genome(CrystalNet(PeriodicGraph(REVERSE_CRYSTALNETS_ARCHIVE["*SFV"])))
         # 2D
         hcb = topological_genome(CrystalNet(PeriodicGraph(REVERSE_CRYSTALNETS_ARCHIVE["hcb"])))
         # non-periodic
