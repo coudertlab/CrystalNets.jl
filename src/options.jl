@@ -91,7 +91,7 @@ function clustering_from_symb(x::Symbol)
     elseif x === :Standard
         return Clustering.Standard
     elseif x === :PE
-        return Clustering.PEM
+        return Clustering.PE
     elseif x === :PEM
         return Clustering.PEM
     end
