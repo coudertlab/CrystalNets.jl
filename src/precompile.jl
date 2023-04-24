@@ -1,7 +1,7 @@
 using CrystalNets, PeriodicGraphs, PeriodicGraphEmbeddings, StaticArrays, Graphs
-using SnoopPrecompile
+using PrecompileTools
 
-@precompile_setup begin
+@setup_workload begin
     tmpdir = tempname()
     mkdir(tmpdir)
     cifs = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif")
@@ -16,7 +16,7 @@ using SnoopPrecompile
     redirect_stdout(devnull)
     redirect_stderr(devnull)
 
-    @precompile_all_calls begin
+    @compile_workload begin
         # dia
         topological_genome("3 1 1 0 0 1 1 1 0 1 0 1 1 1 0 0", CrystalNets.Options())
         # cpi
