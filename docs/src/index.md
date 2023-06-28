@@ -4,6 +4,10 @@
 net topologies underlying crystalline materials.
 Its inputs can be chemical files in any format recognized by [chemfiles](https://chemfiles.org/).
 
+To use it directly without any installation, simply use the website interface: [https://progs.coudert.name/topology](https://progs.coudert.name/topology)
+
+To use it through Python, check the [Python interface](@ref) tutorial.
+
 ## Package installation
 
 The installation follows the usual procedure. Start by downloading and installing [Julia](https://julialang.org/), v1.6 at least for `CrystalNets.jl`. This package was optimized with Julia v1.8 so performance and latency will be better on the more recent versions of Julia. Then, either

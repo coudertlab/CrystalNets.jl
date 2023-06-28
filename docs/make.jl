@@ -28,7 +28,8 @@ makedocs(
     modules = [CrystalNets],
     pages = [
         "Home" => "index.md",
-        "Visualization" => "man/visualization.md",
+        "Visualization" => "visualization.md",
+        "Python" => "python.md",
         "FAQ" => "faq.md",
         "Library" => [
             "Public"    => "lib/public.md",

@@ -2,16 +2,22 @@
 
 This page covers a few issues that may occur when using CrystalNets.jl. If your problem is not mentioned here, you can [open an issue](https://github.com/coudertlab/CrystalNets.jl/issues/new).
 
+## Can I use this without programming, or if I do not know Julia?
+
+Sure! If you only want to identify the topology of a structure, the easiest way is to use the website interface at [https://progs.coudert.name/topology](https://progs.coudert.name/topology)
+
+If you want to use the package in a programmatic way without learning Julia, it is possible to use it through Python. To do so, please check the dedicated [Python interface](@ref) tutorial.
+
+## How can I check that the detected topology corresponds to my input?
+
+This is the focus of the [Visualization](@ref) tutorial.
+
 ## How can I silence warnings or remove exports?
 
 - From the module: see [`CrystalNets.toggle_warning`](@ref) and [`CrystalNets.toggle_export`](@ref)
 - From the executable: use the `--no-warn` and `--no-export` flags.
 
 For exports, each `export_...` keyword argument to [`Options`](@ref CrystalNets.Options) can be individually set to `false` or `""` to silence this particular export. See also the paragraph on [export options](@ref exports).
-
-## How can I check that the detected topology corresponds to my input?
-
-This is the focus of the [Visualization](@ref) tutorial.
 
 ## How can I choose a particular clustering algorithm?
 

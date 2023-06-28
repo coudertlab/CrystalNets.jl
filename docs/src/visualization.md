@@ -90,9 +90,9 @@ Determining its topology yields the following:
 ```jldoctest viz
 julia> determine_topology(path_to_im19; bonding=Bonding.Guess, structure=StructureType.MOF)
 [ Info: Initial pass found O and C with invalid number of bonds.
-Export of input is enabled: saving file at /tmp/input_IM-19_0.vtf
-Export of subnet_AllNodes is enabled: saving file at /tmp/subnet_AllNodes_IM-19_0.vtf
-Export of subnet_SingleNodes is enabled: saving file at /tmp/subnet_SingleNodes_IM-19_0.vtf
+Export of input is enabled: saving file at /tmp/input_IM-19.vtf
+Export of subnet_AllNodes is enabled: saving file at /tmp/subnet_AllNodes_IM-19_1.vtf
+Export of subnet_SingleNodes is enabled: saving file at /tmp/subnet_SingleNodes_IM-19_1.vtf
 AllNodes: rna
 SingleNodes: bpq
 ```
@@ -137,17 +137,17 @@ vmd /tmp/input_IM-19_0.vtf
 ```
 
 The result will look like this:
-![IM-19 visualization in VMD](assets/input.jpg)
+![IM-19 visualization in VMD](man/assets/input.jpg)
 
 To visualize the "single nodes" clusters on top of the input, navigate to `File` ->
 `New Molecule...` in the VMD window and load the adequate VTF file (in our case, the
 one located at `/tmp/subnet_SingleNodes_IM-19_0.vtf`). The result should look like this:
-![IM-19 with single nodes clusters superposed](assets/singlenodes.jpg)
+![IM-19 with single nodes clusters superposed](man/assets/singlenodes.jpg)
 
 To look at the underlying topology only (in our case, the **bpq** net), you can toggle
 off the visualization of the input file by double-clicking on the `D` letter left to
 the input file name in the main VMD window. The result should look like this:
-![bpq net underlying IM-19](assets/singlenodesonly.jpg)
+![bpq net underlying IM-19](man/assets/singlenodesonly.jpg)
 
 ## [Export options](@id exports)
 
