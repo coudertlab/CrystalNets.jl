@@ -90,6 +90,7 @@ include("archive.jl") # Manipulation of the topological archive
 include("output.jl") # Crystal file exports
 include("arithmetics.jl") # Handling of (possibly sparse) integer/rational matrices
 include("stability.jl") # Functions related to unstable nets
+include("minimization.jl") # Cell minimization
 include("topology.jl") # Main functions of the algorithm
 include("query.jl") # Entry point for the user-facing functions
 include("executable.jl") # Entry point for the argument parsing of the executable
