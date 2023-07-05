@@ -109,7 +109,7 @@ macro loop_group(ex)
         group = :(group.$D)
         newex = quote
             if !isempty(group)
-                currallowed = first(group)[2][1].options.dimensions
+                currallowed = first(group)[1][1].options.dimensions
                 if isempty(currallowed) || $i in currallowed
                     $(deepcopy(ex))
                 end
@@ -130,8 +130,8 @@ Compute the topological genome of each subnet stored in `group`.
     Options must be passed directly within the subnets.
 """
 function topological_genome(group::UnderlyingNets)
-    ret = Tuple{Vector{Int},TopologyResult}[]
-    @loop_group for (id, net) in group
+    ret = Tuple{TopologyResult,Int,Vector{Int}}[]
+    @loop_group for (net, nfold, id) in group
         encountered = Dict{PeriodicGraph,_Clustering}()
         subret = Vector{Tuple{_Clustering,Union{_Clustering,TopologicalGenome}}}(undef, length(net))
         for (j, subnet) in enumerate(net)
@@ -139,7 +139,7 @@ function topological_genome(group::UnderlyingNets)
             refclust = get!(encountered, subnet.pge.g, clust)
             subret[j] = (clust, refclust == clust ? topological_genome(subnet) : refclust)
         end
-        push!(ret, (id, TopologyResult(subret)))
+        push!(ret, (TopologyResult(subret), nfold, id))
     end
     return ret
 end
@@ -174,13 +174,12 @@ In the case where the structure is not made of interpenetrating nets, return the
 of the only net.
 """
 function determine_topology(path, options::Options)
-    genomes::Vector{Tuple{Vector{Int},TopologyResult}} =
+    genomes::Vector{Tuple{TopologyResult, Int, Vector{Int}}} =
         topological_genome(UnderlyingNets(parse_chemfile(path, options)))
-    if length(genomes) == 1
-        return genomes[1][2]
+    if length(genomes) == 0
+        push!(genomes, (TopologyResult(""), 1, Int[]))
     end
-    length(genomes) == 0 && return TopologyResult("")
-    return genomes
+    InterpenetratedTopologyResult(genomes)
 end
 determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs...))
 
@@ -389,16 +388,16 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
         f = joinpath(path, file)
         # threadid() == 1 && @show f # to find infinite loops: the last one printed is probably running
 
-        genomes::Vector{Tuple{Vector{Int},TopologyResult}} = try
+        genomes::Vector{Tuple{TopologyResult,Int,Vector{Int}}} = try
             topological_genome(UnderlyingNets(parse_chemfile(f, options)))
         catch e
             (options.throw_error || isinterrupt(e)) && rethrow()
-            [(Int[], TopologyResult(string(e)))]
+            [(TopologyResult(string(e)), 1, Int[])]
         end
         if isempty(genomes)
-            push!(genomes, (Int[], TopologyResult("")))
+            push!(genomes, (TopologyResult(""), 1, Int[]))
         end
-        for (j, (_, genome)) in enumerate(genomes)
+        for (j, (genome, _)) in enumerate(genomes)
             newname = length(genomes) == 1 ? file * '/' : file * '/' * string(j)
             open(joinpath(resultdir, string(threadid())), "a") do results
                 io = IOContext(results, :compact => true)

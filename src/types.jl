@@ -722,11 +722,11 @@ function separate_components(c::Crystal{T}) where T
     @ifwarn if haskey(dimensions, 0)
         @warn "Detected structure of dimension 0, possibly solvent residues. It will be ignored for topology computation."
     end
-    ret = (Tuple{Vector{Int},Crystal{T}}[], Tuple{Vector{Int},Crystal{T}}[], Tuple{Vector{Int},Crystal{T}}[])
+    ret = (Tuple{Crystal{T},Int,Vector{Int}}[], Tuple{Crystal{T},Int,Vector{Int}}[], Tuple{Crystal{T},Int,Vector{Int}}[])
     for i in 1:3
         reti = ret[i]
-        for vmap in get(dimensions, i, Vector{Int}[])
-            push!(reti, (vmap, c[vmap]))
+        for (vmap, nfold) in get(dimensions, i, Vector{Int}[])
+            push!(reti, (c[vmap], nfold, vmap))
         end
     end
     return ret
@@ -807,13 +807,13 @@ end
 Grouping of the connected components of a structure according to their dimensionality.
 """
 struct UnderlyingNets
-    D1::Vector{Tuple{Vector{Int},Vector{CrystalNet1D}}}
-    D2::Vector{Tuple{Vector{Int},Vector{CrystalNet2D}}}
-    D3::Vector{Tuple{Vector{Int},Vector{CrystalNet3D}}}
+    D1::Vector{Tuple{Vector{CrystalNet1D},Int,Vector{Int}}}
+    D2::Vector{Tuple{Vector{CrystalNet2D},Int,Vector{Int}}}
+    D3::Vector{Tuple{Vector{CrystalNet3D},Int,Vector{Int}}}
 end
-UnderlyingNets() = UnderlyingNets(Tuple{Vector{Int},Vector{CrystalNet1D}}[],
-                                  Tuple{Vector{Int},Vector{CrystalNet2D}}[],
-                                  Tuple{Vector{Int},Vector{CrystalNet1D}}[],
+UnderlyingNets() = UnderlyingNets(Tuple{Vector{CrystalNet1D},Int,Vector{Int}}[],
+                                  Tuple{Vector{CrystalNet2D},Int,Vector{Int}}[],
+                                  Tuple{Vector{CrystalNet1D},Int,Vector{Int}}[],
                                  )
 
 function _repeatgroups!(ex, i)
@@ -856,16 +856,16 @@ function UnderlyingNets(c::Crystal)
     if all(isempty, components)
         vmap = collect(1:length(c.types))
         nets = [CrystalNet3D(c.pge.cell, Options(c.options; clusterings=[clust])) for clust in c.options.clusterings]
-        push!(groups.D3, (vmap, nets))
+        push!(groups.D3, (nets, 1, vmap))
         return groups
     end
     @repeatgroups begin
-        for (i, (vmap, comp)) in enumerate(components[D])
+        for (i, (comp, nfold, vmap)) in enumerate(components[D])
             component = Crystal(comp.pge, comp.types, comp.clusters,
                                 Options(comp.options; name=string(comp.options.name,'_',i)))
             crystals = collapse_clusters(component)
             nets = collect_nets(crystals, Val(D))
-            push!(groups, (vmap, nets))
+            push!(groups, (nets, nfold, vmap))
         end
     end
     return groups
@@ -879,19 +879,19 @@ function CrystalNet(c::Crystal)
     if D == 3
         length(group.D3) > 1 && __throw_interpenetrating(D)
         (isempty(group.D1) && isempty(group.D2)) || __warn_nonunique(D)
-        _D3 = last(first(group.D3))
+        _D3 = first(first(group.D3))
         length(_D3) > 1 && __throw_multiplenets(D)
         return first(_D3)
     elseif D == 2
         length(group.D2) > 1 && __throw_interpenetrating(D)
         isempty(group.D2) || __warn_nonunique(D)
-        _D2 = last(first(group.D2))
+        _D2 = first(first(group.D2))
         length(_D2) > 1 && __throw_multiplenets(D)
         return first(_D2)
     end
     @toggleassert D == 1
     length(group.D1) > 1 && __throw_interpenetrating(D)
-    _D1 = last(first(group.D1))
+    _D1 = first(first(group.D1))
     length(_D1) > 1 && __throw_multiplenets(D)
     return first(_D1)
 end
@@ -945,12 +945,12 @@ function UnderlyingNets(g::SmallPseudoGraph, options::Options)
     end
     cell = Cell()
     @repeatgroups begin
-        for vmap in get(dimensions, D, Vector{Int}[])
+        for (vmap, nfold) in get(dimensions, D, Vector{Int}[])
             nets = PeriodicGraph{D}(graph[vmap])
             n = nv(nets)
             types = fill(Symbol(""), n)
             opts = rev_permute_mapping(options, vmap, n)
-            push!(groups, (vmap, CrystalNet{D}[CrystalNet{D}(cell, types, nets, opts)]))
+            push!(groups, (CrystalNet{D}[CrystalNet{D}(cell, types, nets, opts)], nfold, vmap))
         end
     end
     return groups
@@ -1068,6 +1068,8 @@ TopologyResult
 julia> parse(TopologyResult, repr(topologies)) == topologies
 true
 ```
+
+See also [`TopologicalGenome`](@ref) and [`InterpenetratedTopologyResult`](@ref).
 """
 struct TopologyResult
     results::SizedVector{8,TopologicalGenome,Vector{TopologicalGenome}}
@@ -1274,3 +1276,10 @@ function Base.parse(::Type{TopologyResult}, s::AbstractString)
     end
     return TopologyResult(ret)
 end
+
+
+struct InterpenetratedTopologyResult <: AbstractVector{Tuple{TopologyResult,Int}}
+    data::Vector{Tuple{TopologyResult,Int,Vector{Int}}}
+end
+Base.size(x::InterpenetratedTopologyResult) = (length(x.data),)
+Base.getindex(x::InterpenetratedTopologyResult, i) = (y = x.data[i]; (y[1], y[2]))
