@@ -1371,7 +1371,11 @@ function Base.show(io::IO, ::MIME"text/plain", x::InterpenetratedTopologyResult)
         end
         hasnfold = nfold > 1
         if hasnfold
-            printstyled(io, '(', nfold, "-fold) ", italic=true)
+            @static if VERSION < v"1.9-"
+                printstyled(io, '(', nfold, "-fold) ", color=:yellow)
+            else
+                printstyled(io, '(', nfold, "-fold) ", italic=true)
+            end
         end
         print(IOContext(io, :compact=>(compact|hasnfold)), topology)
     end
