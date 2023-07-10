@@ -1293,12 +1293,12 @@ possibly decomposed into several catenated nets.
 
 !!! info "Vocabulary"
     In this context, *interpenetration* and *catenation* have slightly different meanings:
-    - two (or more) subnets are *interpenetrated* if both are present in the unit cell, and
+    - two (or more) substructures are *interpenetrated* if both are present in the unit cell, and
       are composed of vertices that have disjoint numbers. They may or may not all have the
       same topology since they are disjoint and independent subgraphs. For example:
       ```jldoctest
       julia> topological_genome(PeriodicGraph("2   1 1  0 1   2 2  0 1   2 2  1 0"))
-      2 interpenetrated subnets:
+      2 interpenetrated substructures:
       ⋅ Subnet 1 → UNKNOWN 1 1 1 1
       ⋅ Subnet 2 → sql
       ```
@@ -1313,7 +1313,7 @@ possibly decomposed into several catenated nets.
     Both may occur inside a single structure, for example:
     ```jldoctest
     julia> topological_genome(PeriodicGraph("2   1 1  0 2   2 2  0 1   2 2  1 0"))
-    2 interpenetrated subnets:
+    2 interpenetrated substructures:
     ⋅ Subnet 1 → (2-fold) UNKNOWN 1 1 1 1
     ⋅ Subnet 2 → sql
     ```
@@ -1323,7 +1323,7 @@ possibly decomposed into several catenated nets.
 julia> mof14 = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif", "MOFs", "MOF-14.cif");
 
 julia> topologies = determine_topology(mof14, structure=StructureType.MOF, clusterings=[Clustering.Auto, Clustering.Standard, Clustering.PE])
-2 interpenetrated subnets:
+2 interpenetrated substructures:
 ⋅ Subnet 1 → AllNodes,SingleNodes,Standard: pto | PE: sqc11259
 ⋅ Subnet 2 → AllNodes,SingleNodes,Standard: pto | PE: sqc11259
 
@@ -1361,7 +1361,7 @@ Base.getindex(x::InterpenetratedTopologyResult, i) = (y = x.data[i]; (y[1], y[2]
 function Base.show(io::IO, ::MIME"text/plain", x::InterpenetratedTopologyResult)
     compact = length(x) > 1
     if compact
-        print(io, length(x), " interpenetrated subnets:")
+        print(io, length(x), " interpenetrated substructures:")
     elseif length(x) == 0
         print(io, "non-periodic")
     end
@@ -1392,7 +1392,7 @@ end
 function Base.parse(::Type{InterpenetratedTopologyResult}, x::AbstractString)
     s = split(x; limit=4)
     length(s) == 1 && x == "non-periodic" && return InterpenetratedTopologyResult()
-    if length(s) > 3 && s[2] == "interpenetrated" && s[3] == "subnets:"
+    if length(s) > 3 && s[2] == "interpenetrated" && s[3] == "substructures:"
         lines = split(s[4], '\n')
         data = Vector{Tuple{TopologyResult,Int,Vector{Int}}}(undef, length(lines))
         for l in lines

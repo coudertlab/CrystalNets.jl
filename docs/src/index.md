@@ -76,7 +76,7 @@ For example:
 
 ```julia
 julia> x = determine_topology("/path/to/intertwinned/structures.cif")
-2 interpenetrated subnets:
+2 interpenetrated substructures:
 ⋅ Subnet 1 → pcu
 ⋅ Subnet 2 → srs
 ```
