@@ -7,6 +7,7 @@ CrystalNet
 UnderlyingNets
 TopologicalGenome
 TopologyResult
+InterpenetratedTopologyResult
 ```
 
 ## Main functions
@@ -14,11 +15,8 @@ TopologyResult
 ```@docs
 determine_topology
 determine_topology_dataset
-guess_topology
-guess_topology_dataset
 parse_chemfile
 topological_genome
-recognize_topology
 ```
 
 ## Options
@@ -28,7 +26,7 @@ CrystalNets.Options
 StructureType
 Bonding
 Clustering
-ClusterKinds
+CrystalNets.ClusterKinds
 ```
 
 ## Other utilities
@@ -51,6 +49,5 @@ empty_default_archive!
 change_current_archive!
 refresh_current_archive!
 add_to_current_archive!
-make_archive
 CrystalNets.export_arc
 ```

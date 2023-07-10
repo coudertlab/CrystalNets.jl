@@ -96,18 +96,14 @@ Most often, the difference will come from either:
 
 ## How can I do a database topology analysis with CrystalNets.jl?
 
-The built-in way to do this consists in using the [`determine_topology_dataset`](@ref) function, or [`guess_topology_dataset`](@ref) in some cases.
-These functions expect the path of a directory containing CIF files within (possibly in subdirectories).
+The built-in way to do this consists in using the [`determine_topology_dataset`](@ref) function.
+This function expects the path of a directory containing CIF files within (possibly in subdirectories).
 
 ## How can I directly access the genome of my structure instead of its name?
 
-The result of [`determine_topology`](@ref) is either a [`TopologicalGenome`](@ref) or a
-`Vector{Tuple{Vector{Int},TopologyResult}}`, depending on whether the input
-contains multiple interpenetrating subnets or not. In the second case, extract the relevant
-[`TopologyResult`](@ref).
+The result `x` of [`determine_topology`](@ref) is an [`InterpenetratedTopologyResult`](@ref). Its `length` gives the number of interpenetrated substructures. Each of its values, for instance `x[1]`, is a tuple `(topo, n)` meaning that the substructure is an `n`-fold catenated net of topology `topo`. `topo` itself is a [`TopologyResult`](@ref), which stores the result of a topology computation for possibly several clusterings. The [`TopologicalGenome`](@ref) associated to a given clustering can be extracted by indexing the [`TopologyResult`](@ref), for instance `t = topo[Clustering.SingleNodes]` (or simply `t = topo[:SingleNodes]`).
 
-A [`TopologyResult`](@ref) can store the result for different clustering options, so the
-topological genome should be chosen by extracting the relevant result. For example:
+For example:
 
 ```jldoctest im19faq
 julia> path_to_im19 = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif", "IM-19.cif");
@@ -117,9 +113,24 @@ AllNodes: rna
 SingleNodes: bpq
 
 julia> typeof(result)
+InterpenetratedTopologyResult
+
+julia> length(result)
+1
+
+julia> topo, n = only(result);
+
+julia> n # catenation multiplicity
+1
+
+julia> topo
+AllNodes: rna
+SingleNodes: bpq
+
+julia> typeof(topo)
 TopologyResult
 
-julia> genome_allnodes = result[Clustering.AllNodes]
+julia> genome_allnodes = topo[Clustering.AllNodes]
 rna
 
 julia> typeof(genome_allnodes)
@@ -127,7 +138,7 @@ TopologicalGenome
 ```
 
 In case where all clusterings lead to the same genome, it can simply be accessed
-by calling `first(result)`.
+by calling `first(topo)`.
 
 Having obtained a [`TopologicalGenome`](@ref), the topological genome itself can accessed
 by converting it to a `PeriodicGraph`:
@@ -136,6 +147,8 @@ by converting it to a `PeriodicGraph`:
 julia> genome = PeriodicGraph(genome_allnodes)
 PeriodicGraph3D(6, PeriodicEdge3D[(1, 2, (0,0,0)), (1, 3, (0,0,0)), (1, 4, (0,0,0)), (1, 4, (0,0,1)), (1, 5, (0,0,0)), (1, 6, (0,0,0)), (2, 4, (0,0,1)), (2, 6, (-1,0,0)), (3, 4, (0,0,1)), (3, 5, (0,-1,0)), (4, 5, (0,0,0)), (4, 6, (0,0,0))])
 ```
+
+In case of error during topology identification, the returned `genome` is a `PeriodicGraph{0}`.
 
 The string representation of the genome is simply `string(genome)`:
 

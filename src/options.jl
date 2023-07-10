@@ -116,7 +116,7 @@ function Base.parse(::Type{_Clustering}, s::AbstractString)
     elseif s == "PEM"
         return Clustering.PEM
     end
-    throw(ArgumentError(lazy"No clustering from string $x"))
+    throw(ArgumentError(lazy"No clustering from string \"$s\""))
 end
 
 """

@@ -33,6 +33,12 @@ function __reset_archive!(safeARCHIVE, safeREVERSE)
     nothing
 end
 
+function extract1(x)
+    topo, nfold = only(x)
+    @test nfold == 1
+    topo
+end
+
 import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
 
 @testset "MOF examples" begin
@@ -42,56 +48,59 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     mofdataset = determine_topology_dataset(joinpath(cifs, "MOFs"), false; kwargs...)
 
     @testset "Dataset analysis" begin
-        @test length(mofdataset) == 14
+        @test length(mofdataset) == 13
 
-        hkust1 = mofdataset["HKUST-1.cif"]
+        hkust1 = extract1(mofdataset["HKUST-1.cif"])
         @test hkust1[SingleNodes] == hkust1[AllNodes] == hkust1[Standard]
         @test hkust1[SingleNodes].name == "tbo"
 
-        jxust1 = mofdataset["JXUST-1.cif"]
+        jxust1, nfoldjxust1 = only(mofdataset["JXUST-1.cif"])
+        @test nfoldjxust1 == 2
         @test jxust1[SingleNodes] == jxust1[AllNodes]
         @test PeriodicGraph(jxust1[SingleNodes]) == PeriodicGraph(REVERSE_CRYSTALNETS_ARCHIVE["pcu"])
 
-        mil53 = mofdataset["MIL-53.cif"]
+        mil53 = extract1(mofdataset["MIL-53.cif"])
         @test string(mil53[SingleNodes]) == mil53[Standard].name == "bpq"
         @test mil53[AllNodes].name == "rna"
         @test mil53[PE].name == "sra, ABW"
 
-        mil100 = mofdataset["MIL-100.cif"]
+        mil100 = extract1(mofdataset["MIL-100.cif"])
         @test mil100[SingleNodes].name == mil100[AllNodes].name == "moo"
 
-        mil101 = mofdataset["MIL-101.cif"]
+        mil101 = extract1(mofdataset["MIL-101.cif"])
         @test mil101[SingleNodes].name == mil101[AllNodes].name == "mtn-e"
         @test mil101[PE].name == "mtn-e-a"
 
-        mof5 = mofdataset["MOF-5.cif"]
+        mof5 = extract1(mofdataset["MOF-5.cif"])
         @test first(mof5) == ([AllNodes, SingleNodes, Standard, PEM] => parse(TopologicalGenome, "tbo"))
         @test last(collect(mof5)) == ([PE] => last(mof5))
         @test mof5[SingleNodes].name == mof5[AllNodes].name == mof5[Standard].name == "tbo"
 
-        mof14 = mofdataset["MOF-14.cif/1"]
-        @test mof14 == mofdataset["MOF-14.cif/2"]
+        topologies_mof14 = mofdataset["MOF-14.cif"]
+        @test topologies_mof14[1] == topologies_mof14[2]
+        mof14, nfoldmof14 = topologies_mof14[1]
+        @test nfoldmof14 == 1
         @test mof14[SingleNodes].name == mof14[AllNodes].name == mof14[Standard].name == "pto"
         @test mof14[PE] == parse(TopologicalGenome, "sqc11259")
 
-        mof801 = mofdataset["MOF-801.cif"]
+        mof801 = extract1(mofdataset["MOF-801.cif"])
         @test mof801[SingleNodes].name == mof801[AllNodes].name == "fcu"
         @test mof801[Standard].name == "xbi"
         @test mof801[PE].name == "ubt"
 
-        pcn700 = mofdataset["PCN-700.cif"]
+        pcn700 = extract1(mofdataset["PCN-700.cif"])
         @test pcn700[SingleNodes].name == pcn700[AllNodes].name == "bcu"
         @test pcn700[PE].name == "pcb, ACO"
 
-        uio66 = mofdataset["UiO-66.cif"]
+        uio66 = extract1(mofdataset["UiO-66.cif"])
         @test uio66[SingleNodes].name == uio66[AllNodes].name == "fcu"
         @test uio66[Standard].name == "xbi"
         @test uio66[PE].name == "ubt"
 
-        zif8 = mofdataset["ZIF-8.cif"]
-        @test mofdataset["ZIF-8.cif"] == parse(TopologyResult, "AllNodes, SingleNodes, Standard, PEM: sod, SOD | PE: sod-e")
+        zif8 = extract1(mofdataset["ZIF-8.cif"])
+        @test mofdataset["ZIF-8.cif"] == parse(InterpenetratedTopologyResult, "AllNodes, SingleNodes, Standard, PEM: sod, SOD | PE: sod-e")
 
-        zif67 = mofdataset["ZIF-67.cif"]
+        zif67 = extract1(mofdataset["ZIF-67.cif"])
         @test string(zif67) == "AllNodes, SingleNodes, Standard, PEM: sod, SOD\nPE: sod-e"
     end
 
@@ -102,36 +111,36 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
 
     @test mofdataset["UiO-66.cif"] == determine_topology(joinpath(cifs, "UiO-66.cif"); kwargs...)
 
-    juc101 = determine_topology(joinpath(cifs, "JUC-101.cif"); kwargs..., bonding=Bonding.Guess)
-    @test juc101 == determine_topology(joinpath(cifs, "JUC-101.cif"); kwargs..., bonding=Bonding.Input)
+    juc101 = extract1(determine_topology(joinpath(cifs, "JUC-101.cif"); kwargs..., bonding=Bonding.Guess))
+    @test juc101 == extract1(determine_topology(joinpath(cifs, "JUC-101.cif"); kwargs..., bonding=Bonding.Input))
     @test juc101[SingleNodes].name == "nia"
     @test juc101[AllNodes].name == "jjt"
     @test string(juc101[Standard].genome) == "3 1 2 0 0 0 1 2 0 1 1 1 3 0 0 0 1 3 0 1 0 1 4 0 0 0 1 4 0 0 1 1 5 0 0 0 1 5 0 1 1 1 6 0 0 0 1 6 0 1 0 1 7 0 0 0 1 7 0 0 1 2 3 0 0 -1 2 4 0 0 0 2 8 0 0 0 2 8 0 1 1 3 4 0 0 1 3 8 0 0 1 3 8 0 1 1 4 8 0 1 0 4 8 0 1 1 5 6 0 0 0 5 7 0 -1 0 5 8 1 0 0 5 8 1 1 1 6 7 0 -1 0 6 8 1 0 1 6 8 1 1 1 7 8 1 1 0 7 8 1 1 1"
     @test string(juc101[PE]) == "UNKNOWN 3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 2 3 0 0 0 2 6 0 0 0 2 7 0 0 0 3 8 0 0 0 3 9 0 0 0 4 7 0 0 0 4 8 0 0 0 4 10 0 0 0 5 11 0 0 0 5 12 0 0 0 6 11 1 0 0 6 13 0 0 0 7 8 0 0 0 7 14 0 0 0 8 15 0 0 0 9 11 0 1 0 9 16 0 0 0 10 17 0 0 0 10 18 0 0 0 12 13 -1 1 0 12 16 -1 0 0 12 18 0 0 -1 13 16 0 -1 0 13 19 0 0 0 14 17 1 0 0 14 19 0 0 1 15 17 0 1 0 15 20 0 0 0 16 20 0 0 -1 18 19 -1 1 1 18 20 -1 0 0 19 20 0 -1 -1"
     @test juc101[PEM].genome == PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 1 6 0 0 0 1 7 0 0 0 2 4 0 0 0 2 8 0 0 0 3 4 0 0 0 3 9 0 0 0 4 6 0 0 0 4 10 0 0 0 4 11 0 0 0 5 6 0 0 0 5 12 0 0 0 6 7 0 0 0 6 10 0 0 0 6 11 0 0 0 7 13 0 0 0 8 14 0 0 0 8 15 0 0 0 9 16 0 0 0 9 17 0 0 0 10 18 0 0 0 11 19 0 0 0 12 15 -1 0 0 12 20 0 0 0 13 16 -1 0 0 13 21 0 0 0 14 22 0 0 0 14 23 0 0 0 15 18 1 0 -1 16 19 1 0 -1 17 22 -1 1 0 17 23 -1 1 0 18 24 0 0 0 19 25 0 0 0 20 22 -1 0 1 20 26 0 0 0 21 22 -2 1 1 21 26 -1 1 0 22 23 0 0 0 22 26 1 0 -1 23 24 0 0 -1 23 25 1 -1 -1 23 26 1 0 -1 24 26 1 0 0 25 26 0 1 0")
 
-    ewetuw = determine_topology(joinpath(cifs, "EWETUW_clean.cif"); kwargs...)
+    ewetuw = extract1(determine_topology(joinpath(cifs, "EWETUW_clean.cif"); kwargs...))
     @test allunique(ewetuw)
     @test ewetuw[SingleNodes].name == "fit"
     @test unique!(sort!(degree(ewetuw[PE].genome))) == [3, 5, 6]
     @assert allunique(unique!(sort!(degree(last(x).genome))) for x in ewetuw)
 
-    wemfif = determine_topology(joinpath(cifs, "WEMFIF_clean.cif"); kwargs...)
+    wemfif = extract1(determine_topology(joinpath(cifs, "WEMFIF_clean.cif"); kwargs...))
     @test wemfif[AllNodes] == wemfif[SingleNodes] == wemfif[Standard] == wemfif[PEM]
     @test wemfif[AllNodes].name == "dia"
     @test wemfif[PE].name == "crs"
     CrystalNets.toggle_warning(true)
 
     # test cell minimization with collision nodes
-    nott112 = determine_topology(joinpath(cifs, "NOTT-112.cif"); kwargs..., bonding=Bonding.Input)
+    nott112 = extract1(determine_topology(joinpath(cifs, "NOTT-112.cif"); kwargs..., bonding=Bonding.Input))
     @test startswith(string(nott112), "AllNodes, PEM: ntt\nSingleNodes, Standard: nts\nPE: ")
 
     # test input bonding when different symmetric images of the same atoms have different bonds
-    fowwar = determine_topology(joinpath(cifs, "FOWWAR.cif"); kwargs..., bonding=Bonding.Input, clusterings=[Clustering.Standard])
+    fowwar = extract1(determine_topology(joinpath(cifs, "FOWWAR.cif"); kwargs..., bonding=Bonding.Input, clusterings=[Clustering.Standard]))
     @test string(fowwar) == "Standard: UNKNOWN 3 1 1 0 0 1 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 2 5 0 0 0 2 6 0 0 0 3 6 0 0 0 3 7 0 0 0 4 5 1 0 0 4 7 0 -1 0 5 5 0 1 1 5 8 0 0 0 6 6 0 0 1 6 8 0 1 0 7 7 0 1 1 7 8 1 1 0"
 
     # Test non-periodic input
-    calfig = determine_topology(joinpath(cifs, "CALFIG.cif"); kwargs..., clusterings=[Clustering.Auto])
+    calfig = extract1(determine_topology(joinpath(cifs, "CALFIG.cif"); kwargs..., clusterings=[Clustering.Auto]))
     @test string(calfig) == "non-periodic"
 end
 
@@ -259,7 +268,7 @@ end
     path = joinpath(cifs, "RRO.cif")
     push!(ARGS, "-a", joinpath(CrystalNets.arc_location, "rcsr.arc"), path)
     result, written = capture_out(out)
-    @test result == 1
+    @test result == 0
     @test startswith(only(written), "UNKNOWN")
     __reset_archive!(safeARCHIVE, safeREVERSE)
 
@@ -309,13 +318,14 @@ end
     path = joinpath(cifs, "ALPO-3.1.1.37.001.cif")
     push!(ARGS, "-s", "guess", "-b", "input", path)
     result, written = capture_out(out)
-    @test result == 1 # Unknown topology with the input bonds
+    @test result == 0
+    @test startswith(only(written), "AllNodes, SingleNodes: UNKNOWN 3") # Unknown topology with the input bonds
 
     empty!(ARGS)
     path = joinpath(cifs, "ALPO-3.1.1.37.001.cif")
     push!(ARGS, "-b", "auto", path)
     result, written = capture_out(out)
-    @test_broken result == 0
+    @test result == 0
     @test_broken written == ["afi, AFI"]
 
     # Test automatic removal of solvent residues and sites with multiple atoms
