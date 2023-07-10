@@ -1371,7 +1371,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::InterpenetratedTopologyResult)
         end
         hasnfold = nfold > 1
         if hasnfold
-            @static if VERSION < v"1.9-"
+            @static if VERSION < v"1.10-"
                 printstyled(io, '(', nfold, "-fold) ", color=:yellow)
             else
                 printstyled(io, '(', nfold, "-fold) ", italic=true)
