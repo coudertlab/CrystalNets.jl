@@ -12,7 +12,7 @@ In the folder where you intend to put your python script, add a new file called 
     "packages": {
         "CrystalNets": {
             "uuid": "7952bbbe-a946-4118-bea0-081a0932faa9",
-            "version": "0.3"
+            "version": "0.4"
         }
     }
 }
