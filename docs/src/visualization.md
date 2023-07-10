@@ -183,4 +183,4 @@ Other available export options are disabled by default:
 - `export_clusters` for the clusters. The only difference with `export_subnets` is that the
   graph induced by the clusters is not trimmed yet.
 - `export_net` for the net before separation into connected components. This is equivalent
-  to catenating the result of `export_subnets` into a single file.
+  to concatenating the result of `export_subnets` into a single file.

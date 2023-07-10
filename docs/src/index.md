@@ -66,25 +66,19 @@ julia> determine_topology("/path/to/unstable/net.cif")
 unstable 1 1 1 1 1 2 0 2 2 1
 ```
 
-In both known and unknown cases, the result is a [`TopologyResult`](@ref).
+In both known and unknown cases, the result is an [`InterpenetratedTopologyResult`](@ref).
 
 #### Interpenetrating substructures
 
-If the file contains multiple interpenetrating substructures, the result is a
-`Vector{Tuple{Vector{Int}, TopologyResult}}`, where each entry is a tuple
-`(vmap, result)` with:
+If the file contains multiple interpenetrating substructures, each substructure and its catenation multiplicity can be extracted from the [`InterpenetratedTopologyResult`](@ref).
 
-- `vmap`: the list of vertices of the initial graph that were kept for this substructure.
-  The initial graph is the one exported in .vtf as `input`. See also
-  [`parse_chemfile`](@ref) and [`CrystalNets.Crystal`](@ref) for manipulations on the initial graph.
-- `result`: the [`TopologyResult`](@ref) for this substructure.
 For example:
 
 ```julia
-julia> determine_topology("/path/to/intertwinned/structures.cif")
-2-element Vector{Tuple{Vector{Int64}, TopologyResult}}:
- ([2, 3, 4, 6], pcu)
- ([1, 5, 7, 8], srs)
+julia> x = determine_topology("/path/to/intertwinned/structures.cif")
+2 interpenetrated subnets:
+⋅ Subnet 1 → pcu
+⋅ Subnet 2 → srs
 ```
 
 #### Using options
@@ -134,5 +128,7 @@ dia
 Run `CrystalNets --help` for the list of options available to the executable.
 
 !!! tip
-    In terms of performance, the compiled executable is the best option if you only want to identify a few structures from time to time. For intensive workloads with many structures to identify, it is best to use `CrystalNets.jl` as a Julia module through the
+    In terms of performance, the compiled executable is the best option if you only want to identify a few structures from time to time. Using [the website](https://progs.coudert.name/topology) is recommended as well for this use-case, unless the nets you study are too big.
+
+    For intensive workloads with many structures to identify, it is best to use `CrystalNets.jl` as a Julia module through the
     [`determine_topology_dataset`](@ref) and [`guess_topology_dataset`](@ref) functions. The module is also the best option to perform more advanced analyses on the net in Julia, or to use the [`Options`](@ref) unavailable to the executable.

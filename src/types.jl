@@ -1033,7 +1033,7 @@ function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
         return TopologicalGenome(PeriodicGraph(s[10:end]), nothing, true)
     end
     if startswith(s, "FAILED")
-        return TopologicalGenome(s[13:end])
+        return TopologicalGenome(s[14:end])
     end
     return TopologicalGenome(parse(PeriodicGraph, REVERSE_CRYSTALNETS_ARCHIVE[s]), s, false)
 end
@@ -1057,7 +1057,7 @@ of a `TopologyResult` can be parsed back to a `TopologyResult`:
 ```jldoctest
 julia> mof5 = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif", "MOF-5.cif");
 
-julia> topologies = determine_topology(mof5, structure=StructureType.MOF, clusterings=[Clustering.Auto, Clustering.Standard, Clustering.PE])
+julia> topologies = only(determine_topology(mof5, structure=StructureType.MOF, clusterings=[Clustering.Auto, Clustering.Standard, Clustering.PE]))[1]
 AllNodes, SingleNodes: pcu
 Standard: xbh
 PE: cab
@@ -1278,8 +1278,133 @@ function Base.parse(::Type{TopologyResult}, s::AbstractString)
 end
 
 
+"""
+    InterpenetratedTopologyResult <: AbstractVector{Tuple{TopologyResult,Int}}
+
+The result of a topology computation on a structure containing possibly several
+interpenetrated substructures.
+
+An `InterpenetratedTopologyResult` can be seen as a list of `(topology, n)` pair where
+* `topology` is the [`TopologyResult`](@ref) corresponding to the substructures.
+* `n` is an integer such that the substructure is composed of an `n`-fold catenated net.
+
+The entire structure can thus be decomposed in a series of substructures, each of them
+possibly decomposed into several catenated nets.
+
+!!! info "Vocabulary"
+    In this context, *interpenetration* and *catenation* have slightly different meanings:
+    - two (or more) subnets are *interpenetrated* if both are present in the unit cell, and
+      are composed of vertices that have disjoint numbers. They may or may not all have the
+      same topology since they are disjoint and independent subgraphs. For example:
+      ```jldoctest
+      julia> topological_genome(PeriodicGraph("2   1 1  0 1   2 2  0 1   2 2  1 0"))
+      2 interpenetrated subnets:
+      ⋅ Subnet 1 → UNKNOWN 1 1 1 1
+      ⋅ Subnet 2 → sql
+      ```
+    - a net is `n`-fold *catenated* if the unit cell of a single connected component of the
+      net is `n` times larger than the unit cell of the overall net. In that case, the net
+      is actually made of `n` interpenetrating connected components, which all have the
+      same topology. For example:
+      ```jldoctest
+      julia> topological_genome(PeriodicGraph("3   1 1  2 0 0   1 1  0 1 0   1 1  0 0 1"))
+      (2-fold) pcu
+      ```
+    Both may occur inside a single structure, for example:
+    ```jldoctest
+    julia> topological_genome(PeriodicGraph("2   1 1  0 2   2 2  0 1   2 2  1 0"))
+    2 interpenetrated subnets:
+    ⋅ Subnet 1 → (2-fold) UNKNOWN 1 1 1 1
+    ⋅ Subnet 2 → sql
+    ```
+
+# Example
+```jldoctest
+julia> mof14 = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif", "MOFs", "MOF-14.cif");
+
+julia> topologies = determine_topology(mof14, structure=StructureType.MOF, clusterings=[Clustering.Auto, Clustering.Standard, Clustering.PE])
+2 interpenetrated subnets:
+⋅ Subnet 1 → AllNodes,SingleNodes,Standard: pto | PE: sqc11259
+⋅ Subnet 2 → AllNodes,SingleNodes,Standard: pto | PE: sqc11259
+
+julia> typeof(topologies)
+InterpenetratedTopologyResult
+
+julia> parse(InterpenetratedTopologyResult, repr(topologies)) == topologies
+true
+
+julia> topologies[2]
+(AllNodes, SingleNodes, Standard: pto
+PE: sqc11259, 1)
+
+julia> topology, n = topologies[2]; # second subnet
+
+julia> n # catenation multiplicity
+1
+
+julia> topology
+AllNodes, SingleNodes, Standard: pto
+PE: sqc11259
+
+julia> typeof(topology)
+TopologyResult
+```
+"""
 struct InterpenetratedTopologyResult <: AbstractVector{Tuple{TopologyResult,Int}}
     data::Vector{Tuple{TopologyResult,Int,Vector{Int}}}
 end
+InterpenetratedTopologyResult() = InterpenetratedTopologyResult(Tuple{TopologyResult,Int,Vector{Int}}[])
+InterpenetratedTopologyResult(e::AbstractString) = InterpenetratedTopologyResult([(TopologyResult(string(e)), 1, Int[])])
 Base.size(x::InterpenetratedTopologyResult) = (length(x.data),)
 Base.getindex(x::InterpenetratedTopologyResult, i) = (y = x.data[i]; (y[1], y[2]))
+
+function Base.show(io::IO, ::MIME"text/plain", x::InterpenetratedTopologyResult)
+    compact = length(x) > 1
+    if compact
+        print(io, length(x), " interpenetrated subnets:")
+    elseif length(x) == 0
+        print(io, "non-periodic")
+    end
+    for (i, (topology, nfold)) in enumerate(x)
+        if compact
+            print(io, "\n⋅ Subnet ", i, " → ")
+        end
+        hasnfold = nfold > 1
+        if hasnfold
+            printstyled(io, '(', nfold, "-fold) ", italic=true)
+        end
+        print(IOContext(io, :compact=>(compact|hasnfold)), topology)
+    end
+end
+Base.show(io::IO, x::InterpenetratedTopologyResult) = show(io, MIME("text/plain"), x)
+
+function parse_nfold_topologyresult(x::AbstractString)
+    nfold = 1
+    num_digits = -8
+    if x[1] == '('
+        nfold = parse(Int, first(split(@view(x[2:end]), !isnumeric; limit=2)))
+        num_digits = ndigits(nfold)
+        @assert @view(x[(2+num_digits):(8+num_digits)]) == "-fold) "
+    end
+    parse(TopologyResult, @view(x[(9+num_digits):end])), nfold
+end
+
+function Base.parse(::Type{InterpenetratedTopologyResult}, x::AbstractString)
+    s = split(x; limit=4)
+    length(s) == 1 && x == "non-periodic" && return InterpenetratedTopologyResult()
+    if length(s) > 3 && s[2] == "interpenetrated" && s[3] == "subnets:"
+        lines = split(s[4], '\n')
+        data = Vector{Tuple{TopologyResult,Int,Vector{Int}}}(undef, length(lines))
+        for l in lines
+            @assert @view(l[1:11]) == "⋅ Subnet "
+            splits = split(@view(l[11:end]); limit=3)
+            i = parse(Int, splits[1])
+            @assert splits[2] == "→"
+            topo, nfold = parse_nfold_topologyresult(splits[3])
+            data[i] = (topo, nfold, Int[])
+        end
+        return InterpenetratedTopologyResult(data)
+    end
+    topo1, nfold1 = parse_nfold_topologyresult(x)
+    return InterpenetratedTopologyResult([(topo1, nfold1, Int[])])
+end

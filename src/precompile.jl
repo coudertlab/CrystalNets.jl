@@ -38,7 +38,6 @@ using PrecompileTools
                     export_input=tmpdir, export_trimmed=tmpdir, export_subnets=tmpdir, export_attributions=tmpdir, export_clusters=tmpdir)
         net_rro = parse_chemfile(path_to_rro)
         topological_genome(CrystalNet(net_rro))
-        print(net_rro)
         # Rational{Int128}
         # mil100 = determine_topology(path_to_mil100; structure=StructureType.Guess,
         #             clusterings=[Clustering.EachVertex,Clustering.PEM,Clustering.PE,Clustering.Standard,Clustering.Auto],

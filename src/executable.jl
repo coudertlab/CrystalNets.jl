@@ -236,6 +236,19 @@ function split_clusterings(s)
     end
 end
 
+"""
+    main(ARGS)
+
+Function called when using the module as an executable.
+
+Return code can be:
+* 0: no error
+* 1: the chemical bond system has no periodicity
+* 2: invalid input
+* 3: parsing error
+* 4: internal CrystalNets.jl error
+* 5: unhandled CrystalNets.jl error, please report
+"""
 function main(args)
     try
         _parsed_args = parse_commandline(args)
@@ -424,7 +437,7 @@ function main(args)
             end
         end
 
-        unets = try
+        unets::UnderlyingNets = try
             if iskey
                 g = try
                     PeriodicGraph(input_file)
@@ -452,7 +465,7 @@ function main(args)
             return invalid_input_error("""The input cannot be analyzed because of the following error:""",
                                         e, catch_backtrace())
         end
-        genomes::Vector{Tuple{Vector{Int},TopologyResult}} = try
+        genomes::InterpenetratedTopologyResult = try
             topological_genome(unets)
         catch e
             return internal_error("""Internal error encountered while computing the topological genome:""",
@@ -488,20 +501,13 @@ function main(args)
         end
         =#
 
-        if length(genomes) == 1
-            id = genomes[1][2]
-            println(id)
-            all(x -> isnothing(x.name), values(id)) && return 1
-            return 0
-        end
-
         if length(genomes) == 0
-            println(TopologyResult(""))
+            println(genomes)
             return 1
         end
-        
+
         println(genomes)
-        return 1
+        return 0
     catch e
         return unhandled_error("CrystalNets encountered an unhandled exception:",
                                e, catch_backtrace())

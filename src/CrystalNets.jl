@@ -25,17 +25,14 @@ export CrystalNet,
        UnderlyingNets,
        TopologicalGenome,
        TopologyResult,
+       InterpenetratedTopologyResult,
        determine_topology,
        determine_topology_dataset,
-       guess_topology,
-       guess_topology_dataset,
        parse_chemfile,
        topological_genome,
-       recognize_topology,
        StructureType,
        Bonding,
-       Clustering,
-       ClusterKinds
+       Clustering
 
 using LinearAlgebra: det, dot, norm, rank, cross
 import LinearAlgebra

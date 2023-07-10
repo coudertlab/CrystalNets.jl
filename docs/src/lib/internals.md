@@ -94,3 +94,11 @@ CrystalNets.collision_nodes
 CrystalNets.@toggleassert
 CrystalNets.check_dimensionality
 ```
+
+## Other
+
+```@docs
+CrystalNets.guess_topology
+CrystalNets.guess_topology_dataset
+CrystalNets.recognize_topology
+```

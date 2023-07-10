@@ -77,12 +77,10 @@ def identify_topology(cif):
     options = jl.CrystalNets.Options(structure=jl.StructureType.MOF)
     # Since the structure is specified as a MOF, the default clusterings are AllNodes and SingleNodes
     result = jl.determine_topology(cif, options) # Main call
-    if jl.isa(result, jl.Vector): # indicates interpenetrating substructures
-        # for each x in result:
-        # * x[0] is the list of nodes belonging to the substructure
-        # * x[1] is the topology of the substructure
-        return [check_unique_topology(x[1]) for x in result]
-    return [check_unique_topology(result)]
+    # for each x in result:
+    # * x[0] is the topology of the substructure.
+    # * x[1] is the catenation multiplicity of this subnet.
+    return [check_unique_topology(x[0]) for x in result]
 
 def check_unique_topology(result):
     singlenodes = result[jl.Clustering.SingleNodes] # topology for SingleNodes

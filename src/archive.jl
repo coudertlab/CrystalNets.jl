@@ -47,10 +47,10 @@ dia
     It is also possible to directly access the topological genome as a `PeriodicGraph`
     by parsing the name as a [`TopologicalGenome`](@ref):
     ```jldoctest
-    julia> parse(TopologicalGenome, "pcu").genome
+    julia> PeriodicGraph(parse(TopologicalGenome, "pcu"))
     PeriodicGraph3D(1, PeriodicEdge3D[(1, 1, (0,0,1)), (1, 1, (0,1,0)), (1, 1, (1,0,0))])
 
-    julia> string(parse(TopologicalGenome, "nbo").genome) == REVERSE_CRYSTALNETS_ARCHIVE["nbo"]
+    julia> string(PeriodicGraph(parse(TopologicalGenome, "nbo"))) == REVERSE_CRYSTALNETS_ARCHIVE["nbo"]
     true
     ```
 """

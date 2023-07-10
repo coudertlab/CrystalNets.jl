@@ -9,6 +9,8 @@ the string representation of a D-periodic graph such that
 `PeriodicGraph{D}(topological_genome(net))` is isomorphic to `net.pge.g` (except
 possibly if the `ignore_types` option is unset).
 
+Return a [`TopologicalGenome`](@ref).
+
 !!! info
     Options must be passed directly within `net`.
 """
@@ -48,7 +50,7 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
     return topological_genome(shrunk_net, collisions)
 end
 
-topological_genome(net::CrystalNet{0,T}) where {T} = TopologicalGenome(net.options.error)
+topological_genome(net::CrystalNet{0}) = TopologicalGenome(net.options.error)
 
 function topological_genome(net::CrystalNet{D,T}, collisions::CollisionList)::TopologicalGenome where {D,T}
     try
@@ -73,6 +75,8 @@ end
 
 Compute the topological genome of a periodic graph.
 If given a topological key (as a string), it is converted to a `PeriodicGraph` first.
+
+Return a [`TopologicalGenome`](@ref).
 """
 function topological_genome(g::PeriodicGraph, options::Options)
     nets = UnderlyingNets(g, options)
@@ -122,9 +126,11 @@ macro loop_group(ex)
 end
 
 """
-    topological_genome(group::UnderlyingNets)::Vector{Tuple{Vector{Int},String}}
+    topological_genome(group::UnderlyingNets)
 
 Compute the topological genome of each subnet stored in `group`.
+
+Return a [`InterpenetratedTopologyResult`](@ref)
 
 !!! info
     Options must be passed directly within the subnets.
@@ -141,7 +147,7 @@ function topological_genome(group::UnderlyingNets)
         end
         push!(ret, (TopologyResult(subret), nfold, id))
     end
-    return ret
+    return InterpenetratedTopologyResult(ret)
 end
 
 """
@@ -167,19 +173,13 @@ end
     determine_topology(path; kwargs...)
 
 Compute the topology of the structure described in the file located at `path`.
-This is essentially equivalent to calling
+This is exactly equivalent to calling
 `topological_genome(UnderlyingNets(parse_chemfile(path, options)))`.
 
-In the case where the structure is not made of interpenetrating nets, return the topology
-of the only net.
+Return an [`InterpenetratedTopologyResult`](@ref).
 """
 function determine_topology(path, options::Options)
-    genomes::Vector{Tuple{TopologyResult, Int, Vector{Int}}} =
-        topological_genome(UnderlyingNets(parse_chemfile(path, options)))
-    if length(genomes) == 0
-        push!(genomes, (TopologyResult(""), 1, Int[]))
-    end
-    InterpenetratedTopologyResult(genomes)
+    topological_genome(UnderlyingNets(parse_chemfile(path, options)))
 end
 determine_topology(path; kwargs...) = determine_topology(path, Options(; kwargs...))
 
@@ -324,8 +324,9 @@ guess_topology(path; kwargs...) = guess_topology(path, Options(structure=Structu
 Given a path to a directory containing structure input files, compute the
 topology of each structure within the directory.
 Return a dictionary linking each file name to the result.
-The result is a [`TopologyResult`](@ref), containing the topological genome, the name if
-known and the stability of the net. In case of error, the exception is reported.
+The result is a [`InterpenetratedTopologyResult`](@ref), containing the topological genome,
+the name if known and the stability of the net.
+In case of error, the exception is reported.
 
 Warnings will be toggled off (unless `force_warn` is set) and it is stongly recommended
 not to export any file since those actions may critically reduce performance,
@@ -388,17 +389,17 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
         f = joinpath(path, file)
         # threadid() == 1 && @show f # to find infinite loops: the last one printed is probably running
 
-        genomes::Vector{Tuple{TopologyResult,Int,Vector{Int}}} = try
+        genomes::InterpenetratedTopologyResult = try
             topological_genome(UnderlyingNets(parse_chemfile(f, options)))
         catch e
             (options.throw_error || isinterrupt(e)) && rethrow()
-            [(TopologyResult(string(e)), 1, Int[])]
+            InterpenetratedTopologyResult(e)
         end
         if isempty(genomes)
-            push!(genomes, (TopologyResult(""), 1, Int[]))
+            push!(genomes.data, (TopologyResult(""), 1, Int[]))
         end
-        for (j, (genome, _)) in enumerate(genomes)
-            newname = length(genomes) == 1 ? file * '/' : file * '/' * string(j)
+        for (j, (genome, nfold)) in enumerate(genomes)
+            newname = string(file, '/', j, '/', nfold)
             open(joinpath(resultdir, string(threadid())), "a") do results
                 io = IOContext(results, :compact => true)
                 println(io, newname, '/', genome)
@@ -407,18 +408,18 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
         showprogress && next!(progress)
     end
 
-    ret = Pair{String,TopologyResult}[]
+    result = Dict{String,InterpenetratedTopologyResult}()
     for _f in readdir(resultdir; join=true)
         basename(_f) == "data" && continue
         for l in eachline(_f)
             isempty(l) && continue
             splits = split(l, '/')
+            data = get!(result, splits[1], InterpenetratedTopologyResult()).data
             _genome = pop!(splits)
-            isempty(splits[end]) && pop!(splits)
-            push!(ret, Pair(join(splits, '/'), parse(TopologyResult, _genome)))
+            _nfold = pop!(splits)
+            push!(data, (parse(TopologyResult, _genome), parse(Int, _nfold), Int[]))
         end
     end
-    result::Dict{String,TopologyResult} = Dict(ret)
     if save
         i = 0
         tmpresultdir = resultdir*".OLD"*string(i)
