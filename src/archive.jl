@@ -56,14 +56,16 @@ dia
 """
 const REVERSE_CRYSTALNETS_ARCHIVE = Dict{String,String}(id => (startswith(key, "unstable") ? key[10:end] : key) for (key, id) in CRYSTALNETS_ARCHIVE)
 
+export REVERSE_CRYSTALNETS_ARCHIVE
+
 export clean_default_archive!,
        set_default_archive!,
        empty_default_archive!,
        change_current_archive!,
        refresh_current_archive!,
-       add_to_current_archive!,
-       make_archive,
-       REVERSE_CRYSTALNETS_ARCHIVE
+       add_to_current_archive!
+
+# export make_archive
 
 function _reset_archive!()
     global CRYSTALNETS_ARCHIVE
@@ -317,7 +319,7 @@ function add_to_current_archive!(id::AbstractString, genome::AbstractString)
 end
 
 """
-    make_archive(path, destination=nothing)
+    make_archive(path, destination=nothing, verbose=false)
 
 Make an archive from the files located in the directory given by `path` and export
 it to `destination`, if specified. Each file of the directory should correspond
@@ -334,22 +336,24 @@ function make_archive(path, destination, verbose=false)
         verbose && print("Handling "*name*"... ")
         flag = false
         flagerror = Ref{Any}(Tuple{Vector{Int},String}[])
-        genomes::Vector{Tuple{Vector{Int},String}} = try
+        results::InterpenetratedTopologyResult = try
             x = topological_genome(UnderlyingNets(parse_chemfile(path*f)))
             verbose && println(name*" done.")
             x
         catch e
             flag = true
             flagerror[] = e
-            Tuple{Vector{Int},String}[]
+            InterpenetratedTopologyResult()
         end
-        for (i, (vmap, genome)) in enumerate(genomes)
+        for (i, (topology, nfold)) in enumerate(results)
+            genome = string(topology)
             if startswith(genome, "unstable") || genome == "non-periodic"
                 flag = true
-                push!(flagerror[]::Vector{Vector{Int}}, (vmap, genome))
+                push!(flagerror[]::Vector{Tuple{Vector{Int},String}}, (vmap, genome))
                 continue
             end
-            arc[genome] = length(genomes) == 1 ? name : (name * '_' * string(i))
+            verbose && nfold != 1 && println(nfold, "-fold catenated net found for ", name)
+            arc[genome] = length(results) == 1 ? name : (name * '_' * string(i))
         end
         if flag
             e = flagerror[]

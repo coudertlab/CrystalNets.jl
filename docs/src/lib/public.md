@@ -49,6 +49,5 @@ empty_default_archive!
 change_current_archive!
 refresh_current_archive!
 add_to_current_archive!
-make_archive
 CrystalNets.export_arc
 ```

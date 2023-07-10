@@ -96,8 +96,8 @@ Most often, the difference will come from either:
 
 ## How can I do a database topology analysis with CrystalNets.jl?
 
-The built-in way to do this consists in using the [`determine_topology_dataset`](@ref) function, or [`guess_topology_dataset`](@ref) in some cases.
-These functions expect the path of a directory containing CIF files within (possibly in subdirectories).
+The built-in way to do this consists in using the [`determine_topology_dataset`](@ref) function.
+This function expects the path of a directory containing CIF files within (possibly in subdirectories).
 
 ## How can I directly access the genome of my structure instead of its name?
 

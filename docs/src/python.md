@@ -66,7 +66,7 @@ The same warnings are printed at the beginning, followed by the same exports. Th
 
 ## Usage
 
-Let's now consider a programmatic use-case where the goal is to identify the topology of a complex MOF structure according the [`SingleNodes`](@ref Clustering) and [`AllNodes`](@ref Clustering) clusterings. The main structure may contain interpenetrating substructures and for each substructure.
+Let's now consider a programmatic use-case where the goal is to identify the topology of a complex MOF structure according the [`SingleNodes`](@ref Clustering) and [`AllNodes`](@ref Clustering) clusterings. The main structure may contain interpenetrating substructures.
 
 The function is expected to error if the topologies are different between the two clusterings. Otherwise, it returns a list of pairs whose first element is the dimensionality of the subnet and the second element is the name of the corresponding topology. If there is no known name, the topological genome is used instead.
 

@@ -131,4 +131,4 @@ Run `CrystalNets --help` for the list of options available to the executable.
     In terms of performance, the compiled executable is the best option if you only want to identify a few structures from time to time. Using [the website](https://progs.coudert.name/topology) is recommended as well for this use-case, unless the nets you study are too big.
 
     For intensive workloads with many structures to identify, it is best to use `CrystalNets.jl` as a Julia module through the
-    [`determine_topology_dataset`](@ref) and [`guess_topology_dataset`](@ref) functions. The module is also the best option to perform more advanced analyses on the net in Julia, or to use the [`Options`](@ref) unavailable to the executable.
+    [`determine_topology_dataset`](@ref) function. The module is also the best option to perform more advanced analyses on the net in Julia, or to use the [`Options`](@ref) unavailable to the executable.

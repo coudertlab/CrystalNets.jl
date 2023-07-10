@@ -88,6 +88,12 @@ CrystalNets.expand_collisions
 CrystalNets.collision_nodes
 ```
 
+## Archives
+
+```@docs
+CrystalNets.make_archive
+```
+
 ## Utils
 
 ```@docs
