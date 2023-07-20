@@ -1213,6 +1213,14 @@ function Base.keys(x::TopologyResult)
     end
     return samenet
 end
+Base.values(x::TopologyResult) = ValuesTopologyResult(x)
+Base.valtype(::Type{TopologyResult}) = TopologicalGenome
+
+struct ValuesTopologyResult <: AbstractVector{TopologicalGenome}
+    x::TopologyResult
+end
+Base.size(vx::ValuesTopologyResult) = (length(vx.x),)
+Base.getindex(vx::ValuesTopologyResult, i::Int) = vx.x[i]
 
 function Base.show(io::IO, ::MIME"text/plain", x::TopologyResult)
     samenet = keys(x)
@@ -1230,14 +1238,6 @@ function Base.show(io::IO, ::MIME"text/plain", x::TopologyResult)
     end
 end
 Base.show(io::IO, x::TopologyResult) = show(io, MIME"text/plain"(), x)
-
-struct ValuesTopologyResult <: AbstractVector{TopologicalGenome}
-    x::TopologyResult
-end
-Base.values(x::TopologyResult) = ValuesTopologyResult(x)
-Base.valtype(::Type{TopologyResult}) = TopologicalGenome
-Base.size(vx::ValuesTopologyResult) = (length(vx.x),)
-Base.getindex(vx::ValuesTopologyResult, i::Int) = vx.x[i]
 
 function Base.iterate(x::TopologyResult, (p, i)=(pairs(x), nothing))
     next = i isa Nothing ? iterate(p) : iterate(p, i)
