@@ -596,6 +596,53 @@ macro reduce_valence(dofix, n1, n2, nm=0)
     end)
 end
 
+"""
+    check_C_disorder!(graph, pos, types, i, mat)
+
+Check the presence of carbon cycle disorder (multiple cycles superposed).
+If present, send a warning and allow the common carbons and the ends of the cycles to have
+an additional bond out of the cycle (even if it overcomes the usual bond limits for a
+carbon).
+"""
+function check_C_disorder!(graph, pos, types, i, mat)
+    neighs = neighbors(graph, i)
+    length(neighs) ≥ 5 || return false
+    carbons = PeriodicVertex3D[]
+    for x in neighs
+        ty = types[x.v]
+        if !ismetal[atomic_numbers[ty]]
+            ty == :C || return false
+            push!(carbons, x)
+        end
+    end
+    if length(carbons) > 5
+        Δs = Float64[norm(mat*(pos[x.v] .+ x.ofs .- pos[i])) for x in neighs]
+        toremove = least_plausible_neighbours(Δs, length(carbons) - 5)
+        for i in toremove
+            rem_edge!(graph, PeriodicEdge3D(i, neighs[i]))
+        end
+    end
+    length(carbons) == 5 || return false
+    adjacency = MMatrix{5,5,Bool,25}(undef)
+    buffer, ortho, safemin = prepare_periodic_distance_computations(mat)
+    for i in 1:5
+        posi = pos[carbons[i].v] .+ carbons[i].ofs
+        adjacency[i,i] = false
+        for j in (i+1):5
+            buffer .= posi .- pos[carbons[j].v] .- carbons[j].ofs
+            adjacency[i,j] = adjacency[j,i] = periodic_distance!(buffer, mat, ortho, safemin) < 1.85
+        end
+    end
+    odd_one = false
+    num_neighs = sum(adjacency; dims=1)
+    for i in 1:5
+        if num_neighs[i] == 0
+            odd_one && return false
+            odd_one = true
+        end
+    end
+    return true
+end
 
 """
     fix_valence!(graph::PeriodicGraph3D, pos, types, passH, passO, passCN, mat, ::Val{dofix}, options) where {dofix}
@@ -623,10 +670,14 @@ function fix_valence!(graph::PeriodicGraph3D, pos, types, passH, passO, passCN, 
             @reduce_valence dofix 0 2 2
         end
     end
+    anychecked = false
     for i in passCN
         t = types[i]
-        @reduce_valence dofix 2 4 1
+        checked = t == :C && dofix && check_C_disorder!(graph, pos, types, i, mat)
+        checked || @reduce_valence dofix 2 4 1
+        anychecked |= checked
     end
+    @ifwarn anychecked && @error "Found what looks like a disordered carbon ring for $(options.name): use of disordered input is not advised, please double-check the detected topology or provide a clean input."
     if !isempty(invalidatoms)
         s = String.(collect(invalidatoms))
         @ifwarn begin
