@@ -67,7 +67,7 @@ CrystalNets.edges_from_bonds
 ## Clustering algorithm
 
 ```@docs
-CrystalNets.find_sbus
+CrystalNets.find_sbus!
 CrystalNets.regroup_sbus
 CrystalNets.regroup_paddlewheel!
 CrystalNets.split_sbu!

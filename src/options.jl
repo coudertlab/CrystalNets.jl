@@ -203,7 +203,7 @@ Finally, each group of adjacent nonmetals, metalloids and halogens is assigned c
 following the same rule as for P and S atoms.
 
 At the end of the procedure, all atoms are thus given a class between `1` and `length(sbus)`
-which is not in `toclassify`. See also [`find_sbus`](@ref) for the implementation of this
+which is not in `toclassify`. See also [`find_sbus!`](@ref) for the implementation of this
 procedure.
 
 To determine which SBU kind corresponds to a given atom, use `getindex`:
@@ -282,6 +282,7 @@ function getmetal(sbus::ClusterKinds)
 end
 
 Base.length(sbus::ClusterKinds) = sbus.len
+Base.:(==)(k1::ClusterKinds, k2::ClusterKinds) = k1.dict == k2.dict && k1.default == k2.default && k1.tomerge == k2.tomerge
 
 const default_sbus = ClusterKinds([
     [:metal, :actinide, :lanthanide], [:C, :Pc, :Ss], [:P, :S],
@@ -576,4 +577,12 @@ function rev_permute_mapping(options::Options, rev_vmap, len=length(rev_vmap))
         vmap[x] = i
     end
     return permute_mapping(options, vmap)
+end
+
+function (Base.:(==))(opt1::Options, opt2::Options)
+    opt1 === opt2 && return true
+    for i in 1:nfields(opt1)
+        getfield(opt1, i) == getfield(opt2, i) || return false
+    end
+    return true
 end

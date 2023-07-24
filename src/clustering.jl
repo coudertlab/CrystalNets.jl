@@ -877,12 +877,12 @@ end
 
 
 """
-    find_sbus(crystal, kinds=default_sbus)
+    find_sbus!(crystal::Crystal, kinds::ClusterKinds=default_sbus)
 
 Recognize SBUs using heuristics based on the atom types corresponding to the `AllNodes`
 clustering algorithm.
 """
-function find_sbus(crystal, kinds=default_sbus)
+function find_sbus!(crystal::Crystal, kinds::ClusterKinds=default_sbus)
     separate_metals = crystal.options.separate_metals::Bool
     n = nv(crystal.pge.g)
     classes = Vector{Int}(undef, n)
@@ -926,7 +926,6 @@ function find_sbus(crystal, kinds=default_sbus)
                 # Each atom in an aromatic cycle is bonded to the other atoms of the
                 # same cycle. The newly-formed clique is assigned a new class.
                 last_class += 1
-                aromaticcycleclass = last_class
                 for (i, x) in enumerate(cycle)
                     classes[x.v] = last_class
                     for j in (i+1):length(cycle)
@@ -1311,6 +1310,7 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters, onlyn
     for s in vertices(crystal.pge.g)
         atts = clusters.attributions[s]
         neigh0 = neighbors(crystal.pge.g, s)
+        # @show s, atts
         @toggleassert length(neigh0) ≥ 2
         typisnotC = crystal.types[s] !== :C
         for x in neigh0
@@ -1327,7 +1327,7 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters, onlyn
                     end
                 end
             end
-            if d > s || (d == s && x.ofs > zero(SVector{3,Int}))
+            if isdirectedge(PeriodicGraphs.unsafe_edge{3}(s, x))
                 attd = clusters.attributions[d]
                 newofs = x.ofs .+ clusters.offsets[s] .- clusters.offsets[d]
                 if atts == attd && d != s
@@ -1399,7 +1399,7 @@ function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Tupl
     end
     if guess
         clusters::Clusters = try
-            find_sbus(c, c.options.cluster_kinds)
+            find_sbus!(c, c.options.cluster_kinds)
         catch e
             if !(e isa ClusteringError)
                 rethrow()
@@ -1412,7 +1412,7 @@ function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Tupl
         end
         return false, clusters
     end
-    return false, find_sbus(c, c.options.cluster_kinds)
+    return false, find_sbus!(c, c.options.cluster_kinds)
 end
 
 function find_clusters(_c::Crystal{T}) where T
@@ -1428,19 +1428,20 @@ function find_clusters(_c::Crystal{T}) where T
         idx = maybeclusters isa Bool ? identified::Tuple{_StructureType,_Clustering,Bool} :
                                        (structure, identified[2], true)
         clusters::Union{Int,Clusters} = get!(encountered, idx, i)
+        newc = Crystal(copy(c.pge), copy(c.types), c.clusters, c.options)
         if clusters == i
             if maybeclusters isa Clusters
                 clusters = maybeclusters
             else
                 separate_metals = maybeclusters
                 guess = structure == StructureType.Guess && identified[2] == Clustering.Auto
-                _guess, clusters = _find_clusters(c, guess, separate_metals)
+                _guess, clusters = _find_clusters(newc, guess, separate_metals)
                 if guess && !_guess
                     structure = StructureType.Cluster
                 end
             end
         end
-        ret[i] = (Crystal{Nothing}(c; structure, clusterings=[_clustering]), clusters)
+        ret[i] = (Crystal{Nothing}(newc; structure, clusterings=[_clustering]), clusters)
     end
     return ret
 end
