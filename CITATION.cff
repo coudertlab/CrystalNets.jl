@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 title: CrystalNets.jl
-message: "If you use this software, please cite it as below (WARNING: temporary version awaiting article publication)."
+message: "If you use this software, please cite it as below."
 type: software
 authors:
   - given-names: Lionel
@@ -8,11 +8,11 @@ authors:
 repository-code: "https://github.com/coudertlab/CrystalNets.jl"
 url: "https://molsim.info/CrystalNets.jl/"
 license: MIT
-version: 1.0.0
+version: 1.4.3
 identifiers:
   - type: url
-    value: "https://scipost.org/submissions/10.26434/chemrxiv-2022-bl6mf-v2/"
-    description: The SciPost submission.
+    value: "https://scipost.org/SciPostChem.1.2.005/"
+    description: The SciPost article.
 preferred-citation:
   type: article
   authors:
@@ -25,5 +25,5 @@ preferred-citation:
       orcid: "https://orcid.org/0000-0001-5318-3910"
   title: "CrystalNets.jl: Identification of Crystal Topologies"
   year: 2022
-  doi: "10.26434/chemrxiv-2022-bl6mf-v2"
+  doi: "10.21468/SciPostChem.1.2.005"
 
