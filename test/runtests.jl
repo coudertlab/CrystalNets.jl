@@ -147,7 +147,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     calfig = extract1(determine_topology(joinpath(cifs, "CALFIG.cif"); kwargs..., clusterings=[Clustering.Auto]))
     @test string(calfig) == "non-periodic"
 
-    println(stderr, "The following warnings and error printing is expected")
+    println(stderr, "The following @error about carbon cycle disorder is expected")
     # Test carbon cycle disorder detection
     cizpos = extract1(determine_topology(joinpath(cifs, "CIZPOS.cif"); kwargs..., clusterings=[Clustering.Auto], bonding=Bonding.Guess))
     @test string(cizpos) == "AllNodes: fof\nSingleNodes: nbo"

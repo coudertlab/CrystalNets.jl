@@ -15,6 +15,7 @@ starting '_' character) is linked to its value.
 Values are either a string or a vector of string (if defined in a loop).
 """
 function parse_cif(file)
+    name = splitext(basename(file))[1]
     all_data = Dict{String, Union{String, Vector{String}}}()
     inloop = false
     loopisspecified = false
@@ -44,7 +45,7 @@ function parse_cif(file)
             if startswith(l[i:j], "data")
                 inloop = false
                 @ifwarn if haskey(all_data, "atom_site_fract_x")
-                    @error lazy"The CIF file $(options.name) may contain multiple inputs: only keeping the last one."
+                    @error lazy"The CIF file $name may contain multiple inputs: only keeping the last one."
                 end
                 i, j, x = nextword(l, x)
                 continue
@@ -82,7 +83,7 @@ function parse_cif(file)
                 lastword = ""
             elseif j-i ≥ 4 && l[i:i+4] == "data_"
                 @ifwarn if haskey(all_data, "data") && haskey(all_data, "atom_site_fract_x")
-                    @error lazy"The CIF file $(options.name) may contain multiple inputs: only keeping the last one."
+                    @error lazy"The CIF file $name may contain multiple inputs: only keeping the last one."
                 end
                 all_data["data"] = l[i+5:j]
             else
@@ -99,6 +100,7 @@ function parse_cif(file)
         i, j, x = nextword(l, x)
     end
 
+    all_data["__name"] = name
     return all_data
 end
 
@@ -151,7 +153,7 @@ CIF(file::AbstractString) = CIF(parse_cif(file))
 function CIF(parsed::Dict{String, Union{Vector{String},String}})
     natoms = length(parsed["atom_site_label"]::Vector{String})
     equivalentpositions = haskey(parsed, "symmetry_equiv_pos_as_xyz") ?
-        popvecstring!(parsed, "symmetry_equiv_pos_as_xyz") : 
+        popvecstring!(parsed, "symmetry_equiv_pos_as_xyz") :
         haskey(parsed, "space_group_symop_operation_xyz") ?
             popvecstring!(parsed, "space_group_symop_operation_xyz") : String[]
     all(contains('?'), equivalentpositions) && empty!(equivalentpositions)
@@ -168,7 +170,7 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
                     popstring!(parsed, "symmetry_space_group_name_H-M") : "",
             haskey(parsed, "symmetry_Int_Tables_number") ?
                 parse(Int, popstring!(parsed, "symmetry_Int_Tables_number")) :
-                haskey(parsed, "space_group.IT_number") ? 
+                haskey(parsed, "space_group.IT_number") ?
                     parse(Int, popstring!(parsed, "space_group.IT_number")) : 0)
     cell = Cell(hall, (parsestrip(popstring!(parsed, "cell_length_a")),
                        parsestrip(popstring!(parsed, "cell_length_b")),
@@ -257,12 +259,12 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
             if x == 0 || y == 0
                 empty!(bonds)
                 missingatom = x == 0 ? bond_a[i] : bond_b[i]
-                @ifwarn @error lazy"Atom $missingatom, used in a bond, has either zero or multiple placements in CIF file $(options.name). This invalidates all bonds from the file, which will thus be discarded."
+                @ifwarn @error lazy"""Atom $missingatom, used in a bond, has either zero or multiple placements in CIF file $(parsed["__name"]). This invalidates all bonds from the file, which will thus be discarded."""
                 break
             end
             d = 1.004f0*dists[i] # to avoid rounding errors
             if isnan(d) || (d != -Inf32 && (d ≤ 0f0 || isinf(d)))
-                @ifwarn @error lazy"Invalid bond distance of $d between atoms $(bond_a[i]) and $(bond_b[i]) in CIF file $(options.name)."
+                @ifwarn @error lazy"""Invalid bond distance of $d between atoms $(bond_a[i]) and $(bond_b[i]) in CIF file $(parsed["__name"])."""
                 continue
             end
             push!(bonds[x], (y, d))
@@ -923,8 +925,8 @@ function sanity_checks!(graph, pos, types, mat, options)
                 if (order_s, order_d, blength) ∉ alreadywarned
                     push!(alreadywarned, (order_s, order_d, blength))
                     bentmsg = bent_bond ? " and bent" : ""
-                    @ifwarn @warn lazy"""Suspiciously large$bentmsg bond found: $blength pm between $order_s and $order_d. \
-                        $(removeflag ? " Such bonds are probably spurious and will be deleted." : "")"""
+                    @ifwarn @warn lazy"""Suspiciously large$bentmsg bond found: $blength pm between $order_s and $order_d.
+                        $(removeflag ? "Such bonds are probably spurious and will be deleted." : "")"""
                     ret = true
                 end
                 if removeflag
