@@ -14,7 +14,7 @@ julia> using CrystalNets
 julia> determine_topology(FILE)
 ```
 
-See the documentation at https://molsim.info/CrystalNets.jl/ for further instructions on
+See the documentation at https://coudertlab.github.io/CrystalNets.jl/ for further instructions on
 on the use of CrystalNets.jl, and how to do a full installation to reduce latency at
 startup.
 """
