@@ -730,7 +730,8 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
                     typu = types[u.v]
                     if typu === :C
                         u.v ∈ toremove && continue
-                        Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i]))) > 1.45 && continue
+                        bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
+                        bondlength > 1.45 && continue
                         @ifwarn if isempty(toremove)
                             @warn lazy"C suspiciously close to a metal (bond length: $bondlength) will be removed."
                         end
@@ -1110,6 +1111,7 @@ function parse_as_chemfile(frame::Chemfiles.Frame, options::Options, name::Strin
             push!(types, typ)
         end
     end
+    reverse!(types)
 
     _pos = collect(eachcol(Chemfiles.positions(frame)))
     cell = cell_with_warning(SMatrix{3,3,BigFloat,9}(Chemfiles.matrix(Chemfiles.UnitCell(frame)))')
