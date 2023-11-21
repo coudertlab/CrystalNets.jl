@@ -1110,6 +1110,7 @@ function parse_as_chemfile(frame::Chemfiles.Frame, options::Options, name::Strin
             push!(types, typ)
         end
     end
+    reverse!(types)
 
     _pos = collect(eachcol(Chemfiles.positions(frame)))
     cell = cell_with_warning(SMatrix{3,3,BigFloat,9}(Chemfiles.matrix(Chemfiles.UnitCell(frame)))')
