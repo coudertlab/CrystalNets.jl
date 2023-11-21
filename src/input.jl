@@ -730,7 +730,8 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
                     typu = types[u.v]
                     if typu === :C
                         u.v ∈ toremove && continue
-                        Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i]))) > 1.45 && continue
+                        bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
+                        bondlength > 1.45 && continue
                         @ifwarn if isempty(toremove)
                             @warn lazy"C suspiciously close to a metal (bond length: $bondlength) will be removed."
                         end

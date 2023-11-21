@@ -409,3 +409,11 @@ end
     Test.get_testset().n_passed += length(unstabletry) - failures
     @test failures == 0
 end
+
+@testset "Non-CIF Files" begin
+    testcase = joinpath(last(_finddirs()), "test", "Moganite.xyz")
+    mogtopo = extract1(determine_topology(testcase))
+    @test string(mogtopo) == "mog"
+    # Test ordering of species is correct while parsing with chemfiles
+    @test parse_chemfile(testcase).types == [repeat([:Si], 12); repeat([:O], 24)]
+end
