@@ -100,7 +100,7 @@ function validate_archive(custom_arc, avoid_recompute=true)::Dict{String,String}
                     @info "Keys will be converted to the topological genome used by CrystalNets. This may take a while."
                 end
                 arc_per_thread = [Pair{String,String}[] for _ in 1:nthreads()]
-                Threads.@threads for (key, id) in collect(parsed)
+                Threads.@threads :static for (key, id) in collect(parsed)
                     _g = topological_genome(CrystalNet(PeriodicGraph(key)))
                     if _g.unstable || !isempty(_g.error)
                         if _g.unstable

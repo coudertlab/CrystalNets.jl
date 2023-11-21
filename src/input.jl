@@ -738,7 +738,8 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
                         push!(toremove, u.v)
                     elseif typu == t && u.v > i
                         u.v ∈ toremove && continue
-                        Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i]))) > 0.9 && continue
+                        bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[i])))
+                        bondlength > 0.9 && continue
                         @ifwarn if isempty(toremove)
                             @warn lazy"$t atoms suspiciously close to one another(bond length: $bondlength). One will be removed."
                         end
