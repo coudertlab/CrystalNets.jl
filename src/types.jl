@@ -1003,6 +1003,8 @@ function Base.hash(s::TopologicalGenome, h::UInt)
     isempty(s.error) ? hash(s.error, h) : s.name === nothing ? hash(s.genome, h) : hash(s.name, h)
 end
 
+haserror(x::TopologicalGenome) = !isempty(x.error)
+
 function Base.show(io::IO, x::TopologicalGenome)
     if !isempty(x.error)
         print(io, "FAILED with: ", x.error)
@@ -1222,6 +1224,8 @@ end
 Base.size(vx::ValuesTopologyResult) = (length(vx.x),)
 Base.getindex(vx::ValuesTopologyResult, i::Int) = vx.x[i]
 
+haserror(x::TopologyResult) = any(haserror, values(x))
+
 function Base.show(io::IO, ::MIME"text/plain", x::TopologyResult)
     samenet = keys(x)
     if length(samenet) == 1 && length(samenet[1]) == 1 && x.uniques[1] == 1 # Auto
@@ -1353,19 +1357,29 @@ TopologyResult
 struct InterpenetratedTopologyResult <: AbstractVector{Tuple{TopologyResult,Int}}
     data::Vector{Tuple{TopologyResult,Int,Vector{Int}}}
 end
-InterpenetratedTopologyResult() = InterpenetratedTopologyResult(Tuple{TopologyResult,Int,Vector{Int}}[])
+function InterpenetratedTopologyResult(b::Bool)
+    if b # non-periodic
+        InterpenetratedTopologyResult([(TopologyResult(),0,Int[])])
+    else # no topology computation
+        InterpenetratedTopologyResult(Tuple{TopologyResult,Int,Vector{Int}}[])
+    end
+end
 InterpenetratedTopologyResult(e::AbstractString) = InterpenetratedTopologyResult([(TopologyResult(string(e)), 1, Int[])])
 Base.size(x::InterpenetratedTopologyResult) = (length(x.data),)
 Base.getindex(x::InterpenetratedTopologyResult, i) = (y = x.data[i]; (y[1], y[2]))
+
+haserror(x::InterpenetratedTopologyResult) = any(haserror∘first, x.data)
 
 function Base.show(io::IO, ::MIME"text/plain", x::InterpenetratedTopologyResult)
     compact = length(x) > 1
     if compact
         print(io, length(x), " interpenetrated substructures:")
-    elseif length(x) == 0
-        print(io, "non-periodic")
     end
     for (i, (topology, nfold)) in enumerate(x)
+        if nfold == 0
+            print(io, "non-periodic")
+            continue
+        end
         if compact
             print(io, "\n⋅ Subnet ", i, " → ")
         end
@@ -1395,7 +1409,8 @@ end
 
 function Base.parse(::Type{InterpenetratedTopologyResult}, x::AbstractString)
     s = split(x; limit=4)
-    length(s) == 1 && x == "non-periodic" && return InterpenetratedTopologyResult()
+    length(s) == 1 && x == "non-periodic" && return InterpenetratedTopologyResult(true)
+    isempty(s) && return InterpenetratedTopologyResult(false)
     if length(s) > 3 && s[2] == "interpenetrated" && s[3] == "substructures:"
         lines = split(s[4], '\n')
         data = Vector{Tuple{TopologyResult,Int,Vector{Int}}}(undef, length(lines))

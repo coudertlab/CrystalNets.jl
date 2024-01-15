@@ -343,9 +343,10 @@ function make_archive(path, destination, verbose=false)
         catch e
             flag = true
             flagerror[] = e
-            InterpenetratedTopologyResult()
+            InterpenetratedTopologyResult(true)
         end
         for (i, (topology, nfold)) in enumerate(results)
+            nfold == 0 && continue
             genome = string(topology)
             if startswith(genome, "unstable") || genome == "non-periodic"
                 flag = true

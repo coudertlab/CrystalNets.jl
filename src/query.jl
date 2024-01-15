@@ -113,9 +113,12 @@ macro loop_group(ex)
         group = :(group.$D)
         newex = quote
             if !isempty(group)
-                currallowed = first(group)[1][1].options.dimensions
-                if isempty(currallowed) || $i in currallowed
-                    $(deepcopy(ex))
+                root = first(group)[1]
+                if !isempty(root)
+                    currallowed = root[1].options.dimensions
+                    if isempty(currallowed) || $i in currallowed
+                        $(deepcopy(ex))
+                    end
                 end
             end
         end
@@ -393,7 +396,7 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
             topological_genome(UnderlyingNets(parse_chemfile(f, options)))
         catch e
             (options.throw_error || isinterrupt(e)) && rethrow()
-            InterpenetratedTopologyResult(e)
+            InterpenetratedTopologyResult(string(e))
         end
         if isempty(genomes)
             push!(genomes.data, (TopologyResult(""), 1, Int[]))
@@ -406,6 +409,7 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
             end
         end
         showprogress && next!(progress)
+        yield()
     end
 
     result = Dict{String,InterpenetratedTopologyResult}()
@@ -414,7 +418,7 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
         for l in eachline(_f)
             isempty(l) && continue
             splits = split(l, '/')
-            data = get!(result, splits[1], InterpenetratedTopologyResult()).data
+            data = get!(result, splits[1], InterpenetratedTopologyResult(false)).data
             _genome = pop!(splits)
             _nfold = pop!(splits)
             push!(data, (parse(TopologyResult, _genome), parse(Int, _nfold), Int[]))
@@ -525,6 +529,7 @@ function guess_topology_dataset(path, save, autoclean, showprogress, options::Op
             println(results, file, '/', genome)
         end
         showprogress && next!(progress)
+        yield()
     end
 
     ret = Pair{String,TopologicalGenome}[]

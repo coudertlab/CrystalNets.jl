@@ -13,11 +13,11 @@ function check_dimensionality(c::CrystalNet{D}) where {D}
     unique!(edgs)
     mat = reduce(hcat, edgs)
     if D == 3
-        isrank3(mat) || throw(DimensionMismatch("Internal error: the input net does not have expected dimensionality 3."))
+        isrank3(mat) || throw(DimensionMismatch(lazy"Internal error: the input net does not have expected dimensionality 3: found $(rank(mat))"))
     elseif D == 2
-        isrank2(mat) || throw(DimensionMismatch("Internal error: the input net does not have expected dimensionality 2."))
+        isrank2(mat) || throw(DimensionMismatch(lazy"Internal error: the input net does not have expected dimensionality 2: found $(rank(mat))"))
     elseif D == 1
-        isrank1(mat) || throw(DimensionMismatch("Internal error: the input net does not have expected dimensionality 1."))
+        isrank1(mat) || throw(DimensionMismatch(lazy"Internal error: the input net does not have expected dimensionality 1: found $(rank(mat))"))
     else
         throw(AssertionError("1 ≤ D ≤ 3"))
     end
