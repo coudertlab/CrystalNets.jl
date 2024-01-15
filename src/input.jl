@@ -599,15 +599,15 @@ macro reduce_valence(dofix, n1, n2, nm=0)
 end
 
 """
-    check_C_disorder!(graph, pos, types, i, mat)
+    check_C_disorder!(graph, pos, types, idx, mat)
 
 Check the presence of carbon cycle disorder (multiple cycles superposed).
 If present, send a warning and allow the common carbons and the ends of the cycles to have
 an additional bond out of the cycle (even if it overcomes the usual bond limits for a
 carbon).
 """
-function check_C_disorder!(graph, pos, types, i, mat)
-    neighs = neighbors(graph, i)
+function check_C_disorder!(graph, pos, types, idx, mat)
+    neighs = neighbors(graph, idx)
     length(neighs) ≥ 5 || return false
     carbons = PeriodicVertex3D[]
     for x in neighs
@@ -618,11 +618,12 @@ function check_C_disorder!(graph, pos, types, i, mat)
         end
     end
     if length(carbons) > 5
-        Δs = Float64[norm(mat*(pos[x.v] .+ x.ofs .- pos[i])) for x in neighs]
-        toremove = least_plausible_neighbours(Δs, length(carbons) - 5)
-        for i in toremove
-            rem_edge!(graph, PeriodicEdge3D(i, neighs[i]))
+        Δs = Float64[norm(mat*(pos[x.v] .+ x.ofs .- pos[idx])) for x in neighs]
+        toremove = neighs[least_plausible_neighbours(Δs, length(carbons) - 5)]
+        for j in toremove
+            rem_edge!(graph, PeriodicEdge3D(idx, j))
         end
+        setdiff!(carbons, toremove)
     end
     length(carbons) == 5 || return false
     adjacency = MMatrix{5,5,Bool,25}(undef)
