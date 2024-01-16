@@ -240,6 +240,12 @@ function split_clusterings(s)
     end
 end
 
+@static if VERSION < v"1.11-"
+    macro main()
+        :main
+    end
+end
+
 """
     main(ARGS)
 
@@ -253,7 +259,7 @@ Return code can be:
 * 4: internal CrystalNets.jl error
 * 5: unhandled CrystalNets.jl error, please report
 """
-function main(args)
+function (@main)(args)
     try
         _parsed_args = parse_commandline(args)
         if _parsed_args isa Int

@@ -44,7 +44,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
 @testset "MOF examples" begin
     cifs, crystalnetsdir = _finddirs()
     kwargs = (; structure=StructureType.MOF, clusterings=[Clustering.Auto,Standard,PE,PEM])
-    println(stderr, "The following warning about altering performance is expected")
+    println(stderr, "The following warning about altering performance, the two messages on warning toggling and the three error statements are expected.")
     mofdataset = determine_topology_dataset(joinpath(cifs, "MOFs"), false; kwargs...)
 
     @testset "Dataset analysis" begin
@@ -135,6 +135,8 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     @test wemfif[PE].name == "crs"
     CrystalNets.toggle_warning(true)
 
+    println(stderr, "The following warning about symmetry and the three warnings about 0-dimensional structures are expected.")
+
     # test cell minimization with collision nodes
     nott112 = extract1(determine_topology(joinpath(cifs, "NOTT-112.cif"); kwargs..., bonding=Bonding.Input))
     @test startswith(string(nott112), "AllNodes, PEM: ntt\nSingleNodes, Standard: nts\nPE: ")
@@ -147,7 +149,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     calfig = extract1(determine_topology(joinpath(cifs, "CALFIG.cif"); kwargs..., clusterings=[Clustering.Auto]))
     @test string(calfig) == "non-periodic"
 
-    println(stderr, "The following @error about carbon cycle disorder is expected")
+    println(stderr, "The following @error about carbon cycle disorder is expected.")
     # Test carbon cycle disorder detection
     cizpos = extract1(determine_topology(joinpath(cifs, "CIZPOS.cif"); kwargs..., clusterings=[Clustering.Auto], bonding=Bonding.Guess))
     @test string(cizpos) == "AllNodes: fof\nSingleNodes: nbo"
@@ -352,6 +354,7 @@ end
     @test result == 0
     @test written == ["gis, GIS"]
 
+    #= FIXME: https://github.com/carlobaldassi/ArgParse.jl/pull/128
     empty!(ARGS)
     push!(ARGS, "--help")
     result, written = capture_out(out)
@@ -364,6 +367,7 @@ end
     @test isempty(popfirst!(written))
     @test isempty(popfirst!(written))
     @test popfirst!(written) == "Automatic recognition of crystal net topologies."
+    =#
 
     empty!(ARGS)
     append!(ARGS, safeARGS)
