@@ -85,6 +85,10 @@ function parse_commandline(args)
             help = "Discard all warnings and information messages."
             action = :store_true
 
+        "--no-error"
+            help = "Discard all @error messages."
+            action = :store_true
+
         "--no-export"
             help = "Do not automatically export the parsed input."
             action = :store_true
@@ -263,6 +267,9 @@ function main(args)
 
         if parsed_args[:no_warn]::Bool
             toggle_warning(false)
+        end
+        if parsed_args[:no_error]::Bool
+            toggle_error(false)
         end
         if parsed_args[:no_export]::Bool
             if !isnothing(parsed_args[:export_to])

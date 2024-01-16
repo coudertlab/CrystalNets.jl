@@ -58,6 +58,20 @@ macro ifwarn(ex)
     end
 end
 
+macro iferror(ex)
+    return quote
+        if (DOERROR[]::Bool)
+            @static if VERSION < v"1.7-"
+                $(esc(ex))
+            else
+                Base.with_logger(minimal_logger) do
+                    $(esc(ex))
+                end
+            end
+        end
+    end
+end
+
 
 function recursive_readdir!(stored, prefix, path)
     for f in readdir(path; sort=false, join=false)

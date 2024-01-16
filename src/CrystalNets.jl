@@ -49,6 +49,7 @@ import Logging
 using ProgressMeter
 
 const DOWARN = Base.RefValue{Bool}(false)
+const DOERROR = Base.RefValue{Bool}(true)
 const DOEXPORT = Base.RefValue{Bool}(false)
 
 """
@@ -60,6 +61,17 @@ Without an argument, toggle on and off repeatedly at each call.
 function toggle_warning(to=nothing)
     global DOWARN
     DOWARN[] = to isa Nothing ? !DOWARN[] : to
+end
+
+"""
+    toggle_error(to=nothing)
+
+Toggle @error visibility on (if `to == true`) or off (if `to == false`).
+Without an argument, toggle on and off repeatedly at each call.
+"""
+function toggle_error(to=nothing)
+    global DOERROR
+    DOERROR[] = to isa Nothing ? !DOERROR[] : to
 end
 
 """
@@ -75,6 +87,7 @@ end
 
 function __init__()
     toggle_warning("--no-warn" ∉ ARGS)
+    toggle_error("--no-error" ∉ ARGS)
     toggle_export("--no-export" ∉ ARGS)
     nothing
 end

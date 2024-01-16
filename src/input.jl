@@ -44,7 +44,7 @@ function parse_cif(file)
             @toggleassert loopisspecified
             if startswith(l[i:j], "data")
                 inloop = false
-                @ifwarn if haskey(all_data, "atom_site_fract_x")
+                @iferror if haskey(all_data, "atom_site_fract_x")
                     @error lazy"The CIF file $name may contain multiple inputs: only keeping the last one."
                 end
                 i, j, x = nextword(l, x)
@@ -82,7 +82,7 @@ function parse_cif(file)
                 loopspec = String[]
                 lastword = ""
             elseif j-i ≥ 4 && l[i:i+4] == "data_"
-                @ifwarn if haskey(all_data, "data") && haskey(all_data, "atom_site_fract_x")
+                @iferror if haskey(all_data, "data") && haskey(all_data, "atom_site_fract_x")
                     @error lazy"The CIF file $name may contain multiple inputs: only keeping the last one."
                 end
                 all_data["data"] = l[i+5:j]
@@ -259,12 +259,12 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
             if x == 0 || y == 0
                 empty!(bonds)
                 missingatom = x == 0 ? bond_a[i] : bond_b[i]
-                @ifwarn @error lazy"""Atom $missingatom, used in a bond, has either zero or multiple placements in CIF file $(parsed["__name"]). This invalidates all bonds from the file, which will thus be discarded."""
+                @iferror @error lazy"""Atom $missingatom, used in a bond, has either zero or multiple placements in CIF file $(parsed["__name"]). This invalidates all bonds from the file, which will thus be discarded."""
                 break
             end
             d = 1.004f0*dists[i] # to avoid rounding errors
             if isnan(d) || (d != -Inf32 && (d ≤ 0f0 || isinf(d)))
-                @ifwarn @error lazy"""Invalid bond distance of $d between atoms $(bond_a[i]) and $(bond_b[i]) in CIF file $(parsed["__name"])."""
+                @iferror @error lazy"""Invalid bond distance of $d between atoms $(bond_a[i]) and $(bond_b[i]) in CIF file $(parsed["__name"])."""
                 continue
             end
             push!(bonds[x], (y, d))
@@ -680,7 +680,7 @@ function fix_valence!(graph::PeriodicGraph3D, pos, types, passH, passO, passCN, 
         checked || @reduce_valence dofix 2 4 1
         anychecked |= checked
     end
-    @ifwarn anychecked && @error lazy"Found what looks like a disordered carbon ring for $(options.name): use of disordered input is not advised, please double-check the detected topology or provide a clean input."
+    @iferror anychecked && @error lazy"Found what looks like a disordered carbon ring for $(options.name): use of disordered input is not advised, please double-check the detected topology or provide a clean input."
     if !isempty(invalidatoms)
         s = String.(collect(invalidatoms))
         @ifwarn begin
@@ -718,13 +718,13 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
             if flag && any(>(2.6), lengths)
                 # This warning could be out of a  @ifwarn because it reliably indicates
                 # cases where the input was not properly cleaned
-                @ifwarn @error lazy"Very suspicious connectivity found for $(options.name)."
+                @iferror @error lazy"Very suspicious connectivity found for $(options.name)."
                 flag = false
             end
         else
             at = get(atomic_numbers, t, nothing)
             if at === nothing
-                @ifwarn @error lazy"Unrecognized atom type \"$t\" in $(options.name) will be considered a dummy atom."
+                @iferror @error lazy"Unrecognized atom type \"$t\" in $(options.name) will be considered a dummy atom."
                 push!(toremove, i)
             elseif ismetal[at::Int]
                 for u in neighbors(graph, i)

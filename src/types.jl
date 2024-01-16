@@ -940,7 +940,7 @@ function UnderlyingNets(g::SmallPseudoGraph, options::Options)
     groups = UnderlyingNets()
     graph = g isa PeriodicGraph ? g : PeriodicGraph(g)
     dimensions = PeriodicGraphs.dimensionality(graph)
-    @ifwarn if haskey(dimensions, 0)
+    @iferror if haskey(dimensions, 0)
         @error "Detected substructure of dimension 0 in the input graph. It will be ignored for topology computation."
     end
     cell = Cell()

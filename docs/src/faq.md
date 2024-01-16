@@ -14,8 +14,8 @@ This is the focus of the [Visualization](@ref) tutorial.
 
 ## How can I silence warnings or remove exports?
 
-- From the module: see [`CrystalNets.toggle_warning`](@ref) and [`CrystalNets.toggle_export`](@ref)
-- From the executable: use the `--no-warn` and `--no-export` flags.
+- From the module: see [`CrystalNets.toggle_warning`](@ref), [`CrystalNets.toggle_error`](@ref) and [`CrystalNets.toggle_export`](@ref)
+- From the executable: use the `--no-warn`, `--no-error` and `--no-export` flags.
 
 For exports, each `export_...` keyword argument to [`Options`](@ref CrystalNets.Options) can be individually set to `false` or `""` to silence this particular export. See also the paragraph on [export options](@ref exports).
 
