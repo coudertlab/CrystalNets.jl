@@ -369,9 +369,9 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
             truncate(io, pos+(pos>0)) # remove the last line if incomplete
             close(io)
             for l in eachline(_f)
-                _splits = split(l, '/')
+                _splits = split(l, ';')
                 isempty(last(_splits)) && continue
-                push!(alreadydone, join(_splits[1:end-2], '/'))
+                push!(alreadydone, join(_splits[1:end-2], ';'))
             end
         end
         files = recursive_readdir(path)
@@ -402,10 +402,10 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
             push!(genomes.data, (TopologyResult(""), 1, Int[]))
         end
         for (j, (genome, nfold)) in enumerate(genomes)
-            newname = string(file, '/', j, '/', nfold)
+            newname = string(file, ';', j, ';', nfold)
             open(joinpath(resultdir, string(threadid())), "a") do results
                 io = IOContext(results, :compact => true)
-                println(io, newname, '/', genome)
+                println(io, newname, ';', genome)
             end
         end
         showprogress && next!(progress)
@@ -417,7 +417,7 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
         basename(_f) == "data" && continue
         for l in eachline(_f)
             isempty(l) && continue
-            splits = split(l, '/')
+            splits = split(l, ';')
             data = get!(result, splits[1], InterpenetratedTopologyResult(false)).data
             _genome = pop!(splits)
             _nfold = pop!(splits)
@@ -498,8 +498,8 @@ function guess_topology_dataset(path, save, autoclean, showprogress, options::Op
             close(io)
             for l in eachline(_f)
                 isempty(l) && continue
-                _splits = split(l, '/')
-                push!(alreadydone, join(_splits[1:end-1], '/'))
+                _splits = split(l, ';')
+                push!(alreadydone, join(_splits[1:end-1], ';'))
             end
         end
         files = recursive_readdir(path)
@@ -526,7 +526,7 @@ function guess_topology_dataset(path, save, autoclean, showprogress, options::Op
             TopologicalGenome(escape_string(string(e)::String))
         end
         open(joinpath(resultdir, string(threadid())), "a") do results
-            println(results, file, '/', genome)
+            println(results, file, ';', genome)
         end
         showprogress && next!(progress)
         yield()
@@ -536,10 +536,10 @@ function guess_topology_dataset(path, save, autoclean, showprogress, options::Op
     for _f in readdir(resultdir; join=true)
         basename(_f) == "data" && continue
         for l in eachline(_f)
-            splits = split(l, '/')
+            splits = split(l, ';')
             isempty(last(splits)) && @show _f, l
             _genome = pop!(splits)
-            push!(ret, Pair(join(splits, '/'), parse(TopologicalGenome, _genome)))
+            push!(ret, Pair(join(splits, ';'), parse(TopologicalGenome, _genome)))
         end
     end
     result::Dict{String,TopologicalGenome} = Dict(ret)
