@@ -153,6 +153,11 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     # Test carbon cycle disorder detection
     cizpos = extract1(determine_topology(joinpath(cifs, "CIZPOS.cif"); kwargs..., clusterings=[Clustering.Auto], bonding=Bonding.Guess))
     @test string(cizpos) == "AllNodes: fof\nSingleNodes: nbo"
+
+    @test_broken determine_topology(joinpath(cifs, "c8ce00653a2.cif"); kwargs..., clusterings=[Clustering.PE], bonding=Bonding.Guess)
+
+    bexvad = determine_topology(joinpath(cifs, "BEXVAD.cif"); kwargs..., clusterings=[Clustering.PEM], bonding=Bonding.Guess)
+    @test_broken bexvad[1][1] == bexvad[2][1]
 end
 
 @testset "Archive" begin
