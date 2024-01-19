@@ -1137,19 +1137,15 @@ end
 end
 
 function Base.get(f::Union{Function,Type}, x::TopologyResult, c::_Clustering)
-    if x.attributions[Int(c)] == 0
+    i = x.attributions[Int(c)]
+    if i == 0
         f()
     else
-        x.results[x.attributions[Int(c)]]
+        x.results[i]
     end
 end
 Base.get(x::TopologyResult, c::_Clustering, default) = get(Returns(default), x, c)
 
-function Base.get(x::TopologyResult, c::_Clustering, default)
-    i = x.attributions[Int(c)]
-    i == 0 && return default
-    return x.results[i]
-end
 Base.get(x::TopologyResult, c::Symbol, default) = get(x, clustering_from_symb(c), default)
 function Base.getindex(x::TopologyResult, c::_Clustering)
     ret = get(x, c, nothing)
@@ -1433,4 +1429,17 @@ function Base.parse(::Type{InterpenetratedTopologyResult}, x::AbstractString)
     end
     topo1, nfold1 = parse_nfold_topologyresult(x)
     return InterpenetratedTopologyResult([(topo1, nfold1, Int[])])
+end
+
+function one_topology(x::InterpenetratedTopologyResult, c::_Clustering)
+    result = nothing
+    for topo in x
+        newresult = get(topo[1], c, missing)
+        if result !== nothing
+            result == newresult || return nothing
+        else
+            result = newresult
+        end
+    end
+    return result
 end
