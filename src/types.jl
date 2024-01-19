@@ -1145,11 +1145,18 @@ function Base.get(f::Union{Function,Type}, x::TopologyResult, c::_Clustering)
 end
 Base.get(x::TopologyResult, c::_Clustering, default) = get(Returns(default), x, c)
 
+function Base.get(x::TopologyResult, c::_Clustering, default)
+    i = x.attributions[Int(c)]
+    i == 0 && return default
+    return x.results[i]
+end
+Base.get(x::TopologyResult, c::Symbol, default) = get(x, clustering_from_symb(c), default)
 function Base.getindex(x::TopologyResult, c::_Clustering)
-    if x.attributions[Int(c)] == 0
+    ret = get(x, c, nothing)
+    if ret isa Nothing
         throw(ArgumentError(lazy"No stored topology result for clustering $c"))
     end
-    return x.results[x.attributions[Int(c)]]
+    ret
 end
 Base.getindex(x::TopologyResult, c::Symbol) = getindex(x, clustering_from_symb(c))
 Base.getindex(x::TopologyResult, i) = x.results[x.uniques[i]]

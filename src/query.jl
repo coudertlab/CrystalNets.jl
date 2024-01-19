@@ -571,3 +571,43 @@ function guess_topology_dataset(path, save=true, autoclean=true, showprogress=tr
     restore_warns && (DOWARN[] = true)
     ret
 end
+
+"""
+    export_report(path, results; keepext=true)
+
+Write to `path` a CSV report on the `results` obtained from one of the `*_dataset`
+functions.
+
+If `keepext` is unset, remove the extension from the file names in `results`.
+"""
+function export_report(path, results::Dict; keepext=true)
+    clusterings = reduce(vcat, keys(first(first(results)[2])[1]))::Vector{_Clustering}
+    sort!(clusterings)
+    ks = sort!(collect(keys(results)))
+    open(path, "w") do io
+        print(io, "input, ")
+        join(io, clusterings, ", ")
+        println(io, ", catenation")
+        for name in ks
+            itr = results[name]
+            print(io, keepext ? splitext(name)[1] : name, ", ")
+            uniques = unique(itr)
+            for (u, mult) in uniques
+                for clustering in clusterings
+                    top = get(u, clustering, nothing)
+                    if top isa Nothing
+                        if clustering === Clustering.SingleNodes || clustering === Clustering.AllNodes
+                            auto = get(u, Clustering.Auto, nothing)
+                            top = auto
+                        end
+                    end
+                    top isa Nothing && throw(ArgumentError(lazy"No stored topology result for structure $name with clustering $clustering"))
+                    print(io, top, ", ")
+                end
+                print(io, count(==((u, mult)), itr)*mult)
+            end
+            println(io)
+        end
+    end
+    nothing
+end
