@@ -573,38 +573,61 @@ function guess_topology_dataset(path, save=true, autoclean=true, showprogress=tr
 end
 
 """
-    export_report(path, results; keepext=true)
+    export_report(path, results; keepext=true, fullunknown=false)
 
-Write to `path` a CSV report on the `results` obtained from one of the `*_dataset`
+Write to `path` a TSV report on the `results` obtained from one of the `*_dataset`
 functions.
 
 If `keepext` is unset, remove the extension from the file names in `results`.
+
+If `fullunknown` is set, export the full "UNKNOWN" and "unstable" topologies.
 """
-function export_report(path, results::Dict; keepext=true)
-    clusterings = reduce(vcat, keys(first(first(results)[2])[1]))::Vector{_Clustering}
+function export_report(path, results::Dict; keepext=true, fullunknown=false, clusterings=reduce(vcat, keys(first(first(results)[2])[1]))::Vector{_Clustering})
     sort!(clusterings)
+    if clusterings[1] === Clustering.Auto
+        popfirst!(clusterings)
+        pushfirst!(clusterings, Clustering.AllNodes, Clustering.SingleNodes)
+        @assert allunique(clusterings)
+    end
     ks = sort!(collect(keys(results)))
+    if splitext(path)[2] != ".tsv"
+        path = string(path, ".tsv")
+    end
     open(path, "w") do io
-        print(io, "input, ")
+        print(io, "input, catenation, ")
         join(io, clusterings, ", ")
-        println(io, ", catenation")
+        println(io)
         for name in ks
-            itr = results[name]
-            print(io, keepext ? splitext(name)[1] : name, ", ")
-            uniques = unique(itr)
-            for (u, mult) in uniques
-                for clustering in clusterings
-                    top = get(u, clustering, nothing)
-                    if top isa Nothing
-                        if clustering === Clustering.SingleNodes || clustering === Clustering.AllNodes
-                            auto = get(u, Clustering.Auto, nothing)
-                            top = auto
-                        end
-                    end
-                    top isa Nothing && throw(ArgumentError(lazy"No stored topology result for structure $name with clustering $clustering"))
-                    print(io, top, ", ")
+            topologies = results[name]
+            print(io, keepext ? splitext(name)[1] : name, '\t')
+            print(io, sum(last, topologies), '\t')
+            for (i, clust) in enumerate(clusterings)
+                topo = CrystalNets.one_topology(topologies, clust)
+                if topo isa Missing && (clust === Clustering.SingleNodes || clust === Clustering.AllNodes)
+                    topo = CrystalNets.one_topology(topologies, Clustering.Auto)
                 end
-                print(io, count(==((u, mult)), itr)*mult)
+                if topo isa Missing
+                    @error "Missing topology of $name with clustering $clust"
+                    print(io, "ERROR")
+                elseif topo isa Nothing
+                    print(io, "MISMATCH")
+                else
+                    topo::TopologicalGenome
+                    if fullunknown
+                        print(io, topo)
+                    elseif !isempty(topo.error)
+                        print(io, "ERROR")
+                    elseif ndims(topo.genome) == 0
+                        print(io, "non-periodic")
+                    elseif topo.unstable
+                        print(io, "UNSTABLE")
+                    elseif topo.name isa Nothing
+                        print(io, "UNKNOWN")
+                    else
+                        print(io, topo)
+                    end
+                end
+                i == length(clusterings) || print(io, '\t')
             end
             println(io)
         end
