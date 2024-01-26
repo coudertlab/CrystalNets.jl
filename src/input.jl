@@ -716,8 +716,6 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
             p = pos[i]
             lengths = [norm(mat * (pos[u.v] .+ u.ofs .- p)) for u in neighs]
             if flag && any(>(2.6), lengths)
-                # This warning could be out of a  @ifwarn because it reliably indicates
-                # cases where the input was not properly cleaned
                 @iferror @error lazy"Very suspicious connectivity found for $(options.name)."
                 flag = false
             end
