@@ -572,6 +572,42 @@ function guess_topology_dataset(path, save=true, autoclean=true, showprogress=tr
     ret
 end
 
+function determine_symmetries_dataset(path, showprogress, options::Options)
+    files = recursive_readdir(path)
+    progress = Progress(length(files); dt=0.2, enabled=showprogress, showspeed=true)
+    allsymmetries = [Pair{String,Union{Nothing,String}}[] for _ in 1:nthreads()]
+    @threads :static for file in files
+        symmetries = allsymmetries[threadid()]
+        f = joinpath(path, file)
+        # threadid() == 1 && @show f # to find infinite loops: the last one printed is probably running
+        symm::String = try
+            crystal = parse_chemfile(f, options)
+            dataset = PeriodicGraphEmbeddings.get_spglib_dataset(crystal.pge, crystal.types)
+            if dataset isa Nothing
+                "P1"
+            else
+                chars = dataset._hall_symbol
+                lastchar = findfirst(iszero, chars) - 1
+                replace(String(UInt8.(getindex.((chars,), 1:lastchar))), '"'=>'\\')
+            end
+        catch e
+            (options.throw_error || isinterrupt(e)) && rethrow()
+            "FAILURE: $e"
+        end
+        push!(symmetries, file => symm)
+        showprogress && next!(progress)
+        yield()
+    end
+    Dict(reduce(vcat, allsymmetries))
+end
+function determine_symmetries_dataset(path, showprogress=true; kwargs...)
+    opts, restore_warns = db_options(; kwargs..., bonding=Bonding.NoBond)
+    ret = determine_symmetries_dataset(path, showprogress, opts)
+    restore_warns && (DOWARN[] = true)
+    ret
+end
+
+
 """
     export_report(path, results; keepext=true, fullunknown=false)
 
@@ -594,8 +630,8 @@ function export_report(path, results::Dict; keepext=true, fullunknown=false, clu
         path = string(path, ".tsv")
     end
     open(path, "w") do io
-        print(io, "input, catenation, ")
-        join(io, clusterings, ", ")
+        print(io, "input\tcatenation\t")
+        join(io, clusterings, '\t')
         println(io)
         for name in ks
             topologies = results[name]
@@ -632,5 +668,32 @@ function export_report(path, results::Dict; keepext=true, fullunknown=false, clu
             println(io)
         end
     end
+    nothing
+end
+
+function patch_report(path, dict, name)
+    @assert splitext(path)[2] == ".tsv"
+    copyfile = tempname()
+    mv(path, copyfile)
+    allvals = sort!(collect(dict))
+    open(path, "w") do io
+        e = eachline(copyfile)
+        println(io, first(e), '\t', name)
+        for l in e
+            k = first(eachsplit(l, '\t'))
+            print(io, l, '\t')
+            if startswith(first(allvals)[1], k)
+                println(io, popfirst!(allvals)[2])
+            else
+                println(io)
+            end
+        end
+    end
+    if !isempty(allvals)
+        rm(path)
+        mv(copyfile, path)
+        error(lazy"Name $(first(allvals)[1]) remains")
+    end
+    rm(copyfile)
     nothing
 end
