@@ -347,14 +347,19 @@ function max_nearest(c::Crystal{Nothing}, trans)
     return i_max, max
 end
 
+function dist2(x::SVector{D,T}, y::SVector{D,T}) where {D,T}
+    r2 = zero(T)
+    for j in 1:D
+        r2 += (x[j] - y[j])^2
+    end
+    r2
+end
+
 function find_nearest(l::Vector{SVector{D,T}}, pos::SVector{D,T}) where {D,T}
     minr2 = Inf
     mini = 0
     for (i, x) in enumerate(l)
-        r2 = zero(T)
-        for j in 1:D
-            r2 += (pos[j] - x[j])^2
-        end
+        r2 = dist2(pos, x)
         if r2 < minr2
             minr2 = r2
             mini = i
