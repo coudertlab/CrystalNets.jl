@@ -1431,12 +1431,28 @@ function Base.parse(::Type{InterpenetratedTopologyResult}, x::AbstractString)
     return InterpenetratedTopologyResult([(topo1, nfold1, Int[])])
 end
 
-function one_topology(x::InterpenetratedTopologyResult, c::_Clustering)
+"""
+    one_topology(itr::InterpenetratedTopologyResult, clustering::Union{Nothing,_Clustering}=nothing)
+
+Return the only topology corresponding to the given clustering. If no clustering is given,
+return the only topology of the result.
+
+If several topologies are found, return `nothing`.
+
+If the clustering is not found in one of the interpenetrated topologies, return `missing`.
+"""
+function one_topology(itr::InterpenetratedTopologyResult, clustering::Union{Nothing,_Clustering}=nothing)
     result = nothing
-    for topo in x
-        newresult = get(topo[1], c, missing)
+    for topo in itr
+        top = topo[1]
+        newresult::Union{Missing,TopologicalGenome} = if clustering isa Nothing
+            length(top) == 1 || return nothing
+            only(values(top))
+        else
+            get(top, clustering, missing)
+        end
         if result !== nothing
-            result == newresult || return nothing
+            isequal(result, newresult) || return nothing
         else
             result = newresult
         end
