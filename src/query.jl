@@ -322,7 +322,7 @@ guess_topology(path; kwargs...) = guess_topology(path, Options(structure=Structu
 
 """
     determine_topology_dataset(path, save, autoclean, showprogress, options::Options)
-    determine_topology_dataset(path, save=true, autoclean=true, showprogress=true; kwargs...)
+    determine_topology_dataset(path; save=true, autoclean=true, showprogress=true, kwargs...)
 
 Given a path to a directory containing structure input files, compute the
 topology of each structure within the directory.
@@ -353,7 +353,7 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
     if isdirpath(path)
         path = dirname(path)
     end
-    if startswith(basename(path), "results_") && isfile(joinpath(path), "data")
+    if startswith(basename(path), "results") && isfile(joinpath(path), "data")
         resultdir = path
         path = only(readlines(joinpath(path, "data")))
         alreadydone = String[]
@@ -369,7 +369,7 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
             truncate(io, pos+(pos>0)) # remove the last line if incomplete
             close(io)
             for l in eachline(_f)
-                _splits = split(l, ';')
+                _splits = split(l, ';', limit=4)
                 isempty(last(_splits)) && continue
                 push!(alreadydone, join(_splits[1:end-2], ';'))
             end
@@ -417,7 +417,7 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
         basename(_f) == "data" && continue
         for l in eachline(_f)
             isempty(l) && continue
-            splits = split(l, ';')
+            splits = split(l, ';', limit=4)
             data = get!(result, splits[1], InterpenetratedTopologyResult(false)).data
             _genome = pop!(splits)
             _nfold = pop!(splits)
@@ -446,7 +446,7 @@ function determine_topology_dataset(path, save, autoclean, showprogress, options
     end
     return result
 end
-function determine_topology_dataset(path, save=true, autoclean=true, showprogress=true; kwargs...)
+function determine_topology_dataset(path; save=true, autoclean=true, showprogress=true, kwargs...)
     opts, restore_warns = db_options(; kwargs...)
     ret = determine_topology_dataset(path, save, autoclean, showprogress, opts)
     restore_warns && (DOWARN[] = true)
@@ -457,7 +457,7 @@ end
 
 """
     guess_topology_dataset(path, save, autoclean, showprogress, options::Options)
-    guess_topology_dataset(path, save=true, autoclean=true, showprogress=true; kwargs...)
+    guess_topology_dataset(path; save=true, autoclean=true, showprogress=true, kwargs...)
 
 Given a path to a directory containing structure input files, guess the topology of each
 structure within the directory using [`guess_topology`](@ref).
@@ -498,7 +498,7 @@ function guess_topology_dataset(path, save, autoclean, showprogress, options::Op
             close(io)
             for l in eachline(_f)
                 isempty(l) && continue
-                _splits = split(l, ';')
+                _splits = split(l, ';', limit=2)
                 push!(alreadydone, join(_splits[1:end-1], ';'))
             end
         end
@@ -536,7 +536,7 @@ function guess_topology_dataset(path, save, autoclean, showprogress, options::Op
     for _f in readdir(resultdir; join=true)
         basename(_f) == "data" && continue
         for l in eachline(_f)
-            splits = split(l, ';')
+            splits = split(l, ';', limit=2)
             isempty(last(splits)) && @show _f, l
             _genome = pop!(splits)
             push!(ret, Pair(join(splits, ';'), parse(TopologicalGenome, _genome)))
@@ -565,7 +565,7 @@ function guess_topology_dataset(path, save, autoclean, showprogress, options::Op
     end
     return result
 end
-function guess_topology_dataset(path, save=true, autoclean=true, showprogress=true; kwargs...)
+function guess_topology_dataset(path; save=true, autoclean=true, showprogress=true, kwargs...)
     opts, restore_warns = db_options(; structure=StructureType.Guess, kwargs...)
     ret = guess_topology_dataset(path, save, autoclean, showprogress, opts)
     restore_warns && (DOWARN[] = true)
@@ -600,7 +600,7 @@ function determine_symmetries_dataset(path, showprogress, options::Options)
     end
     Dict(reduce(vcat, allsymmetries))
 end
-function determine_symmetries_dataset(path, showprogress=true; kwargs...)
+function determine_symmetries_dataset(path; showprogress=true, kwargs...)
     opts, restore_warns = db_options(; kwargs..., bonding=Bonding.NoBond)
     ret = determine_symmetries_dataset(path, showprogress, opts)
     restore_warns && (DOWARN[] = true)
