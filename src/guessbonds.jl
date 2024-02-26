@@ -71,8 +71,8 @@ function guess_bonds(pos, types, mat, options)
         typi = types[i]
         #ignoreifmetallic = typi === :C
         #ignoreifC = ismetal[atomic_numbers[typi]]
-        skiphomoatomic = typi ∈ options.ignore_homoatomic_bonds ||
-                         (options.ignore_homometallic_bonds && ismetal[atomic_numbers[typi]])
+        skiphomoatomic = typi ∈ options.ignore_homoatomic_bonds #||
+                        #  (options.ignore_homometallic_bonds && ismetal[atomic_numbers[typi]])
         acceptonlyO = options.structure === StructureType.Zeolite && typi !== :O
         acceptallbutO = options.structure === StructureType.Zeolite && typi === :O
         for j in (i+1):n
