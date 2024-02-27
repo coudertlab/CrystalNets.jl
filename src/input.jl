@@ -1257,8 +1257,9 @@ end
     remove_homoatomic_bonds!(graph::PeriodicGraph, types, targets, ignore_homometallic)
 
 Remove from the graph all bonds of the form X-X where X is an atom in `targets`.
+
 Also remove all such bonds where X is a metal if the two bonded atoms up to third
-neighbours otherwise.
+neighbours otherwise, and if `ignore_homometallic` is `true`.
 """
 function remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets, ignore_homometallic) where D
     metallics = _remove_homoatomic_bonds!(graph, types, targets, ignore_homometallic)
