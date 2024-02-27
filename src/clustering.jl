@@ -873,7 +873,66 @@ function remove_metal_cluster_bonds!(graph, types, opts)
     return !isempty(edges_toremove)
 end
 
-
+# metallic periodic sbus are pre-split by grouping together the finite sets of metal atoms
+# bonded between together
+function pre_split_infinite_sbu_metals(crystal::Crystal, classes::Vector{Int})
+    graph = crystal.pge.g
+    newclass = maximum(classes) + 1
+    encountered = Dict{Int,SVector{3,Int}}()
+    encounteredmetals = Dict{Int,SVector{3,Int}}()
+    for i in 1:nv(graph)
+        ismetal[atomic_numbers[crystal.types[i]]] || continue
+        haskey(encountered, i) && continue
+        class = classes[i]
+        encountered[i] = zero(SVector{3,Int})
+        Q = [PeriodicVertex3D(i)]
+        infinitesbu = false
+        metals = [i]
+        for u in Q
+            for x in neighbors(graph, u)
+                v, ofs = x
+                classes[v] == class || continue
+                old_ofs = get(encountered, v, nothing)
+                if old_ofs isa Nothing
+                    encountered[v] = ofs
+                    push!(Q, x)
+                    if ismetal[atomic_numbers[crystal.types[v]]]
+                        push!(metals, v)
+                    end
+                elseif old_ofs != ofs
+                    infinitesbu = true
+                end
+            end
+        end
+        infinitesbu || continue
+        for j in metals
+            haskey(encounteredmetals, j) && continue
+            t = crystal.types[j]
+            infinitemetals = false
+            encounteredmetals[j] = zero(SVector{3,Int})
+            Qmetals = [PeriodicVertex3D(j)]
+            for u in Qmetals
+                for x in neighbors(graph, u)
+                    v, ofs = x
+                    crystal.types[v] == t || continue
+                    old_ofs = get(encounteredmetals, v, nothing)
+                    if old_ofs isa Nothing
+                        encounteredmetals[v] = ofs
+                        push!(Qmetals, x)
+                    elseif old_ofs != ofs
+                        infinitemetals = true
+                    end
+                end
+            end
+            if !infinitemetals && length(Qmetals) > 1
+                for (v, _) in Qmetals
+                    classes[v] = newclass
+                end
+                newclass += 1
+            end
+        end
+    end
+end
 
 
 """
@@ -921,7 +980,7 @@ function find_sbus!(crystal::Crystal, kinds::ClusterKinds=default_sbus)
                                     crystal.pge.cell.mat, organickind, temporary_classes_set)
         same_SBU = group_cycle(organiccycle, crystal.types, graph)
         if !isempty(same_SBU)
-            graph = PeriodicGraph(crystal.pge.g) # make a modificable copy
+            graph = PeriodicGraph(crystal.pge.g) # make a modifiable copy
             for cycle in same_SBU
                 # Each atom in an aromatic cycle is bonded to the other atoms of the
                 # same cycle. The newly-formed clique is assigned a new class.
@@ -1024,6 +1083,8 @@ function find_sbus!(crystal::Crystal, kinds::ClusterKinds=default_sbus)
                 push!(isolate, i)
             end
         end
+    elseif crystal.options.premerge_metalbonds
+        pre_split_infinite_sbu_metals(crystal, classes)
     end
 
     # bond_carboxylic_acid!(graph, crystal.types) # gives worse results
@@ -1288,7 +1349,7 @@ end
 
 function order_atomtype(sym)
     sym === :C && return 119 # C is put first to identify organic clusters
-    sym === :P && return 1   # Put S and O before the other non-metals, but after
+    sym === :P && return 1   # Put S and P before the other non-metals, but after
     sym === :S && return 0   # everything else
     anum = atomic_numbers[sym]
     elcat = element_categories[anum]

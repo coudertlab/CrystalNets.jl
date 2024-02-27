@@ -367,6 +367,8 @@ These boolean options have a default value that may be determined by [`Bonding`]
 - `separate_metals`: separate each metal atom into its own vertex (instead of grouping them
   to form metallic clusters if they are adjacent or bonded by an oxygen). Default is false,
   unless [`Clustering`](@ref) is `Standard` or `PEM`.
+- `premerge_metalbonds`: when a periodic metallic SBU is detected, cluster together bonded
+  metal atoms of the same kind before splitting the SBU.
 - `split_O_vertex`: if a vertex is composed of a single O, remove it and bond together all of
   its neighbors. Default is true.
 - `unify_sbu_decomposition`: apply the same rule to decompose both periodic and finite SBUs.
@@ -414,6 +416,7 @@ struct Options
     split_O_vertex::Bool
     unify_sbu_decomposition::Bool
     separate_metals::Union{Nothing,Bool}
+    premerge_metalbonds::Bool
     max_polyhedron_radius::Int
     export_attributions::String
     export_clusters::String
@@ -456,6 +459,7 @@ struct Options
                        split_O_vertex=true,
                        unify_sbu_decomposition=false,
                        separate_metals=nothing,
+                       premerge_metalbonds=true,
                        max_polyhedron_radius=4,
                        export_attributions="",
                        export_clusters="",
@@ -515,6 +519,7 @@ struct Options
             split_O_vertex,
             unify_sbu_decomposition,
             separate_metals,
+            premerge_metalbonds,
             max_polyhedron_radius,
             _export_attributions,
             _export_clusters,
