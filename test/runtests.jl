@@ -45,7 +45,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     cifs, crystalnetsdir = _finddirs()
     kwargs = (; structure=StructureType.MOF, clusterings=[Clustering.Auto,Standard,PE,PEM])
     println(stderr, "The following warning about altering performance, the two messages on warning toggling and the three error statements are expected.")
-    mofdataset = determine_topology_dataset(joinpath(cifs, "MOFs"), save=false; kwargs...)
+    mofdataset = determine_topology_dataset(joinpath(cifs, "MOFs"), save=false, showprogress=false; kwargs...)
 
     @testset "Dataset analysis" begin
         @test length(mofdataset) == 14
