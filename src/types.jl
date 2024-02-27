@@ -1324,6 +1324,12 @@ possibly decomposed into several catenated nets.
     ⋅ Subnet 1 → (2-fold) UNKNOWN 1 1 1 1
     ⋅ Subnet 2 → sql
     ```
+    Note that catenation is a particular case of interpenetration: an `n`-fold catenated
+    net repeated into a supercell `n` times larger becomes `n` interpenetrated nets.
+
+    !!! tip
+        See also [`total_interpenetration`](@ref) to abstract away the difference between
+        interpenetration and catenation.
 
 # Example
 ```jldoctest
@@ -1458,4 +1464,65 @@ function one_topology(itr::InterpenetratedTopologyResult, clustering::Union{Noth
         end
     end
     return result
+end
+
+"""
+    total_interpenetration(itr::InterpenetratedTopologyResult, clustering::Union{Nothing,_Clustering}=nothing)
+
+Return a `Dict{TopologicalGenome,Int}` that links each topology to the number of
+interpenetrated nets having that topology (catenation included) for the given `clustering`.
+If `clustering` is `nothing`, all possible topologies will be studied.
+
+## Example
+
+See [`InterpenetratedTopologyResult`](@ref) for reference on these examples.
+
+```jldoctest
+julia> g = PeriodicGraph("2   1 1  0 2   2 2  0 1   2 2  1 0");
+
+julia> topologies1 = topological_genome(g)
+2 interpenetrated substructures:
+⋅ Subnet 1 → (2-fold) UNKNOWN 1 1 1 1
+⋅ Subnet 2 → sql
+
+julia> CrystalNets.total_interpenetration(topologies1)
+Dict{TopologicalGenome, Int64} with 2 entries:
+  UNKNOWN 1 1 1 1 => 2
+  sql             => 1
+
+julia> mof14 = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif", "MOFs", "MOF-14.cif");
+
+julia> topologies2 = determine_topology(mof14, structure=StructureType.MOF, clusterings=[Clustering.Auto, Clustering.Standard, Clustering.PE])
+2 interpenetrated substructures:
+⋅ Subnet 1 → AllNodes,SingleNodes,Standard: pto | PE: sqc11259
+⋅ Subnet 2 → AllNodes,SingleNodes,Standard: pto | PE: sqc11259
+
+julia> CrystalNets.total_interpenetration(topologies2, Clustering.AllNodes)
+Dict{TopologicalGenome, Int64} with 1 entry:
+  pto => 2
+
+julia> CrystalNets.total_interpenetration(topologies2)
+Dict{TopologicalGenome, Int64} with 2 entries:
+  pto      => 2
+  sqc11259 => 2
+```
+"""
+function total_interpenetration(itr::InterpenetratedTopologyResult, clustering::Union{Nothing,_Clustering}=nothing)
+    result = Dict{TopologicalGenome,Int}()
+    for (top, n) in itr
+        itr = if clustering isa Nothing
+            values(top)
+        else
+            val = get(top, clustering, missing)
+            val isa Missing && return missing
+            (val,)
+        end
+        for topology in itr
+            if isempty(topology.error)
+                known = get(result, topology, 0)
+                result[topology] = known + n
+            end
+        end
+    end
+    result
 end
