@@ -1184,13 +1184,13 @@ function sanity_checks!(graph, pos, types, mat, options)
 end
 
 
-function _remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets, ignore_homometallic) where D
-    isempty(targets) && !ignore_homometallic && return Int[]
+function _remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets, reduce_homometallic) where D
+    isempty(targets) && !reduce_homometallic && return Int[]
     metallics = Int[]
     for i in 1:length(types)
         t = types[i]
         if t ∉ targets
-            ignore_homometallic && ismetal[atomic_numbers[t]] && push!(metallics, i)
+            reduce_homometallic && ismetal[atomic_numbers[t]] && push!(metallics, i)
             continue
         end
         rem_edges = PeriodicVertex{D}[]
@@ -1254,16 +1254,16 @@ function _remove_homometallic_bonds!(graph::PeriodicGraph{D}, types, metallics) 
 end
 
 """
-    remove_homoatomic_bonds!(graph::PeriodicGraph, types, targets, ignore_homometallic)
+    remove_homoatomic_bonds!(graph::PeriodicGraph, types, targets, reduce_homometallic)
 
 Remove from the graph all bonds of the form X-X where X is an atom in `targets`.
 
 Also remove all such bonds where X is a metal if the two bonded atoms up to third
-neighbours otherwise, and if `ignore_homometallic` is `true`.
+neighbours otherwise, and if `reduce_homometallic` is `true`.
 """
-function remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets, ignore_homometallic) where D
-    metallics = _remove_homoatomic_bonds!(graph, types, targets, ignore_homometallic)
-    ignore_homometallic && _remove_homometallic_bonds!(graph, types, metallics)
+function remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets, reduce_homometallic) where D
+    metallics = _remove_homoatomic_bonds!(graph, types, targets, reduce_homometallic)
+    reduce_homometallic && _remove_homometallic_bonds!(graph, types, metallics)
 end
 
 
@@ -1443,7 +1443,7 @@ function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vec
             end
         end
 
-        remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds, options.ignore_homometallic_bonds)
+        remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds, options.reduce_homometallic_bonds)
     end
 
     if isempty(attributions)

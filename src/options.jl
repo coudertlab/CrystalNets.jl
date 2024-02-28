@@ -350,7 +350,8 @@ These boolean options have a default value that may be determined by [`Bonding`]
 - `authorize_pruning`: remove colliding atoms in the input. Default is true.
 - `wider_metallic_bonds`: for bond detections, metals have a radius equal to 1.5× their Van
   der Waals radius. Default is false, unless [`StructureType`](@ref) is `MOF` or `Zeolite`.
-- `ignore_homometallic_bonds`: when guessing bonds, do not bond two metallic atoms of the
+- `ignore_homometallic_bonds`: remove all bonds between two metal atoms of the same kind.
+- `reduce_homometallic_bonds`: when guessing bonds, do not bond two metallic atoms of the
   same type if they are up to third neighbours anyway.
   Default is false, unless [`StructureType`](@ref) is `MOF`.
 - `ignore_metal_cluster_bonds`: do not bond two metallic clusters together if they share at
@@ -399,6 +400,7 @@ struct Options
     ignore_atoms::Set{Symbol}
     ignore_homoatomic_bonds::Set{Symbol}
     ignore_homometallic_bonds::Bool
+    reduce_homometallic_bonds::Bool
     ignore_low_occupancy::Bool
     export_input::String
     export_trimmed::String
@@ -443,7 +445,8 @@ struct Options
                        authorize_pruning=true,
                        ignore_atoms=Set{Symbol}(),
                        ignore_homoatomic_bonds=Set{Symbol}(),
-                       ignore_homometallic_bonds=nothing,
+                       ignore_homometallic_bonds=false,
+                       reduce_homometallic_bonds=nothing,
                        ignore_low_occupancy=false,
                        export_input=DOEXPORT[],
                        export_trimmed=false,
@@ -482,10 +485,10 @@ struct Options
         _export_net = ifbooltempdirorempty(export_net)
         _export_subnets = ifbooltempdirorempty(export_subnets)
 
-        _ignore_homometallic_bonds = if ignore_homometallic_bonds === nothing
+        _reduce_homometallic_bonds = if reduce_homometallic_bonds === nothing
             structure == StructureType.MOF
         else
-            ignore_homometallic_bonds
+            _reduce_homometallic_bonds
         end
 
         _wider_metallic_bonds = if wider_metallic_bonds === nothing
@@ -503,7 +506,8 @@ struct Options
             authorize_pruning,
             Set{Symbol}(ignore_atoms),
             Set{Symbol}(ignore_homoatomic_bonds),
-            _ignore_homometallic_bonds,
+            ignore_homometallic_bonds,
+            _reduce_homometallic_bonds,
             ignore_low_occupancy,
             _export_input,
             _export_trimmed,
