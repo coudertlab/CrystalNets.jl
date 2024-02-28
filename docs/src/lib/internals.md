@@ -107,4 +107,5 @@ CrystalNets.check_dimensionality
 CrystalNets.guess_topology
 CrystalNets.guess_topology_dataset
 CrystalNets.recognize_topology
+CrystalNets.total_interpenetration
 ```
