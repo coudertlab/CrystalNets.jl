@@ -409,7 +409,7 @@ function retrieve_node(nodes::Vector{SVector{N,Float64}}, pos::SVector{N,Float64
     find_nearest(nodes, pos .- ofs), ofs
 end
 
-function _parse_cgd_crystal!(iterator, ret, current_edgelist2D, current_edgelist3D, path)
+function _parse_cgd_crystal!(iterator, ret, current_edgelist2D, current_edgelist3D, path, strict)
     current_name = ""
     local nodes#::Union{Vector{SVector{2,Float64}}, Vector{SVector{3,Float64}}}
     local current_edgelist
@@ -468,7 +468,10 @@ function _parse_cgd_crystal!(iterator, ret, current_edgelist2D, current_edgelist
         elseif keyw == "node" || keyw == "atom"
             @label handle_node
             if !@isdefined(nodes)
-                @error "Error while parsing $path at \"$current_name\": missing cell"
+                if strict
+                    @error "Error while parsing $path at \"$current_name\": missing cell"
+                    @goto skip
+                end
                 dimension = length(split(l)) - 3
                 if dimension == 3
                     current_edgelist = current_edgelist3D
@@ -521,14 +524,16 @@ function _parse_cgd_crystal!(iterator, ret, current_edgelist2D, current_edgelist
             expand_symmetry_cgd!(current_edgelist, nodes, cell.equivalents, )
             g = dimension == 2 ? PeriodicGraph2D(current_edgelist2D) : PeriodicGraph3D(current_edgelist3D)
             empty!(current_edgelist)
-            if nv(g) != length(nodes)
-                @error lazy"Error while parsing $path at \"$current_name\": Found a graph with only $(nv(g)) nodes instead of expected $(length(nodes))"
-                @goto skip
-            end
-            for (i, conn) in enumerate(connectivity)
-                if degree(g, i) != conn
-                    @error lazy"Error while parsing $path at \"$current_name\": Invalid connectivity of $(degree(g, i)) found instead of $conn for node $i"
+            if strict
+                if nv(g) != length(nodes)
+                    @error lazy"Error while parsing $path at \"$current_name\": Found a graph with only $(nv(g)) nodes instead of expected $(length(nodes))"
                     @goto skip
+                end
+                for (i, conn) in enumerate(connectivity)
+                    if degree(g, i) != conn
+                        @error lazy"Error while parsing $path at \"$current_name\": Invalid connectivity of $(degree(g, i)) found instead of $conn for node $i"
+                        @goto skip
+                    end
                 end
             end
             push!(ret, (current_name, g))
@@ -606,13 +611,16 @@ function _parse_cgd_periodicgraph!(iterator, ret, current_edgelist2D, current_ed
 end
 
 """
-    parse_cgd(path::AbstractString)
+    parse_cgd(path::AbstractString; strict=true)
 
 Parse a .cgd Systre configuration data file such as the one used by the RCSR.
 Return a list of `id => g` where `id` is the name of the structure and `g` is its
 `PeriodicGraph`.
+
+If `strict` is set, refuse structures that seem to contain errors (inconsistent
+connectivity, missing cell, incorrect number of vertices) and print an `@error` instead.
 """
-function parse_cgd(path::AbstractString)
+function parse_cgd(path::AbstractString; strict=true)
     ret = Tuple{String,Union{PeriodicGraph2D,PeriodicGraph3D}}[]
     current_edgelist2D = PeriodicEdge2D[]
     current_edgelist3D = PeriodicEdge3D[]
@@ -629,7 +637,7 @@ function parse_cgd(path::AbstractString)
             _parse_cgd_periodicgraph!(iterator, ret, current_edgelist2D, current_edgelist3D, path)
         elseif l == "crystal"
             @assert isempty(current_edgelist2D) && isempty(current_edgelist3D)
-            _parse_cgd_crystal!(iterator, ret, current_edgelist2D, current_edgelist3D, path)
+            _parse_cgd_crystal!(iterator, ret, current_edgelist2D, current_edgelist3D, path, strict)
         else
             error(lazy"Error while parsing $path: Misplaced \"$l\"")
         end
