@@ -488,7 +488,7 @@ struct Options
         _reduce_homometallic_bonds = if reduce_homometallic_bonds === nothing
             structure == StructureType.MOF
         else
-            _reduce_homometallic_bonds
+            reduce_homometallic_bonds
         end
 
         _wider_metallic_bonds = if wider_metallic_bonds === nothing
