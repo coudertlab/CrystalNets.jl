@@ -550,7 +550,7 @@ function trim_topology(graph::PeriodicGraph{N}) where N
     remove_idx = Int[]
     flag = any(<=(2), degree(newgraph))
     vmap = collect(1:nv(graph))
-    ignorecounter = 0
+    ignorecounter = 0 # number of trivial 1-D rods kept
     while flag # we alternate cycles when we remove valence 1 and valence 2
         # until no such vertex remains
         flag = any(<=(1), degree(newgraph))
@@ -575,7 +575,7 @@ function trim_topology(graph::PeriodicGraph{N}) where N
             for i in 1:n
                 if degree(newgraph, i) == 2
                     neigh1, neigh2 = neighbors(newgraph, i)
-                    if neigh1.v == i
+                    if neigh1.v == i # trivial 1-D rod case
                         ignorecounter += 1
                         continue
                     end
@@ -720,7 +720,9 @@ function separate_components(c::Crystal{T}) where T
     graph = PeriodicGraph3D(c.pge.g)
     dimensions = PeriodicGraphs.dimensionality(graph)
     @ifwarn if haskey(dimensions, 0)
-        @warn "Detected structure of dimension 0, possibly solvent residues. It will be ignored for topology computation."
+        _n0 = length(dimensions[0])
+        _s, _it = _n0 > 1 ? ("s", "They") : ("", "It")
+        @warn lazy"Detected $_n0 structure$_s of dimension 0 in $(c.options.name), possibly complex solvent residue$_s. $_it will be ignored for topology computation."
     end
     ret = (Tuple{Crystal{T},Int,Vector{Int}}[], Tuple{Crystal{T},Int,Vector{Int}}[], Tuple{Crystal{T},Int,Vector{Int}}[])
     for i in 1:3
@@ -941,7 +943,9 @@ function UnderlyingNets(g::SmallPseudoGraph, options::Options)
     graph = g isa PeriodicGraph ? g : PeriodicGraph(g)
     dimensions = PeriodicGraphs.dimensionality(graph)
     @iferror if haskey(dimensions, 0)
-        @error "Detected substructure of dimension 0 in the input graph. It will be ignored for topology computation."
+        _n0 = length(dimensions[0])
+        _s, _it = _n0 > 1 ? ("s", "They") : ("", "It")
+        @error lazy"Detected $_n0 substructure$_s of dimension 0 in the input graph. $_it will be ignored for topology computation."
     end
     cell = Cell()
     @repeatgroups begin
