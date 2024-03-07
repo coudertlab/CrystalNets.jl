@@ -1,10 +1,10 @@
 [archives]
-git-tree-sha1 = "86e6f9d5d97dd6763a877bec8632fc171686dd3b"
+git-tree-sha1 = "0adbb9c91922f1e2cc78aa2628ac014495e24773"
 
     [[archives.download]]
-    url = "https://github.com/Liozou/CrystalNetsArchive/releases/download/V2.4/archives.tar.xz"
-    sha256 = "b4866f45330aa69b7a4fe9cb084978a7ae37eb2c12cceb19a3b40815eeb3e3f0"
+    url = "https://github.com/Liozou/CrystalNetsArchive/releases/download/V2.5/archives.tar.xz"
+    sha256 = "cbaba5921b3b0d12a580446a9c62876f7dd86b6beb1bfb55ebd806a97621b8a7"
 
     [[archives.download]]
-    url = "https://github.com/Liozou/CrystalNetsArchive/releases/download/V2.4/archives.zip"
-    sha256 = "d68e8219c905f624f72bd9426127586a3261953a06c31a24c258ee26e9813e29"
+    url = "https://github.com/Liozou/CrystalNetsArchive/releases/download/V2.5/archives.zip"
+    sha256 = "06b6571c66c13fbcc28d72dfd81dbe1722d7250b1121180594e5020d45b4143d"
