@@ -572,7 +572,7 @@ function guess_topology_dataset(path; save=true, autoclean=true, showprogress=tr
     ret
 end
 
-function determine_symmetries_dataset(path, showprogress, options::Options)
+function determine_symmetries_dataset(path, showprogress, tolerance, options::Options)
     files = recursive_readdir(path)
     progress = Progress(length(files); dt=0.2, enabled=showprogress, showspeed=true)
     allsymmetries = [Pair{String,Union{Nothing,String}}[] for _ in 1:nthreads()]
@@ -582,7 +582,7 @@ function determine_symmetries_dataset(path, showprogress, options::Options)
         # threadid() == 1 && @show f # to find infinite loops: the last one printed is probably running
         symm::String = try
             crystal = parse_chemfile(f, options)
-            dataset = PeriodicGraphEmbeddings.get_spglib_dataset(crystal.pge, crystal.types)
+            dataset = PeriodicGraphEmbeddings.get_spglib_dataset(crystal.pge, crystal.types; tolerance)
             if dataset isa Nothing
                 "P1"
             else
@@ -600,9 +600,9 @@ function determine_symmetries_dataset(path, showprogress, options::Options)
     end
     Dict(reduce(vcat, allsymmetries))
 end
-function determine_symmetries_dataset(path; showprogress=true, kwargs...)
+function determine_symmetries_dataset(path; showprogress=true, tolerance=nothing, kwargs...)
     opts, restore_warns = db_options(; kwargs..., bonding=Bonding.NoBond)
-    ret = determine_symmetries_dataset(path, showprogress, opts)
+    ret = determine_symmetries_dataset(path, showprogress, tolerance, opts)
     restore_warns && (DOWARN[] = true)
     ret
 end
