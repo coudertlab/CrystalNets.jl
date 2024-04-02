@@ -149,8 +149,8 @@ end
 
 Make a CIF object out of the parsed file.
 """
-CIF(file::AbstractString) = CIF(parse_cif(file))
-function CIF(parsed::Dict{String, Union{Vector{String},String}})
+CIF(file::AbstractString, label_for_type::Bool=false) = CIF(parse_cif(file), label_for_type)
+function CIF(parsed::Dict{String, Union{Vector{String},String}}, label_for_type::Bool=false)
     natoms = length(parsed["atom_site_label"]::Vector{String})
     equivalentpositions = haskey(parsed, "symmetry_equiv_pos_as_xyz") ?
         popvecstring!(parsed, "symmetry_equiv_pos_as_xyz") :
@@ -203,10 +203,11 @@ function CIF(parsed::Dict{String, Union{Vector{String},String}})
     labels = popvecstring!(parsed, "atom_site_label")
     _symbols = haskey(parsed, "atom_site_type_symbol") ?
                 popvecstring!(parsed, "atom_site_type_symbol") : copy(labels)
-    symbols = String[]
-    @inbounds for x in _symbols
+    symbols = Vector{String}(undef, length(_symbols))
+    @inbounds for k in 1:length(_symbols)
+        x = label_for_type ? labels[k] : _symbols[k]
         i = findfirst(!isletter, x)
-        push!(symbols, uppercase(x[1])*lowercase(isnothing(i) ? x[2:end] : x[2:i-1]))
+        symbols[k] = uppercase(x[1])*lowercase(isnothing(i) ? x[2:end] : x[2:i-1])
     end
     pos_x = popvecstring!(parsed, "atom_site_fract_x")
     pos_y = popvecstring!(parsed, "atom_site_fract_y")
@@ -672,12 +673,11 @@ function parse_atom_name(name::AbstractString)
     end
     return initstr
 end
-
-function parse_atom(name)
-    atom = Chemfiles.Atom(name)
-    set_type!(atom, parse_atom_name(name))
-    return atom
-end
+# function parse_atom(name)
+#     atom = Chemfiles.Atom(name)
+#     set_type!(atom, parse_atom_name(name))
+#     return atom
+# end
 
 @static if !isdefined(Chemfiles, :atoms) # up to 0.9.3 included
     function chem_atoms(residue::Chemfiles.Residue)
@@ -954,9 +954,11 @@ function sanitize_removeatoms!(graph::PeriodicGraph3D, pos, types, mat, options)
         else
             at = get(atomic_numbers, t, nothing)
             if at === nothing
-                @iferror @error lazy"Unrecognized atom type \"$t\" in $(options.name) will be considered a dummy atom."
-                push!(toremove, i)
-            elseif ismetal[at::Int]
+                if !options.label_for_type
+                    @iferror @error lazy"Unrecognized atom type \"$t\" in $(options.name) will be considered a dummy atom."
+                    push!(toremove, i)
+                end
+            elseif at isa Int && ismetal[at]
                 for u in neighbors(graph, i)
                     typu = types[u.v]
                     if typu === :C
@@ -1289,7 +1291,7 @@ function parse_as_cif(cif::CIF, options::Options, name::String)
             push!(ignored, i)
             continue
         end
-        push!(types, Symbol(parse_atom_name(String(typ))))
+        push!(types, options.label_for_type ? typ : Symbol(parse_atom_name(String(typ))))
         push!(pos, cif.pos[:,i])
         #push!(pos, cif.cell.mat * cif.pos[:,i])
     end
@@ -1484,7 +1486,7 @@ function parse_chemfile(_path, options::Options)
         options = Options(options; name)
     end
     if lowercase(last(splitext(path))) == ".cif"
-        cif = expand_symmetry(CIF(path))
+        cif = expand_symmetry(CIF(path, options.label_for_type))
         if options.authorize_pruning
             neededprune, cif = prune_collisions(cif)
             if neededprune && !(options.dryrun isa Nothing)

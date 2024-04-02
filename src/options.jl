@@ -376,6 +376,9 @@ These boolean options have a default value that may be determined by [`Bonding`]
   Default is false.
 - `force_warn`: force printing warning and information even during `..._dataset` function
   calls. Default is false.
+- `label_for_type`: use the atom label instead of its type. Default is false.
+  Note that setting this to true will result in an error when detecting bonds if any atom
+  has a label which is not an element of the periodic table.
 
 ## Internal fields
 These fields are for internal use and should not be modified by the user:
@@ -405,6 +408,7 @@ struct Options
     export_input::String
     export_trimmed::String
     force_warn::Bool
+    label_for_type::Bool
 
     # Clustering options
     clusterings::Vector{_Clustering}
@@ -451,6 +455,7 @@ struct Options
                        export_input=DOEXPORT[],
                        export_trimmed=false,
                        force_warn=false,
+                       label_for_type=false,
                        clusterings=_Clustering[Clustering.Auto],
                        bond_adjacent_sbus=false,
                        ignore_metal_cluster_bonds=nothing,
@@ -512,6 +517,7 @@ struct Options
             _export_input,
             _export_trimmed,
             force_warn,
+            label_for_type,
             clusterings,
             bond_adjacent_sbus,
             ignore_metal_cluster_bonds,
