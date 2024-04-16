@@ -17,12 +17,12 @@ This is the focus of the [Visualization](@ref) tutorial.
 - From the module: see [`CrystalNets.toggle_warning`](@ref), [`CrystalNets.toggle_error`](@ref) and [`CrystalNets.toggle_export`](@ref)
 - From the executable: use the `--no-warn`, `--no-error` and `--no-export` flags.
 
-For exports, each `export_...` keyword argument to [`Options`](@ref CrystalNets.Options) can be individually set to `false` or `""` to silence this particular export. See also the paragraph on [export options](@ref exports).
+For exports, each `export_...` keyword argument to [`Options`](@ref) can be individually set to `false` or `""` to silence this particular export. See also the paragraph on [export options](@ref exports).
 
 ## How can I choose a particular clustering algorithm?
 
 Pass the appropriate option from [`Clustering`](@ref) to the `clusterings`
-keyword argument of [`Options`](@ref CrystalNets.Options), or use the `-c` flag from the executable.
+keyword argument of [`Options`](@ref), or use the `-c` flag from the executable.
 For example, to compute the topology of UiO-66 with the Points-of-Extension (PE) clustering algorithm, do
 
 ```@meta
@@ -65,7 +65,7 @@ Check that the input file is clean: if an atom is represented in multiple possib
 positions for instance (as is common in CIF files), CrystalNets.jl could mistake them as
 multiple atoms, which may break some heuristics of the bond-detection algorithm. Solvent
 residues may also be incorrectly bonded in some circumstances and should be removed. The
-`ignore_atoms` keyword argument in the [`Options`] may be useful in this regard.
+`ignore_atoms` keyword argument in the [`Options`](@ref) may be useful in this regard.
 
 You may want to provide a different `structure` keyword argument in the [`Options`](@ref)
 taken among the possible instances of [`StructureType`](@ref). These can modify the
@@ -91,8 +91,8 @@ While both algorithms usually align, the result may not be the same in all cases
 
 Most often, the difference will come from either:
 
-- an oxygen atom having three (or more) bonds becomes a vertex for ToposPro but is removed by CrystalNets.jl. To solve this, use `split_O_vertex=false` in the [`Options`](@ref CrystalNets.Options).
-- a paddle-wheel pattern is grouped into a single cluster by CrystalNets.jl but not by ToposPro. To solve this, use `detect_paddlewheels=false` in the [`Options`](@ref CrystalNets.Options).
+- an oxygen atom having three (or more) bonds becomes a vertex for ToposPro but is removed by CrystalNets.jl. To solve this, use `split_O_vertex=false` in the [`Options`](@ref).
+- a paddle-wheel pattern is grouped into a single cluster by CrystalNets.jl but not by ToposPro. To solve this, use `detect_paddlewheels=false` in the [`Options`](@ref).
 
 ## How can I do a database topology analysis with CrystalNets.jl?
 

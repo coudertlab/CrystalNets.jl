@@ -453,7 +453,7 @@ Reclassify the atoms of `sbus.sbus[i_sbu])` according to the following algorithm
   `deg == 0` or `deg > 0` and the degree of the atom is `deg`.
 - Assign a new SBU for each target atom (one new per atom).
 - Look at the connected components of atoms in the SBU which are not target atoms.
-  For each connected component that is finite (aperiodic) and has only one neighbor
+  For each connected component that is finite (0-dimensional) and has only one neighbor
   which is a target atom, put that component in the same SBU as the neighbor.
 """
 function reclassify!(sbus, newperiodicsbus, newclass, graph, types, classof, i_sbu)
