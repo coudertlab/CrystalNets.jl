@@ -2,4 +2,4 @@ Manifest.toml
 *.OLD
 .vscode/
 .ipynb_checkpoints/
-
+test/RCSRnets-*
