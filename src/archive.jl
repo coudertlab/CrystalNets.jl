@@ -348,7 +348,7 @@ function make_archive(path, destination, verbose=false)
         for (i, (topology, nfold)) in enumerate(results)
             nfold == 0 && continue
             genome = string(topology)
-            if startswith(genome, "unstable") || genome == "non-periodic"
+            if startswith(genome, "unstable") || genome == "0-dimensional"
                 flag = true
                 push!(flagerror[]::Vector{Tuple{Vector{Int},String}}, (vmap, genome))
                 continue

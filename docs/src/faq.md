@@ -56,7 +56,7 @@ Note that `Auto` is equivalent to both `AllNodes` and `SingleNodes` when the [`S
 
 See [below](@ref ToposProStandard) for the reason why the `Standard` topology is **xbi** and not ToposPro's "3,4,8T15".
 
-## CrystalNets.jl incorrectly detects bonds or reports a periodic structure as "non-periodic"
+## CrystalNets.jl incorrectly detects bonds or reports a periodic structure as "0-dimensional"
 
 You can use the [Visualization](@ref) tutorial to identify which bonds are incorrectly
 detected or missing.

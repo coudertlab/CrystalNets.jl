@@ -1013,7 +1013,7 @@ function Base.show(io::IO, x::TopologicalGenome)
     if !isempty(x.error)
         print(io, "FAILED with: ", x.error)
     elseif ndims(x.genome) == 0
-        print(io, "non-periodic")
+        print(io, "0-dimensional")
     elseif x.unstable
         print(io, "unstable ", x.genome)
     elseif x.name isa String
@@ -1034,7 +1034,7 @@ function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
     if startswith(s, "UNKNOWN")
         return TopologicalGenome(PeriodicGraph(s[9:end]), nothing, false)
     end
-    s == "non-periodic" && return TopologicalGenome()
+    s == "0-dimensional" && return TopologicalGenome()
     if startswith(s, "unstable")
         return TopologicalGenome(PeriodicGraph(s[10:end]), nothing, true)
     end
@@ -1371,7 +1371,7 @@ struct InterpenetratedTopologyResult <: AbstractVector{Tuple{TopologyResult,Int}
     data::Vector{Tuple{TopologyResult,Int,Vector{Int}}}
 end
 function InterpenetratedTopologyResult(b::Bool)
-    if b # non-periodic
+    if b # 0-dimensional
         InterpenetratedTopologyResult([(TopologyResult(),0,Int[])])
     else # no topology computation
         InterpenetratedTopologyResult(Tuple{TopologyResult,Int,Vector{Int}}[])
@@ -1390,7 +1390,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::InterpenetratedTopologyResult)
     end
     for (i, (topology, nfold)) in enumerate(x)
         if nfold == 0
-            print(io, "non-periodic")
+            print(io, "0-dimensional")
             continue
         end
         if compact
@@ -1422,7 +1422,7 @@ end
 
 function Base.parse(::Type{InterpenetratedTopologyResult}, x::AbstractString)
     s = split(x; limit=4)
-    length(s) == 1 && x == "non-periodic" && return InterpenetratedTopologyResult(true)
+    length(s) == 1 && x == "0-dimensional" && return InterpenetratedTopologyResult(true)
     isempty(s) && return InterpenetratedTopologyResult(false)
     if length(s) > 3 && s[2] == "interpenetrated" && s[3] == "substructures:"
         lines = split(s[4], '\n')

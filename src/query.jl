@@ -465,7 +465,7 @@ Return a dictionary linking each file name to the result.
 The result is the corresponding topology name, if known, or the topological
 genome preceded by an "UNKNOWN" mention otherwise. In case of error, the result
 is the exception preceded by a "FAILED with" mention. Finally, if the input does
-not represent a periodic structure, the result is "non-periodic".
+not represent a periodic structure, the result is "0-dimensional".
 
 It is strongly recommended to toggle warnings off (through [`toggle_warning`](@ref)) and
 not to export any file since those actions may critically reduce performance,
@@ -654,7 +654,7 @@ function export_report(path, results::Dict; keepext=true, fullunknown=false, clu
                     elseif !isempty(topo.error)
                         print(io, "ERROR")
                     elseif ndims(topo.genome) == 0
-                        print(io, "non-periodic")
+                        print(io, "0-dimensional")
                     elseif topo.unstable
                         print(io, "UNSTABLE")
                     elseif topo.name isa Nothing

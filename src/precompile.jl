@@ -46,7 +46,7 @@ using PrecompileTools
         # sfv = topological_genome(CrystalNet(PeriodicGraph(REVERSE_CRYSTALNETS_ARCHIVE["*SFV"])))
         # 2D
         hcb = topological_genome(CrystalNet(PeriodicGraph(REVERSE_CRYSTALNETS_ARCHIVE["hcb"])))
-        # non-periodic
+        # 0-dimensional
         calfig = determine_topology(path_to_calfig; structure=StructureType.MOF, clusterings=[Clustering.Auto])
         # other calls to determine_topology
         determine_topology(path_to_abw; structure=StructureType.Zeolite)
