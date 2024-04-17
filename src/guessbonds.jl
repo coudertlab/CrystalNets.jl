@@ -61,9 +61,9 @@ function guess_bonds(pos, types, mat, options)
             @ifwarn @warn lazy"Unrecognized atom type \"$t\" will be considered a dummy atom."
         end
     end
-    cutoff = 3*(options.cutoff_coeff^3.1) * max(maximum(radii), 0.833)
+    cutoff_sq = (3*(options.cutoff_coeff^3.1) * max(maximum(radii), 0.833))^2
     cutoff2 = 13*options.cutoff_coeff/15
-    buffer, ortho, safemin = prepare_periodic_distance_computations(mat)
+    pd2 = PeriodicDistance2(mat)
     for i in 1:n
         radius_i = radii[i]
         iszero(radius_i) && continue
@@ -85,10 +85,9 @@ function guess_bonds(pos, types, mat, options)
             radius_j = radii[j]
             iszero(radius_j) && continue
             posj = pos[j]
-            buffer .= posi .- posj
-            d1 = periodic_distance!(buffer, mat, ortho, safemin)
+            d2 = pd2(posi, posj)
             maxdist = cutoff2*(radius_i + radius_j)
-            if d1 < cutoff && 0.5 < d1 < maxdist
+            if d2 < cutoff_sq && 0.5^2 < d2 < maxdist^2
                 push!(bonds[i], (j, maxdist))
                 push!(bonds[j], (i, maxdist))
             end

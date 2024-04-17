@@ -184,10 +184,9 @@ function prune_collisions(cif::CIF)
     points::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     n = length(points)
     smallmat = Float64.(cif.cell.mat)
-    buffer, ortho, safemin = prepare_periodic_distance_computations(smallmat)
+    pd2 = PeriodicDistance2(smallmat)
     for i in 1:n, j in (i+1):n
-        buffer .= points[i] .- points[j]
-        if periodic_distance!(buffer, smallmat, ortho, safemin) < 0.55
+        if pd2(points[i], points[j]) < 0.55^2
             push!(toremove, j)
         end
     end
@@ -252,7 +251,7 @@ function expand_symmetry(c::CIF)
     newpos::Vector{SVector{3,Float64}} = collect(eachcol(cif.pos))
     smallmat = Float64.(cif.cell.mat)
     symmetric_aliases = [BitSet(i) for i in 1:maxid]
-    buffer, ortho, safemin = prepare_periodic_distance_computations(smallmat)
+    pd2 = PeriodicDistance2(smallmat)
     #=@inbounds=# for equiv in cif.cell.equivalents
         image = zeros(Int, n) # image[i] is the index of the position of the image of i
         for i in 1:n
@@ -261,8 +260,7 @@ function expand_symmetry(c::CIF)
             p .-= floor.(p)
             imi = 0
             for (j, posj) in enumerate(newpos)
-                buffer .= posj .- p
-                if periodic_distance!(buffer, smallmat, ortho, safemin) < 0.55
+                if pd2(posj, p) < 0.55^2
                     imi = j
                     break
                 end
@@ -316,8 +314,7 @@ function expand_symmetry(c::CIF)
             for j in (i+1):m
                 bondlength = get_bondlist(oldbonds[newids[i]], newids[j])
                 bondlength < Inf32 || continue
-                buffer .= newpos[i] .- newpos[j]
-                if abs(periodic_distance!(buffer, smallmat, ortho, safemin) - bondlength) < 0.55
+                if abs(sqrt(pd2(newpos[i], newpos[j])) - bondlength) < 0.55
                     push!(bonds[i], (j, bondlength))
                     push!(bonds[j], (i, bondlength))
                 end

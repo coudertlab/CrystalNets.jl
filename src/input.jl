@@ -729,12 +729,11 @@ function check_collision(pos, mat)
     n = length(pos)
     toremove = Int[]
     n == 0 && return toremove
-    buffer, ortho, safemin = prepare_periodic_distance_computations(mat)
+    pd2 = PeriodicDistance2(mat)
     for i in 1:n
         posi = pos[i]
         for j in (i+1):n
-            buffer .= posi .- pos[j]
-            if periodic_distance!(buffer, mat, ortho, safemin) < 0.55
+            if pd2(posi, pos[j]) < 0.55^2
                 push!(toremove, j)
             end
         end
@@ -859,13 +858,12 @@ function check_C_disorder!(graph, pos, types, idx, mat)
     end
     length(carbons) == 5 || return false
     adjacency = MMatrix{5,5,Bool,25}(undef)
-    buffer, ortho, safemin = prepare_periodic_distance_computations(mat)
+    pd2 = PeriodicDistance2(mat)
     for i in 1:5
         posi = pos[carbons[i].v] .+ carbons[i].ofs
         adjacency[i,i] = false
         for j in (i+1):5
-            buffer .= posi .- pos[carbons[j].v] .- carbons[j].ofs
-            adjacency[i,j] = adjacency[j,i] = periodic_distance!(buffer, mat, ortho, safemin) < 1.85
+            adjacency[i,j] = adjacency[j,i] = pd2(posi, pos[carbons[j].v], nothing, carbons[j].ofs) < 1.85^2
         end
     end
     odd_one = false
