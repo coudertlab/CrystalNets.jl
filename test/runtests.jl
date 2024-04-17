@@ -160,6 +160,12 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     @test_broken bexvad[1][1] == bexvad[2][1]
 end
 
+@testset "Other kinds of structures" begin
+    cifs, crystalnetsdir = _finddirs()
+    @test string(determine_topology(joinpath(cifs, "Clathrate_hydrate.cif"); Hbonds=true)) == "ict"
+    @test string(determine_topology(joinpath(cifs, "Lithosite.cif"); structure=StructureType.Zeolite, ignore_atoms=(:K,))) == "-LIT"
+end
+
 @testset "Archive" begin
     @info "Checking that all known topologies are recognized (this can take a few minutes)."
     Threads.nthreads() == 1 && @info "Use multiple threads to reduce this time"

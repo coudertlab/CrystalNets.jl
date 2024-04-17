@@ -1,0 +1,83 @@
+#*********************************************************************************
+#
+# Crystallographic Information File for Lithosite
+#
+# Reference :
+# Pudovkina, Z.V., Solov'eva, L.P. and Pyatenko, Yu.A.
+# Sov. Phys. Dokl., 31, 941-942, (1986)
+#
+#
+# CIF downloaded from the IZA-SC Database of Zeolite Structures
+# Ch. Baerlocher, L.B. McCusker and D.H. Brouwer
+# Database of Zeolite Structures: https://www.iza-structure.org/databases/
+#
+#**********************************************************************************
+data_Lithosite
+_chemical_name_systematic 'Lithosite'
+
+_cell_length_a 15.197
+_cell_length_b 10.233
+_cell_length_c 8.435
+_cell_angle_alpha 90
+_cell_angle_beta 90.31
+_cell_angle_gamma 90
+_cell_formula_units_Z 1
+
+_space_group.name_H-M_ref 'P 1 21 1'
+_symmetry_space_group_name_H-M 'P 1 21 1'
+_symmetry_space_group_name_Hall 'P 2yb'
+_space_group.IT_number 4
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_B_iso_or_equiv
+_atom_site_occupancy
+Si1 Si 0.262 0.219 0.435 0.62 1
+Si2 Si 0.259 0.221 0.063 0.37 1
+Si3 Si 0.561 0.192 0.053 0.87 1
+Si4 Si 0.914 0.111 0.559 0.81 1
+Si5 Si 0.243 0.778 0.939 0.98 1
+Si6 Si 0.237 0.777 0.565 0.68 1
+Si7 Si 0.586 0.886 0.439 0.78 1
+Si8 Si 0.94 0.807 0.942 0.86 1
+Al1 Al 0.91 0.11 0.93 0.64 1
+Al2 Al 0.563 0.188 0.443 0.83 1
+Al3 Al 0.936 0.809 0.558 0.7 1
+Al4 Al 0.59 0.891 0.064 0.65 1
+K1 K 0.697 0.054 0.752 1.42 1
+K2 K 0.422 0.046 0.752 1.84 1
+K3 K 0.136 0.064 0.738 2.13 1
+K4 K 0.801 0.947 0.247 1.43 1
+K5 K 0.078 0.938 0.248 1.9 1
+K6 K 0.37 0.944 0.244 1.9 1
+O1 O 0.248 0.188 0.249 1.4 1
+O2 O 0.995 0.219 0.948 1.09 1
+O3 O 0.005 0.721 0.436 1.56 1
+O4 O 0.293 0.101 0.958 1.21 1
+O5 O 0.548 0.027 0.501 1.38 1
+O6 O 0.552 0.039 0.997 1.18 1
+O7 O 0.706 0.597 0.468 1.03 1
+O8 O 0.547 0.218 0.245 1.39 1
+O9 O 0.824 0.153 0.453 1.31 1
+O10 O 0.824 0.153 0.054 1.46 1
+O11 O 0.123 0.598 0.257 1.49 1
+O12 O 0.167 0.272 0.501 1.37 1
+O13 O 0.156 0.245 0.001 1.43 1
+O14 O 0.247 0.821 0.754 1.06 1
+O15 O 0.507 0.781 0.451 1.87 1
+O16 O 0.511 0.773 0.051 1.73 1
+O17 O 0.196 0.908 0.479 1.24 1
+O18 O 0.947 0.961 0 1.28 1
+O19 O 0.946 0.97 0.486 0.98 1
+O20 O 0.204 0.904 0.024 1.06 1
+O21 O 0.048 0.295 0.24 1.61 1
+O22 O 0.69 0.854 0.97 1.6 1
+O23 O 0.665 0.844 0.56 1.21 1
+O24 O 0.624 0.898 0.263 1.14 1
+O25 O 0.663 0.234 0.001 1.43 1
+O26 O 0.331 0.745 0.494 1.33 1
+# End of data for Lithosite
