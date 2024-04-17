@@ -1274,6 +1274,59 @@ function remove_homoatomic_bonds!(graph::PeriodicGraph{D}, types, targets, reduc
     reduce_homometallic && _remove_homometallic_bonds!(graph, types, metallics)
 end
 
+function add_H_bonds!(graph::PeriodicGraph3D, types, cell::Cell, pos, opts::Options)
+    bonded_H = Tuple{Int,PeriodicVertex3D}[]
+    acceptors = Int[]
+    for (i, tH) in enumerate(types)
+        if tH in (:O, :N, :F, :Cl, :S)
+            push!(acceptors, i)
+        elseif tH === :H
+            for x in neighbors(graph, i)
+                v = first(x)
+                t = types[v]
+                if t in (:O, :N, :F, :Cl, :S)
+                    push!(bonded_H, (i, x))
+                    break
+                end
+            end
+        end
+    end
+    if isempty(bonded_H)
+        @ifwarn @warn "Could not find any H bonded to O, N, F, Cl or S although option H_bonds is set"
+        return
+    end
+    mat = Float64.(cell.mat)
+    pd2 = PeriodicDistance2(mat)
+    ofs = MVector{3,Int}(undef)
+    dmax2 = opts.Hbonds_dmax^2
+    θmax = opts.Hbonds_θmax
+    nmax = opts.Hbonds_nmax
+    accepted = Tuple{PeriodicVertex3D,Float64}[]
+    for (uH, (uD, ofsD)) in bonded_H
+        pH = pos[uH]
+        pD = pos[uD] .+ ofsD
+        empty!(accepted)
+        for uA in acceptors
+            uA == uD && continue
+            pA = pos[uA]
+            d = pd2(pH, pA; ofs)
+            1.0^2 ≤ d ≤ dmax2 || continue
+            θ = angle(mat*(pD .- (pA .+ ofs)), mat*(pD .- pH))
+            if θ < θmax
+                push!(accepted, (PeriodicVertex3D(uA, SVector{3,Int}(ofs)), d))
+            end
+        end
+        if length(accepted) > nmax
+            sort!(accepted; by=last)
+            resize!(accepted, nmax)
+        end
+        for (x, _) in accepted
+            add_edge!(graph, uH, x)
+        end
+    end
+    nothing
+end
+
 
 function parse_as_cif(cif::CIF, options::Options, name::String)
     guessed_bonds = false
@@ -1453,6 +1506,8 @@ function finalize_checks(cell::Cell, pos::Vector{SVector{3,Float64}}, types::Vec
 
         remove_homoatomic_bonds!(graph, types, options.ignore_homoatomic_bonds, options.reduce_homometallic_bonds)
     end
+
+    options.Hbonds && add_H_bonds!(graph, types, cell, pos, options)
 
     if isempty(attributions)
         crystalnothing = Crystal{Nothing}(cell, types, pos, graph, options)

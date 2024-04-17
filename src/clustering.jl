@@ -1235,6 +1235,15 @@ function _split_this_sbu!(toremove, graph, k, types, stopiftype, sbus)
             length(othersbu) == 1 && types[othersbu[1].v] === stopiftype && return nothing
         end
     end
+    if stopiftype === :O
+        # skip splitting if O has too many H-bonds (like in clathrate hydrates)
+        numhbonds = 0
+        neighsO = neighbors(graph, k)
+        for (x, _) in neighsO
+            numhbonds += types[x] === :H
+        end
+        length(neighsO) - numhbonds ≤ 2 && return nothing
+    end
     push!(toremove, k)
     neighs = reverse(neighbors(graph, k))
     n = length(neighs)

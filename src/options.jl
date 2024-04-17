@@ -342,6 +342,13 @@ string is equivalent to `false`.
 - `max_polyhedron_radius`: an integer specifying the maximum number of bonds between two
   corners of the coordination polyhedron built for the [`Clustering.PE`](@ref Clustering) option.
   Default is 4.
+- `Hbonds`: set to `true` to include hydrogen bonds. Default is false.
+- `Hbonds_dmax`: the maximum length of a hydrogen bond. Only used if `Hbonds` is set.
+  Default is 2.5 Å.
+- `Hbonds_θmax`: the maximum angle of a hydrogen bond. Only used if `Hbonds` is set.
+  Default is 30°.
+- `Hbonds_nmax`: the maximum number of hydrogen bond per hydrogen. Only used if `Hbonds` is
+  set. Default is 1.
 
 ## Miscellaneous options
 These boolean options have a default value that may be determined by [`Bonding`](@ref),
@@ -371,7 +378,7 @@ These boolean options have a default value that may be determined by [`Bonding`]
 - `premerge_metalbonds`: when a periodic metallic SBU is detected, cluster together bonded
   metal atoms of the same kind before splitting the SBU.
 - `split_O_vertex`: if a vertex is composed of a single O, remove it and bond together all of
-  its neighbors. Default is true.
+  its neighbors, unless removing its hydrogen bonds would make it bivalent. Default is true.
 - `unify_sbu_decomposition`: apply the same rule to decompose both periodic and finite SBUs.
   Default is false.
 - `force_warn`: force printing warning and information even during `..._dataset` function
@@ -409,6 +416,10 @@ struct Options
     export_trimmed::String
     force_warn::Bool
     label_for_type::Bool
+    Hbonds::Bool
+    Hbonds_dmax::Float64
+    Hbonds_θmax::Float64
+    Hbonds_nmax::Int
 
     # Clustering options
     clusterings::Vector{_Clustering}
@@ -456,6 +467,10 @@ struct Options
                        export_trimmed=false,
                        force_warn=false,
                        label_for_type=false,
+                       Hbonds=false,
+                       Hbonds_dmax=2.5,
+                       Hbonds_θmax=30.0,
+                       Hbonds_nmax=1,
                        clusterings=_Clustering[Clustering.Auto],
                        bond_adjacent_sbus=false,
                        ignore_metal_cluster_bonds=nothing,
@@ -518,6 +533,10 @@ struct Options
             _export_trimmed,
             force_warn,
             label_for_type,
+            Hbonds,
+            Hbonds_dmax,
+            Hbonds_θmax,
+            Hbonds_nmax,
             clusterings,
             bond_adjacent_sbus,
             ignore_metal_cluster_bonds,
