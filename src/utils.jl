@@ -332,7 +332,7 @@ function representative_atom(t::Symbol, default::Int=0)
     at == 0 || return t, at
     t === :* && return t, default
     styp = string(t)
-    @toggleassert length(styp) ≥ 2
+    # @toggleassert length(styp) ≥ 2 not true for fake atoms like G
     t = islowercase(styp[2]) ? Symbol(styp[1:2]) : Symbol(styp[1])
     return t, get(atomic_numbers, t, default)
 end

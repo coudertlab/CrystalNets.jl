@@ -163,6 +163,7 @@ end
 @testset "Other kinds of structures" begin
     cifs, crystalnetsdir = _finddirs()
     @test string(determine_topology(joinpath(cifs, "Clathrate_hydrate.cif"); Hbonds=true)) == "ict"
+    @test string(determine_topology(joinpath(cifs, "Clathrate_hydrate.cif"); Hbonds=true, structure=StructureType.Guess)) == "AllNodes, SingleNodes: ict"
     @test string(determine_topology(joinpath(cifs, "Lithosite.cif"); structure=StructureType.Zeolite, ignore_atoms=(:K,))) == "-LIT"
 end
 

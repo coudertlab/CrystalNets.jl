@@ -1228,21 +1228,25 @@ function find_sbus!(crystal::Crystal, kinds::ClusterKinds=default_sbus)
     return sbus
 end
 
+function _is_O_sbu_exempt_from_split(sbu, subgraph, types)
+    for (v, _) in sbu
+    # skip splitting if O has too many H-bonds (like in clathrate hydrates)
+        numhbonds = 0
+        neighsO = neighbors(subgraph, v)
+        for (x, _) in neighsO
+            numhbonds += types[x] === :H
+        end
+        length(neighsO) - numhbonds ≤ 2 || return false
+    end
+    return true
+end
+
 function _split_this_sbu!(toremove, graph, k, types, stopiftype, sbus)
     if sbus !== nothing
         for x in neighbors(graph, k)
             othersbu = sbus[x.v]
             length(othersbu) == 1 && types[othersbu[1].v] === stopiftype && return nothing
         end
-    end
-    if stopiftype === :O
-        # skip splitting if O has too many H-bonds (like in clathrate hydrates)
-        numhbonds = 0
-        neighsO = neighbors(graph, k)
-        for (x, _) in neighsO
-            numhbonds += types[x] === :H
-        end
-        length(neighsO) - numhbonds ≤ 2 && return nothing
     end
     push!(toremove, k)
     neighs = reverse(neighbors(graph, k))
@@ -1270,15 +1274,17 @@ function split_special_sbu!(graph, sbus, subgraph, types, splitO)
             end
         end
         uniquetypes === Symbol("") && continue
-        if uniquetypes === :O && splitO
-            _split_this_sbu!(toremove, graph, k, types, uniquetypes, sbus)
+        if uniquetypes === :O && splitO && !_is_O_sbu_exempt_from_split(sbu, subgraph, types)
+            _split_this_sbu!(toremove, graph, k, types, :O, sbus)
         elseif uniquetypes == :C && length(sbu) == 1
             push!(uniqueCs, k)
         end
     end
     for k in uniqueCs
+        v = only(sbus[k]).v
+
         # eliminate the case of points of extension:
-        any(x -> types[x.v] === :C || types[x.v] === :N, neighbors(subgraph, sbus[k][1].v)) && continue
+        any(x -> types[x.v] === :C || types[x.v] === :N, neighbors(subgraph, v)) && continue
 
         neighs = neighbors(graph, k)
         otherwiseconnected = falses(length(neighs))
@@ -1297,17 +1303,26 @@ function split_special_sbu!(graph, sbus, subgraph, types, splitO)
         if all(otherwiseconnected)
             push!(toremove, k)
         else
-            _split_this_sbu!(toremove, graph, k, types, types[only(sbus[k]).v], sbus)
+            _split_this_sbu!(toremove, graph, k, types, types[v], sbus)
         end
     end
     return rem_vertices!(graph, toremove)
 end
 
+"""
+    split_O_vertices(c)
+
+Split O vertices that have 3 or more neighbours, so that these neighbours become connected
+and the O node disappears.
+
+H neighbours are not considered.
+"""
 function split_O_vertices(c)
     toremove = Int[]
     graph = deepcopy(c.pge.g)
     for (k, t) in enumerate(c.types)
         (t === :O && degree(graph, k) > 2) || continue
+        _is_O_sbu_exempt_from_split([PeriodicVertex3D(k)], graph, c.types) && continue
         _split_this_sbu!(toremove, graph, k, c.types, :O, nothing)
     end
     vmap = rem_vertices!(graph, toremove)
@@ -1321,11 +1336,21 @@ struct InvalidSBU <: ClusteringError
 end
 
 
+"""
+    identify_clustering(c::Crystal{T}, structure::_StructureType, clustering::_Clustering) where T
+
+Return a tuple `(newclustering, maybeclusters)` such that:
+- `newclustering` is the first `_Clustering` used. When the input `clustering` is
+  `SingleNodes` for instance, `newclustering` will be `AllNodes` since `SingleNodes` is
+  derived from an initial `AllNodes` clustering.
+- `maybeclusters` is either the `Clusters` to use, or a boolean indicating whether to
+  separate metals.
+"""
 function identify_clustering(c::Crystal{T}, structure::_StructureType, clustering::_Clustering) where T
     if clustering == Clustering.Auto
         if structure == StructureType.Auto
             if T === Clusters
-                return structure, clustering, c.clusters
+                return clustering, c.clusters
             else
                 return identify_clustering(c, structure, Clustering.EachVertex)
             end
@@ -1333,15 +1358,15 @@ function identify_clustering(c::Crystal{T}, structure::_StructureType, clusterin
             return identify_clustering(c, structure, Clustering.EachVertex)
         elseif structure == StructureType.Guess
             separate_metals = c.options.separate_metals isa Bool ? c.options.separate_metals::Bool : false
-            return structure, clustering, separate_metals
+            return clustering, separate_metals
         end
         @toggleassert structure == StructureType.MOF || structure == StructureType.Cluster
         return identify_clustering(c, structure, Clustering.AllNodes)
     elseif clustering == Clustering.EachVertex
-        return structure, clustering, Clusters(length(c.types))
+        return clustering, Clusters(length(c.types))
     elseif clustering == Clustering.Input
         if T === Clusters
-            return structure, clustering, c.clusters
+            return clustering, c.clusters
         else
             throw(ArgumentError("Cannot use input residues as clusters: the input does not have residues."))
         end
@@ -1352,7 +1377,7 @@ function identify_clustering(c::Crystal{T}, structure::_StructureType, clusterin
         clustering = Clustering.PEM
     end
     separate_metals2 = c.options.separate_metals isa Bool ? c.options.separate_metals::Bool : clustering == Clustering.PEM
-    return structure, clustering, separate_metals2
+    return clustering, separate_metals2
 end
 
 
@@ -1487,16 +1512,15 @@ end
 
 function find_clusters(_c::Crystal{T}) where T
     c = trim_monovalent(_c)
-    _structure = c.options.structure
+    structure = c.options.structure
     clusterings = c.options.clusterings
     ret = Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}}(undef, length(clusterings))
-    encountered = Dict{Tuple{_StructureType,_Clustering,Bool},Int}()
+    encountered = Dict{Tuple{_Clustering,Bool},Int}()
     for (i, _clustering) in enumerate(clusterings)
-        identified = identify_clustering(c, _structure, _clustering)
-        structure = identified[1]
-        maybeclusters = identified[3]
-        idx = maybeclusters isa Bool ? identified::Tuple{_StructureType,_Clustering,Bool} :
-                                       (structure, identified[2], true)
+        identified = identify_clustering(c, structure, _clustering)
+        maybeclusters = identified[2]
+        idx = maybeclusters isa Bool ? identified::Tuple{_Clustering,Bool} :
+                                       (identified[1], true)
         clusters::Union{Int,Clusters} = get!(encountered, idx, i)
         newc = Crystal(copy(c.pge), copy(c.types), c.clusters, c.options)
         if clusters == i
@@ -1504,7 +1528,7 @@ function find_clusters(_c::Crystal{T}) where T
                 clusters = maybeclusters
             else
                 separate_metals = maybeclusters
-                guess = structure == StructureType.Guess && identified[2] == Clustering.Auto
+                guess = structure == StructureType.Guess && identified[1] == Clustering.Auto
                 _guess, clusters = _find_clusters(newc, guess, separate_metals)
                 if guess && !_guess
                     structure = StructureType.Cluster
