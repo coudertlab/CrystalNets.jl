@@ -836,9 +836,26 @@ Check the presence of carbon cycle disorder (multiple cycles superposed).
 If present, send a warning and allow the common carbons and the ends of the cycles to have
 an additional bond out of the cycle (even if it overcomes the usual bond limits for a
 carbon).
+
+Also remove carbon-metal bonds longer than 2.4 Å.
 """
-function check_C_disorder!(graph, pos, types, idx, mat)
+function check_C_disorder!(graph::PeriodicGraph{N}, pos, types, idx, mat) where {N}
     neighs = neighbors(graph, idx)
+    removeedges = PeriodicVertex{N}[]
+    for u in neighs
+        if ismetal[get(atomic_numbers, types[u.v], 1)]
+            bondlength = Float64(norm(mat * (pos[u.v] .+ u.ofs .- pos[idx])))
+            if bondlength > 2.4
+                push!(removeedges, u)
+            end
+        end
+    end
+    if !isempty(removeedges)
+        for u in removeedges
+            rem_edge!(graph, PeriodicEdge(idx, u))
+        end
+        neighs = neighbors(graph, idx)
+    end
     length(neighs) ≥ 5 || return false
     carbons = PeriodicVertex3D[]
     for x in neighs

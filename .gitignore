@@ -3,3 +3,4 @@ Manifest.toml
 .vscode/
 .ipynb_checkpoints/
 test/RCSRnets-*
+*.code-workspace
