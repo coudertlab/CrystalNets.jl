@@ -575,24 +575,22 @@ end
 function determine_symmetries_dataset(path, showprogress, tolerance, options::Options)
     files = recursive_readdir(path)
     progress = Progress(length(files); dt=0.2, enabled=showprogress, showspeed=true)
-    allsymmetries = [Pair{String,Union{Nothing,String}}[] for _ in 1:nthreads()]
+    allsymmetries = [Pair{String,Int}[] for _ in 1:nthreads()]
     @threads :static for file in files
         symmetries = allsymmetries[threadid()]
         f = joinpath(path, file)
         # threadid() == 1 && @show f # to find infinite loops: the last one printed is probably running
-        symm::String = try
+        symm::Int = try
             crystal = parse_chemfile(f, options)
             dataset = PeriodicGraphEmbeddings.get_spglib_dataset(crystal.pge, crystal.types; tolerance)
             if dataset isa Nothing
-                "P1"
+                0
             else
-                chars = dataset._hall_symbol
-                lastchar = findfirst(iszero, chars) - 1
-                replace(String(UInt8.(getindex.((chars,), 1:lastchar))), '"'=>'\\')
+                dataset.hall_number
             end
         catch e
             (options.throw_error || isinterrupt(e)) && rethrow()
-            "FAILURE: $e"
+            -1
         end
         push!(symmetries, file => symm)
         showprogress && next!(progress)
@@ -678,12 +676,24 @@ function patch_report(path, dict, name)
     allvals = sort!(collect(dict))
     open(path, "w") do io
         e = eachline(copyfile)
-        println(io, first(e), '\t', name)
+        print(io, first(e), '\t')
+        if name isa AbstractString
+            println(io, name)
+        else
+            join(io, name, '\t')
+            println(io)
+        end
         for l in e
             k = first(eachsplit(l, '\t'))
             print(io, l, '\t')
             if startswith(first(allvals)[1], k)
-                println(io, popfirst!(allvals)[2])
+                v = popfirst!(allvals)[2]
+                if name isa AbstractString
+                    println(io, v)
+                else
+                    join(io, v, '\t')
+                    println(io)
+                end
             else
                 println(io)
             end
