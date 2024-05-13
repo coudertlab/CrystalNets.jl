@@ -37,7 +37,7 @@ end
 
 function no_metadata_metafmt(level::Logging.LogLevel, _module, group, id, file, line)
     @nospecialize
-    color = Logging.default_logcolor(level)
+    color = (@static VERSION < v"1.12.0-" ? Logging : Base.CoreLogging).default_logcolor(level)
     prefix = string(level == Logging.Warn ? "Warning" : string(level), ':')
     return color, prefix, ""
 end
