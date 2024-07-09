@@ -495,7 +495,7 @@ struct Options
                        dryrun=nothing,
                        error="",
                        throw_error=false,
-                       track_mapping=nothing,
+                       track_mapping=Vector{Int}(),
                     )
 
         _export_input = ifbooltempdirorempty(export_input)
@@ -601,7 +601,10 @@ function permute_mapping(options::Options, vmap)
             x != 0 && (mapping[i] = vmap[x])
         end
     end
-    return Options(options; track_mapping=mapping)
+    empty!(options.track_mapping)
+    append!(options.track_mapping, mapping)
+    return options
+    #return Options(options; track_mapping=mapping)
 end
 
 function rev_permute_mapping(options::Options, rev_vmap, len=length(rev_vmap))
