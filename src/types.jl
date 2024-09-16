@@ -632,6 +632,7 @@ function CrystalNet{D,T}(net::CrystalNet{N}; kwargs...) where {D,T,N}
     CrystalNet{D,T}(pge, net.types, Options(net.options; kwargs...))
 end
 CrystalNet{D}(net::CrystalNet{R,T}; kwargs...) where {D,R,T} = CrystalNet{D,T}(net; kwargs...)
+CrystalNet(net::CrystalNet{D,T}; kwargs...) where {D,T} = CrystalNet{D,T}(net; kwargs...)
 
 const CrystalNet1D = CrystalNet{1}
 const CrystalNet2D = CrystalNet{2}
