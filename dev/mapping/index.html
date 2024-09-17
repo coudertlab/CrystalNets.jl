@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Mapping of vertices · CrystalNets.jl</title><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">CrystalNets.jl</a></span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../visualization/">Visualization</a></li><li class="is-active"><a class="tocitem" href>Mapping of vertices</a><ul class="internal"><li><a class="tocitem" href="#Principle"><span>Principle</span></a></li><li><a class="tocitem" href="#Restriction"><span>Restriction</span></a></li></ul></li><li><a class="tocitem" href="../python/">Python</a></li><li><a class="tocitem" href="../faq/">FAQ</a></li><li><span class="tocitem">Library</span><ul><li><a class="tocitem" href="../lib/public/">Public</a></li><li><a class="tocitem" href="../lib/internals/">Internals</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Mapping of vertices</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Mapping of vertices</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/coudertlab/CrystalNets.jl/blob/master/docs/src/mapping.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="mapping"><a class="docs-heading-anchor" href="#mapping">Mapping of vertices</a><a id="mapping-1"></a><a class="docs-heading-anchor-permalink" href="#mapping" title="Permalink"></a></h1><h2 id="Principle"><a class="docs-heading-anchor" href="#Principle">Principle</a><a id="Principle-1"></a><a class="docs-heading-anchor-permalink" href="#Principle" title="Permalink"></a></h2><p>CrystalNets.jl extracts the net underlying the input structure, and can identify its name when it exists. Sometimes, it is useful to retrieve the mapping between the input structure and the vertices of the net. This is possible with CrystalNets.jl, using the <code>track_mapping</code> option (see full list of <a href="../lib/public/#CrystalNets.Options"><code>Options</code></a>)</p><p>There are multiple ways of using it. One consists in preparing an empty list and passing it to the <code>track_mapping</code> option. The list will contain the mapping at the end of the computation.</p><p>In the case of a call to <a href="../lib/public/#CrystalNets.determine_topology"><code>determine_topology</code></a>, the net can be extracted from the <a href="../lib/public/#CrystalNets.InterpenetratedTopologyResult"><code>InterpenetratedTopologyResult</code></a> returned by the function, while the number of the input atoms is that corresponding to the &quot;name&quot; field of the .vtf file exported with the <code>export_input</code> option. For example:</p><pre><code class="language-julia-repl hljs">julia&gt; path_to_PIVCIJ = joinpath(dirname(dirname(pathof(CrystalNets))), &quot;test&quot;, &quot;cif&quot;, &quot;PIVCIJ.cif&quot;);
+
+julia&gt; mapping = Int[]; # pass an empty list to track_mapping
+
+julia&gt; topology = determine_topology(path_to_PIVCIJ; structure=StructureType.MOF, clusterings=[Clustering.SingleNodes], track_mapping=mapping, export_input=true)
+Export of input is enabled: saving file at /tmp/input_PIVCIJ.vtf
+SingleNodes: fsc
+
+julia&gt; fsc = last(only(first(only(topology))))
+fsc
+
+julia&gt; fsc_graph = PeriodicGraph(fsc)
+PeriodicGraph3D(2, PeriodicEdge3D[(1, 1, (0,0,1)), (1, 2, (-1,0,0)), (1, 2, (-1,1,0)), (1, 2, (0,0,0)), (1, 2, (0,1,0))])
+
+julia&gt; degree(fsc_graph) # fsc has two vertices, of degree respectively 6 and 4
+2-element Vector{Int64}:
+ 6
+ 4
+
+julia&gt; first(Iterators.drop(eachline(&quot;/tmp/input_PIVCIJ.vtf&quot;), 4))
+&quot;atom 0 type Co name 1 resid 0 atomicnumber 27&quot;
+
+julia&gt; mapping[1] # atom 1, Co, is mapped to the 6-coordinated vertex
+1
+
+julia&gt; first(Iterators.drop(eachline(&quot;/tmp/input_PIVCIJ.vtf&quot;), 11))
+&quot;atom 7 type C name 8 resid 0 atomicnumber 6&quot;
+
+julia&gt; mapping[8] # atom 8, C, is part of the 4-coordinated ligand
+2
+
+julia&gt; first(Iterators.drop(eachline(&quot;/tmp/input_PIVCIJ.vtf&quot;), 13))
+&quot;atom 9 type H name 10 resid 0 atomicnumber 1&quot;
+
+julia&gt; mapping[10] # atom 10, H, has been removed early and has no mapping
+0</code></pre><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>The operation that goes from the <a href="../lib/public/#CrystalNets.InterpenetratedTopologyResult"><code>InterpenetratedTopologyResult</code></a>, returned by <a href="../lib/public/#CrystalNets.determine_topology"><code>determine_topology</code></a>, to the actual genome stored as a <code>PeriodicGraph</code>, is explained in <a href="../faq/#genomefromname">a dedicated FAQ question</a></p></div></div><p>When using the lower-level <a href="../lib/public/#CrystalNets.topological_genome"><code>topological_genome</code></a> function, the call will include an <a href="../lib/public/#CrystalNets.Options"><code>Options</code></a>, either given explicitly (for <code>PeriodicGraph</code> input) or within the passed object if it is a <a href="../lib/public/#CrystalNets.CrystalNet"><code>CrystalNet</code></a> or an <a href="../lib/public/#CrystalNets.UnderlyingNets"><code>UnderlyingNets</code></a>. In such cases, the mapping can be fetched from the <code>track_mapping</code> field of the given <a href="../lib/public/#CrystalNets.Options"><code>Options</code></a> after the computation, as long as it was initialized with either an empty list, like in the previous example, or simply the boolean <code>true</code>. For example :</p><pre><code class="language-julia-repl hljs">julia&gt; crystal_PIVCIJ = parse_chemfile(path_to_PIVCIJ; clusterings=[Clustering.SingleNodes], track_mapping=true);
+
+julia&gt; topological_genome(CrystalNet(crystal_PIVCIJ))
+fsc
+
+julia&gt; crystal_PIVCIJ.options.track_mapping == mapping
+true</code></pre><h2 id="Restriction"><a class="docs-heading-anchor" href="#Restriction">Restriction</a><a id="Restriction-1"></a><a class="docs-heading-anchor-permalink" href="#Restriction" title="Permalink"></a></h2><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>In order to have a one-to-one correspondence between the input structure and the net, there must be exactly one net that corresponds to the input. Using <code>track_mapping</code> will thus fail when there is only one <code>track_mapping</code> field for either multiple interpenetrated substructures, or multiple clusterings.</p></div></div><p>For example, the following command errors:</p><pre><code class="language-julia-repl hljs">julia&gt; determine_topology(path_to_PIVCIJ; structure=StructureType.MOF, track_mapping=mapping)
+ERROR: ArgumentError: Cannot keep a single mapping track for multiple sub-nets. Please use keep_single_track=true only on single components with a single clustering.
+[...]</code></pre><p>The reason is that the <code>structure=StructureType.MOF</code> argument makes the default <code>Clustering.Auto</code> value equivalent to both <code>Clustering.SingleNodes</code> and <code>Clustering.AllNodes</code>, so the previous call is actually evaluating two different clusterings, hence the error.</p><h3 id="Workaround:-the-keep_single_trackfalse-option"><a class="docs-heading-anchor" href="#Workaround:-the-keep_single_trackfalse-option">Workaround: the <code>keep_single_track=false</code> option</a><a id="Workaround:-the-keep_single_trackfalse-option-1"></a><a class="docs-heading-anchor-permalink" href="#Workaround:-the-keep_single_trackfalse-option" title="Permalink"></a></h3><p>A quick workaround consists in adding the <code>keep_single_track=false</code> option. The result of the mapping will then be printed after the computation, but it cannot be retrieved computationally:</p><pre><code class="language-julia-repl hljs">julia&gt; mapping2 = Int[];
+
+julia&gt; determine_topology(path_to_PIVCIJ; structure=StructureType.MOF, track_mapping=mapping2, keep_single_track=false)
+Mapping for CrystalNets.Clustering._Clustering[CrystalNets.Clustering.AllNodes][1, 1, 1, 1, 1, 0, 0, 2, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 3, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+Mapping for CrystalNets.Clustering._Clustering[CrystalNets.Clustering.SingleNodes][1, 1, 1, 1, 1, 0, 0, 2, 2, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 2, 2, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+AllNodes: sqc27
+SingleNodes: fsc
+
+julia&gt; mapping2 # untouched, cannot be used to retrieve the mapping
+Int64[]</code></pre><h3 id="Subnet-separation"><a class="docs-heading-anchor" href="#Subnet-separation">Subnet separation</a><a id="Subnet-separation-1"></a><a class="docs-heading-anchor-permalink" href="#Subnet-separation" title="Permalink"></a></h3><p>A more proper solution to this issue consists in creating separate <a href="../lib/public/#CrystalNets.CrystalNet"><code>CrystalNet</code></a> instances, one for each substructure and for each target clustering, and thus with their own separate <code>track_mapping</code> field. The <a href="../lib/public/#CrystalNets.UnderlyingNets"><code>UnderlyingNets</code></a> constructor can be used for this purpose, starting from a <a href="../lib/internals/#CrystalNets.Crystal"><code>CrystalNets.Crystal</code></a>. For example:</p><pre><code class="language-julia-repl hljs">julia&gt; path_to_WEBZEK = joinpath(dirname(dirname(pathof(CrystalNets))), &quot;test&quot;, &quot;cif&quot;, &quot;MOFs&quot;, &quot;WEBZEK.cif&quot;);
+
+julia&gt; crystal_webzek = parse_chemfile(path_to_WEBZEK; structure=StructureType.MOF);
+
+julia&gt; unets_webzek = UnderlyingNets(crystal_webzek);
+
+julia&gt; topological_genome(unets_webzek) # there are 2 interpenetrated subnets, with 2 clusterings each
+2 interpenetrated substructures:
+⋅ Subnet 1 → AllNodes,SingleNodes: bcu
+⋅ Subnet 2 → AllNodes,SingleNodes: dia
+
+julia&gt; webzekA, webzekB = first.(unets_webzek.D3) # only keep 3D nets here
+2-element Vector{Vector{CrystalNet3D}}:
+ [CrystalNet3D{Rational{Int32}} of WEBZEK_1 with 8 vertices and 32 edges (clustering: AllNodes), CrystalNet3D{Rational{Int32}} of WEBZEK_1 with 8 vertices and 32 edges (clustering: SingleNodes)]
+ [CrystalNet3D{Rational{Int32}} of WEBZEK_2 with 4 vertices and 8 edges (clustering: AllNodes), CrystalNet3D{Rational{Int32}} of WEBZEK_2 with 4 vertices and 8 edges (clustering: SingleNodes)]</code></pre><p>Say we focus on a particular net, for instance the <code>AllNodes</code> clustering of substructure B. After selecting it, its <a href="../lib/public/#CrystalNets.Options"><code>Options</code></a> can be modified by wrapping it in the <a href="../lib/public/#CrystalNets.CrystalNet"><code>CrystalNet</code></a> constructor and using the appropriate keyword arguments:</p><pre><code class="language-julia-repl hljs">julia&gt; subnet = webzekB[1]
+CrystalNet3D{Rational{Int32}} of WEBZEK_2 with 4 vertices and 8 edges (clustering: AllNodes)
+
+julia&gt; newmapping = Int[];
+
+julia&gt; newsubnet = CrystalNet(subnet; track_mapping=newmapping);
+
+julia&gt; topological_genome(newsubnet)
+dia
+
+julia&gt; newmapping
+4-element Vector{Int64}:
+ 1
+ 2
+ 2
+ 1</code></pre><p>Note that the call <code>CrystalNet(subnet; track_mapping=newmapping)</code> does not modify <code>subnet</code>: it simply creates a copy of <code>subnet</code> with a modified <code>track_mapping</code> field. As a consequence, <code>subnet.options.track_mapping</code> cannot be used to track the result of the computation of <code>topological_genome(newsubnet)</code>:</p><pre><code class="language-julia-repl hljs">julia&gt; newmapping === newsubnet.options.track_mapping != subnet.options.track_mapping
+true</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../visualization/">« Visualization</a><a class="docs-footer-nextpage" href="../python/">Python »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.25 on <span class="colophon-date" title="Tuesday 17 September 2024 13:24">Tuesday 17 September 2024</span>. Using Julia version 1.10.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
