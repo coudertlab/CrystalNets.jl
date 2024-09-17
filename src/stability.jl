@@ -116,7 +116,7 @@ function shrink_collisions(net::CrystalNet{D,T}, collision_ranges::Vector{UnitRa
     append!(newpos, net.pge.pos[first(collision_ranges[i])] for i in 2:m)
     newtypes = net.types[1:first_colliding-1]
     append!(newtypes, :* for i in 1:m) # type of collision nodes will be Symbol("*")
-    opts = permute_mapping(net.options, collision_vmap)
+    opts = permute_mapping!(net.options, collision_vmap)
 
     return CrystalNet{D,T}(net.pge.cell, newtypes, newpos, newgraph, opts)
 end
@@ -427,7 +427,7 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
 
     @toggleassert iszero(first(net.pge.pos))
 
-    opts = rev_permute_mapping(net.options, vmap, length(net.types))
+    opts = rev_permute_mapping!(net.options, vmap, length(net.types))
     newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, opts)
     # newnodes = [CollisionNode(newnet.pge.g, node) for node in collision_ranges]
     newnodes = CollisionList(newnet.pge.g, collision_ranges)

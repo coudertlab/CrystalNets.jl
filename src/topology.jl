@@ -705,12 +705,14 @@ function topological_key(net::CrystalNet{D,T}, collisions::CollisionList) where 
     end
 
     if !isnothing(net.options.track_mapping)
-        map = rev_permute_mapping(net.options, vmap).track_mapping
-        @show map
+        map = rev_permute_mapping!(net.options, vmap).track_mapping
+        if !net.options.keep_single_track
+            _clust = first(net.options.clusterings)
+            println("Mapping for ", length(net.options.clusterings) == 1 ? _clust : net.options.clusterings, map)
+        end
     end
 
     # finalbasis = minimal_basis * newbasis
     # return Int.(finalbasis), minimal_vmap, graph
     return graph
 end
-

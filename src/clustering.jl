@@ -140,7 +140,7 @@ function trim_monovalent(crystal::Crystal{T}) where T
     vmap = _trim_monovalent!(graph)
     types = crystal.types[vmap]
     pge = PeriodicGraphEmbedding3D(graph, crystal.pge.pos[vmap], crystal.pge.cell)
-    opts = rev_permute_mapping(crystal.options, vmap, length(crystal.types))
+    opts = rev_permute_mapping!(crystal.options, vmap, length(crystal.types))
     if T === Nothing
         return Crystal{Nothing}(pge, types, opts)
     else
@@ -1482,7 +1482,7 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters, onlyn
                 vmap[x.v] = i
             end
         end
-        opts = permute_mapping(opts, vmap)
+        opts = permute_mapping!(opts, vmap)
     end
     ret = Crystal{Nothing}(crystal.pge.cell, types, pos, graph, opts)
     return ret
@@ -2048,7 +2048,7 @@ function regroup_vmap(cryst, vmap, isolate, msg)
                 newvmap[x.v] = i
             end
         end
-        opts = permute_mapping(opts, newvmap)
+        opts = permute_mapping!(opts, newvmap)
     end
     ret = trimmed_crystal(Crystal{Nothing}(cryst.pge.cell, types, pos, graph, opts))
     export_default(ret, lazy"clusters_$msg", cryst.options.name, cryst.options.export_clusters)

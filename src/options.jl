@@ -386,6 +386,22 @@ These boolean options have a default value that may be determined by [`Bonding`]
 - `label_for_type`: use the atom label instead of its type. Default is false.
   Note that setting this to true will result in an error when detecting bonds if any atom
   has a label which is not an element of the periodic table.
+- `track_mapping`: track the mapping of vertices from the input to the final genome.
+  To use it, set `true`: at the end of the topology computation, the `track_mapping` field
+  will hold a list `l` such that `l[i]` is the number of vertex in the result topology that
+  corresponds to atom `i` in the initial structure. In the case of `determine_topology...`
+  calls, this initial structure is the file exported through the `export_input` option.
+  Default is `nothing`, which does no tracking.
+  `track_mapping` also accepts being set to `Int[]` instead of `true`: the list will then
+  be modified in-place.
+- `keep_single_track`: set to `false` to modify the behaviour of the `track_mapping` option.
+  By default (`true`), `track_mapping` is only allowed when the structure corresponds to a
+  single topology: this excludes structures with multiple connected components, as well as
+  multiple values in `clusterings`. This is necessary since otherwise the list held in
+  `track_mapping` at the end of the computation could refer to any of multiple topologies.
+  Setting `keep_single_track` to `false` lifts this requirement; in this case, the mapping
+  will be printed at the end of the topology computation for each topology, but it will not
+  be held in the `track_mapping` field (and will not be made computationally accessible).
 
 ## Internal fields
 These fields are for internal use and should not be modified by the user:
@@ -393,10 +409,6 @@ These fields are for internal use and should not be modified by the user:
 - `_pos`: the positions of the centre of the clusters collapsed into vertices.
 - `error`: store the first error that occured when building the net.
 - `throw_error`: if set, throw the error instead of storing it in the `error` field.
-- `track_mapping`: if set to `true`, this field will contain, at the end of the computation,
-  the mapping from the vertices of the input to the vertices of the returned genome.
-  In the case of `determine_topology...` calls, the "input" is the file exported through
-  the `export_input` option. Default is false.
 """
 struct Options
     name::String # used for exports
@@ -451,6 +463,7 @@ struct Options
     error::String
     throw_error::Bool
     track_mapping::Union{Nothing,Vector{Int}}
+    keep_single_track::Bool
 
     function Options(; name="unnamed",
                        bonding=Bonding.Auto,
@@ -496,6 +509,7 @@ struct Options
                        error="",
                        throw_error=false,
                        track_mapping=nothing,
+                       keep_single_track=true
                     )
 
         _export_input = ifbooltempdirorempty(export_input)
@@ -515,6 +529,14 @@ struct Options
             structure == StructureType.MOF || structure == StructureType.Zeolite
         else
             wider_metallic_bonds
+        end
+
+        _track_mapping = if track_mapping === true
+            Int[]
+        elseif track_mapping === false
+            nothing
+        else
+            track_mapping
         end
 
         new(
@@ -561,7 +583,8 @@ struct Options
             dryrun,
             error,
             throw_error,
-            track_mapping,
+            _track_mapping,
+            keep_single_track,
         )
     end
 end
@@ -591,9 +614,9 @@ function Options(options::Options; kwargs...)
     return Options(; base...)
 end
 
-function permute_mapping(options::Options, vmap)
+function permute_mapping!(options::Options, vmap)
     options.track_mapping isa Vector{Int} || return options
-    mapping::Vector{Int} = copy(options.track_mapping)
+    mapping::Vector{Int} = options.keep_single_track ? options.track_mapping : copy(options.track_mapping)
     if isempty(mapping)
         append!(mapping, vmap)
     else
@@ -601,16 +624,16 @@ function permute_mapping(options::Options, vmap)
             x != 0 && (mapping[i] = vmap[x])
         end
     end
-    return Options(options; track_mapping=mapping)
+    return options.keep_single_track ? options : Options(options; track_mapping=mapping)
 end
 
-function rev_permute_mapping(options::Options, rev_vmap, len=length(rev_vmap))
+function rev_permute_mapping!(options::Options, rev_vmap, len=length(rev_vmap))
     options.track_mapping isa Vector{Int} || return options
     vmap = zeros(Int, len)
     for (i, x) in enumerate(rev_vmap)
         vmap[x] = i
     end
-    return permute_mapping(options, vmap)
+    return permute_mapping!(options, vmap)
 end
 
 function (Base.:(==))(opt1::Options, opt2::Options)

@@ -506,13 +506,13 @@ function trimmed_crystal(c::Crystal{Nothing})
     types = c.types[vmap]
     pge = PeriodicGraphEmbedding(graph, c.pge.pos[vmap], c.pge.cell)
     opts = isempty(c.options._pos) ? c.options : Options(c.options; _pos=pge.pos)
-    return Crystal{Nothing}(pge, types, rev_permute_mapping(opts, vmap, length(c.types)))
+    return Crystal{Nothing}(pge, types, rev_permute_mapping!(opts, vmap, length(c.types)))
 end
 
 
 function Base.getindex(c::Crystal{T}, vmap::AbstractVector{<:Integer}) where T
     types = c.types[vmap]
-    opts = rev_permute_mapping(c.options, vmap, length(c.types))
+    opts = rev_permute_mapping!(c.options, vmap, length(c.types))
     if T === Nothing
         return Crystal{Nothing}(c.pge[vmap], types, opts)
     else
@@ -647,7 +647,7 @@ function CrystalNet{D,T}(cell::Cell, types::AbstractVector{Symbol}, graph::Perio
     pge, s = SortedPeriodicGraphEmbedding{T}(copy(graph), placement, cell)
     types = Symbol[types[s[i]] for i in 1:n]
     # @toggleassert all(pos[i] == mean(pos[x.v] .+ x.ofs for x in neighbors(graph, i)) for i in 1:length(pos))
-    return CrystalNet{D,T}(pge, types, rev_permute_mapping(options, s))
+    return CrystalNet{D,T}(pge, types, rev_permute_mapping!(options, s))
 end
 
 function CrystalNet{D,T}(cell::Cell, opts::Options) where {D,T<:Real}
@@ -667,7 +667,7 @@ function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
                        graph::PeriodicGraph{D}, options::Options) where D
     placement = equilibrium(graph) # from PeriodicGraphEquilibriumPlacement.jl
     pge, s = SortedPeriodicGraphEmbedding(copy(graph), placement, cell)
-    return CrystalNet{D}(pge, types[s], rev_permute_mapping(options, s))
+    return CrystalNet{D}(pge, types[s], rev_permute_mapping!(options, s))
 end
 
 function CrystalNet{D}(graph::PeriodicGraph{D}, options::Options) where D
@@ -736,7 +736,8 @@ end
 function _collect_net!(ret::Vector{<:CrystalNet{D}}, encountered, idx, c, clustering) where D
     vmap, graph = trim_topology(c.pge.g)
     types = c.types[vmap]
-    opts = rev_permute_mapping(c.options, vmap, length(c.types))
+    idx > 1 && c.options.track_mapping isa Vector{Int} && c.options.keep_single_track && throw(ArgumentError("Cannot keep a single mapping track for multiple sub-nets. Please use keep_single_track=true only on single components with a single clustering."))
+    opts = rev_permute_mapping!(c.options, vmap, length(c.types))
     remove_metal_cluster_bonds!(graph, types, opts)
     remove_homoatomic_bonds!(graph, types, c.options.ignore_homoatomic_bonds, false)
     j = get!(encountered, c.pge.g, idx)
@@ -946,12 +947,15 @@ function UnderlyingNets(g::SmallPseudoGraph, options::Options)
         @error lazy"Detected $_n0 substructure$_s of dimension 0 in the input graph. $_it will be ignored for topology computation."
     end
     cell = Cell()
+    num = 0
     @repeatgroups begin
         for (vmap, nfold) in get(dimensions, D, Vector{Int}[])
             nets = PeriodicGraph{D}(graph[vmap])
             n = nv(nets)
             types = fill(Symbol(""), n)
-            opts = rev_permute_mapping(options, vmap, n)
+            num += 1
+            num > 1 && options.track_mapping isa Vector{Int} && options.keep_single_track && throw(ArgumentError("Cannot keep a single mapping track for multiple sub-nets. Please use keep_single_track=true only on single components with a single clustering."))
+            opts = rev_permute_mapping!(options, vmap, n)
             push!(groups, (CrystalNet{D}[CrystalNet{D}(cell, types, nets, opts)], nfold, vmap))
         end
     end

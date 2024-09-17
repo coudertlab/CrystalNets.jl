@@ -289,7 +289,7 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     end
 
     graph = PeriodicGraph{D}(edges)
-    opts = permute_mapping(c.options, vmap)
+    opts = permute_mapping!(c.options, vmap)
     return CrystalNet{D,Rational{T}}(cell, c.types[I_kept], sortedcol, graph, opts), newcollisions
 end
 
@@ -419,7 +419,7 @@ function reduce_with_matrix(c::Crystal{Nothing}, _mat)
     end
 
     graph = PeriodicGraph{D}(edges)
-    opts = permute_mapping(c.options, vmap)
+    opts = permute_mapping!(c.options, vmap)
     return Crystal{Nothing}(PeriodicGraphEmbedding{D,Float64}(graph, sortedcol, cell), c.types[I_kept], opts)
 end
 
