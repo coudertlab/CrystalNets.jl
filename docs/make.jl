@@ -29,6 +29,7 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Visualization" => "visualization.md",
+        "Mapping of vertices" => "mapping.md",
         "Python" => "python.md",
         "FAQ" => "faq.md",
         "Library" => [
@@ -36,6 +37,7 @@ makedocs(
             "Internals" => "lib/internals.md",
         ]
     ],
+    checkdocs=:none,
 )
 
 # Documenter can also automatically deploy documentation to gh-pages.

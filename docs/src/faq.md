@@ -11,6 +11,7 @@ If you want to use the package in a programmatic way without learning Julia, it 
 ## How can I check that the detected topology corresponds to my input?
 
 This is the focus of the [Visualization](@ref) tutorial.
+You may also want to check the [Vertex mapping](@ref mapping) tutorial.
 
 ## How can I silence warnings or remove exports?
 
@@ -99,7 +100,7 @@ Most often, the difference will come from either:
 The built-in way to do this consists in using the [`determine_topology_dataset`](@ref) function.
 This function expects the path of a directory containing CIF files within (possibly in subdirectories).
 
-## How can I directly access the genome of my structure instead of its name?
+## [How can I directly access the genome of my structure instead of its name?](@id genomefromname)
 
 The result `x` of [`determine_topology`](@ref) is an [`InterpenetratedTopologyResult`](@ref). Its `length` gives the number of interpenetrated substructures. Each of its values, for instance `x[1]`, is a tuple `(topo, n)` meaning that the substructure is an `n`-fold catenated net of topology `topo`. `topo` itself is a [`TopologyResult`](@ref), which stores the result of a topology computation for possibly several clusterings. The [`TopologicalGenome`](@ref) associated to a given clustering can be extracted by indexing the [`TopologyResult`](@ref), for instance `t = topo[Clustering.SingleNodes]` (or simply `t = topo[:SingleNodes]`).
 
@@ -156,3 +157,8 @@ The string representation of the genome is simply `string(genome)`:
 julia> string(genome)
 "3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 4 0 0 1 1 5 0 0 0 1 6 0 0 0 2 4 0 0 1 2 6 -1 0 0 3 4 0 0 1 3 5 0 -1 0 4 5 0 0 0 4 6 0 0 0"
 ```
+
+## Can I identify which input atom maps to which vertex of the returned genome?
+
+Yes, that is the purpose of the `track_mapping` option, detailed in the
+[Vertex mapping](@ref mapping) tutorial.
