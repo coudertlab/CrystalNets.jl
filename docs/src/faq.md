@@ -152,7 +152,7 @@ In case of error during topology identification, the returned `genome` is a `Per
 
 The string representation of the genome is simply `string(genome)`:
 
-``` im19faq
+```jldoctest im19faq
 julia> string(genome)
 "3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 4 0 0 1 1 5 0 0 0 1 6 0 0 0 2 4 0 0 1 2 6 -1 0 0 3 4 0 0 1 3 5 0 -1 0 4 5 0 0 0 4 6 0 0 0"
 ```

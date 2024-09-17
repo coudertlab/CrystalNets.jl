@@ -97,6 +97,12 @@ AllNodes: rna
 SingleNodes: bpq
 ```
 
+```@setup
+rm("/tmp/input_IM-19.vtf");
+rm("/tmp/subnet_AllNodes_IM-19_1.vtf");
+rm("/tmp/subnet_SingleNodes_IM-19_1.vtf");
+```
+
 ```@meta
 DocTestSetup = nothing
 DocTestSetup = begin
