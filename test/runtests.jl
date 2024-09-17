@@ -48,7 +48,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     mofdataset = determine_topology_dataset(joinpath(cifs, "MOFs"), save=false, showprogress=false; kwargs...)
 
     @testset "Dataset analysis" begin
-        @test length(mofdataset) == 14
+        @test length(mofdataset) == 15
 
         hkust1 = extract1(mofdataset["HKUST-1.cif"])
         @test hkust1[SingleNodes] == hkust1[AllNodes] == hkust1[Standard]
@@ -106,6 +106,13 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
 
         zif67 = extract1(mofdataset["ZIF-67.cif"])
         @test string(zif67) == "AllNodes, SingleNodes, Standard, PEM: sod, SOD\nPE: sod-e"
+
+        webzek = mofdataset["WEBZEK.cif"]
+        @test length(webzek) == 2
+        webzekA, webzekB = webzek
+        @test webzekA[2] == webzekB[2] == 1
+        @test webzekA[1][:AllNodes] == webzekA[1][Clustering.SingleNodes] == parse(TopologicalGenome, "bcu")
+        @test string(webzekB[1]) == "AllNodes, SingleNodes, Standard, PEM: dia\nPE: dia-a"
     end
 
     CrystalNets.toggle_warning(false)
