@@ -908,15 +908,15 @@ function CrystalNet(x::UnderlyingNets)
                 CrystalNet{0}(Cell(), Options(; error="Empty UnderlyingNets cannot be converted to a CrystalNet."))
             end
             if length(x.D1) == 1
-                return x.D1[1][2][1]
+                return first(first(first(x.D1)))
             end
         end
         if length(x.D2) == 1 && isempty(x.D1)
-            return x.D2[1][2][1]
+            return first(first(first(x.D2)))
         end
     end
     if length(x.D3) == 1 && isempty(x.D2) && isempty(x.D1)
-        return x.D3[1][2][1]
+        return first(first(first(x.D3)))
     end
     CrystalNet{0}(Cell(), Options(; error="UnderlyingNets contain multiple nets, cannot be converted to a single CrystalNet."))
 end
