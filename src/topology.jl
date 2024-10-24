@@ -90,6 +90,26 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{D,T}}}) where {D,T}
     return basis, newedges
 end
 
+# FIXME: forcing nodes to be consecutive in this fashion influences the end result, this is wrong
+function handle_unstable_force_consecutive(force_consecutive, v, vmap, rev_vmap, newpos, coordinate, offsets, h)
+    consecutive = get(force_consecutive, v, 0)
+    if consecutive < 0
+        newv = -consecutive
+        vmap[h-1] = newv
+        rev_vmap[newv] = h-1
+        consecutive = force_consecutive[newv] # implicitly assert that force_consecutive has an entry for newv
+    end
+    if consecutive > 0
+        for i in 1:(consecutive-1)
+            vmap[h] = v+i
+            rev_vmap[v+i] = h
+            newpos[h] = coordinate
+            offsets[h] = offsets[h-1]
+            h += 1
+        end
+    end
+    h
+end
 
 """
     candidate_key(net::CrystalNet, u, basis, minimal_edgs)
@@ -108,7 +128,7 @@ vertices and their ordered image in the candidate, as well as the key.
 
 See also: [`find_candidates`](@ref)
 """
-function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
+function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs, force_consecutive=nothing) where {D,T}
     n = nv(net.pge.g)
     h = 2 # next node to assign
     origin = net.pge.pos[u]
@@ -120,6 +140,9 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
     vmap[1] = u
     rev_vmap = zeros(Int, n) # inverse of vmap
     rev_vmap[u] = 1
+    if force_consecutive isa Dict{Int,Int}
+        h = handle_unstable_force_consecutive(force_consecutive, u, vmap, rev_vmap, newpos, zero(SVector{D,T}), offsets, h)
+    end
     flag_bestedgs = false # marks whether the current list of edges is lexicographically
     # below the best known one. If not by the end of the algorithm, return false
     edgs = Tuple{Int,Int,SVector{D,T}}[]
@@ -152,6 +175,9 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs) where {D,T}
                 offsets[h] = SVector{D,Int32}(bigbasis * coordinate .+ origin .- net.pge.pos[v])
                 push!(edgs, (t, h, zero(SVector{D,T})))
                 h += 1
+                if force_consecutive isa Dict{Int,Int}
+                    h = handle_unstable_force_consecutive(force_consecutive, v, vmap, rev_vmap, newpos, coordinate, offsets, h)
+                end
             else
                 realofs = coordinate .- newpos[idx]
                 # offset between this representative of the node and that which was first encountered
@@ -245,6 +271,15 @@ end
 struct CheckSymmetryWithCollisions
     collisions::CollisionList
 end
+function CheckSymmetryWithCollisions(x, eachnodeunique::Bool)
+    x isa CollisionList && return CheckSymmetryWithCollisions(x)
+    clist = if eachnodeunique
+        [CollisionNode(i) for i in 1:length(last(x))]
+    else
+        [CollisionNode(length(r)) for r in last(x)]
+    end
+    CheckSymmetryWithCollisions(CollisionList(clist))
+end
 function (cswc::CheckSymmetryWithCollisions)(pge::PeriodicGraphEmbedding{D,T}, t::SVector{D,T}, r, vtypes) where {D,T}
     collisions = cswc.collisions
     vmap = check_valid_symmetry(pge, t, r, vtypes, isempty(collisions))
@@ -273,10 +308,10 @@ Also return a `category_map` linking each vertex to its category number, as defi
 
 See also: [`candidate_key`](@ref)
 """
-function find_candidates(net::CrystalNet{D,T}, collisions::CollisionList) where {D,T}
+function find_candidates(net::CrystalNet{D,T}, collisions) where {D,T}
     L = D*D
     if D == 3
-        check_symmetry = CheckSymmetryWithCollisions(collisions)
+        check_symmetry = CheckSymmetryWithCollisions(collisions, true)
         symmetries = find_symmetries(net.pge, net.types, check_symmetry)
         categories, unique_reprs = partition_by_coordination_sequence(net.pge.g, symmetries)
     else
@@ -644,20 +679,23 @@ end
 
 Return a unique topological key for the net, which is a topological invariant of the net
 (i.e. it does not depend on its initial representation).
+
+!!! warning
+    Beware that no cell minimization will be attempted. Thus, if the net is not in a
+    minimal unit cell, the result will be meaningless.
+
+For most non-internal purposes, [`topological_genome`](@ref) should be called instead.
 """
 function topological_key(net::CrystalNet{D}) where D
     isempty(net.pge.pos) && return PeriodicGraph{D}()
     newnet, collisions = collision_nodes(net)
-    if collisions isa Nothing
-        net.pge.g.width[] = -2 # internal error code
-        return net.pge.g
-    end
-    return topological_key(newnet, collisions::CollisionList)
+    topological_key(newnet, collisions)
 end
 
-function topological_key(net::CrystalNet{D,T}, collisions::CollisionList) where {D,T}
+function topological_key(net::CrystalNet{D,T}, collisions) where {D,T}
     candidates, category_map = find_candidates(net, collisions)
     v, minimal_basis = popfirst!(candidates)
+    collisions isa CollisionList || (best_candidates = [(v, minimal_basis)])
     n = length(net.pge)
     _edgs = [(n + 1, 0, zero(SVector{D,T}))]
     _minimal_vmap, minimal_edgs = candidate_key(net, v, minimal_basis, _edgs)
@@ -668,11 +706,17 @@ function topological_key(net::CrystalNet{D,T}, collisions::CollisionList) where 
         @toggleassert edgs < minimal_edgs
         if isempty(edgs)
             push!(minimal_vmaps, newvmap)
+            collisions isa CollisionList || push!(best_candidates, (v, basis))
         elseif edgs < minimal_edgs
             minimal_edgs = edgs
             minimal_vmaps = [newvmap]
             minimal_basis = basis
+            collisions isa CollisionList || (best_candidates = [(v, basis)])
         end
+    end
+
+    if !(collisions isa CollisionList)
+        return topological_key_unstable(collisions[1], collisions[2], best_candidates)
     end
 
     # rev_vmap = Vector{Int}(undef, n)

@@ -19,14 +19,16 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.pge, fill(Symbol(""), length(net.types)), net.options)
     end
-    shrunk_net, _collisions = collision_nodes(net)
-    _collisions isa Nothing && return TopologicalGenome(net.pge.g, nothing, true)
-    collisions::CollisionList = _collisions
+    shrunk_net, collisions = collision_nodes(net)
 
     if !net.options.skip_minimize
         flag = true
         try
-            shrunk_net, _collisions = minimize(shrunk_net, collisions)
+            shrunk_net, newcollisions = minimize(shrunk_net, collisions)
+            if !(collisions isa CollisionList) && newcollisions isa CollisionList
+                return TopologicalGenome(net.pge.g, nothing, true)
+            end
+            collisions = newcollisions
             flag = false
         catch e
             isinterrupt(e) && rethrow()
@@ -39,8 +41,6 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
             newnet = CrystalNet{D,widen(T)}(net; ignore_types=false)
             return topological_genome(newnet)
         end
-        _collisions isa Nothing && return TopologicalGenome(PeriodicGraph{D}(), nothing, true)
-        collisions = _collisions
     end
 
     export_net = isempty(net.options.export_net) ? isempty(net.options._pos) ?
@@ -52,7 +52,7 @@ end
 
 topological_genome(net::CrystalNet{0}) = TopologicalGenome(net.options.error)
 
-function topological_genome(net::CrystalNet{D,T}, collisions::CollisionList)::TopologicalGenome where {D,T}
+function topological_genome(net::CrystalNet{D,T}, collisions)::TopologicalGenome where {D,T}
     try
         g::PeriodicGraph{D} = topological_key(net, collisions)
         unstable = g.width[] == -2

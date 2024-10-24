@@ -21,6 +21,7 @@ end
 (Base.:(==))(c1::CollisionNode, c2::CollisionNode) = c1.num == c2.num && c1.g == c2.g && c1.neighs == c2.neighs
 Base.hash(c::CollisionNode, h::UInt) = hash(c.g, hash(c.num, hash(c.neighs, h)))
 Base.length(c::CollisionNode) = c.num
+CollisionNode(n) = CollisionNode(PeriodicGraph{0}(), n, Int[]) # fake collision node
 
 """
     unsorted_node(graph::PeriodicGraph, node::UnitRange{Int})
@@ -85,9 +86,9 @@ function CollisionList(collisions::CollisionList, vmap::Vector{Int}, kept_collis
 end
 
 """
-    shrink_collisions(net::CrystalNet, collisions)
+    shrink_collisions(net::CrystalNet, collision_ranges)
 
-Remove all colliding vertices and replace them by one new vertex per `CollisionNode`, whose
+Remove all colliding vertices and replace them by one new vertex per collision range, whose
 neighbours are that of the vertices within.
 """
 function shrink_collisions(net::CrystalNet{D,T}, collision_ranges::Vector{UnitRange{Int}}) where {D,T}
@@ -104,7 +105,8 @@ function shrink_collisions(net::CrystalNet{D,T}, collision_ranges::Vector{UnitRa
     for e in edges(net.pge.g)
         src = collision_vmap[e.src]
         dst = collision_vmap[e.dst.v]
-        if src < first_colliding || dst < first_colliding
+        # if src < first_colliding || dst < first_colliding
+        if src != dst || !iszero(e.dst.ofs) # TODO: check that this is correct
             push!(edgs, PeriodicEdge{D}(src, dst, e.dst.ofs))
         end
     end
@@ -289,6 +291,7 @@ those vertices will be ordered first (compared to other vertices in the same bra
 If `rev_vmap === nothing`, assume `∀i, rev_vmap[i] == i`.
 """
 function CollisionNode(c::CollisionNode, rev_vmap)
+    nv(c.g) == 0 && return c
     sorted_neighbors = rev_vmap isa Vector{Int} ? rev_vmap[c.neighs] : c.neighs
     I = sortperm(sorted_neighbors)
 
@@ -302,7 +305,7 @@ function CollisionNode(c::CollisionNode, rev_vmap)
     newgraph = c.g[newmap]
     n = nv(newgraph)
     @toggleassert n == length(sorted_neighbors) + l
-    neworder, _ = order_collision(newgraph, 1:l)
+    neworder = first(order_collision(newgraph, 1:l))
     @toggleassert !isempty(neworder)
     perm = collect(1:nv(newgraph))
     perm[1:l] = neworder
@@ -378,14 +381,21 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
 
     # Check that conditions A, B and C are respected
     collision_vertices_set = BitSet(collision_vertices)
+    unstable = false
     for site in collision_sites
-        length(site) > 4 && return net, nothing # condition C
+        if length(site) > 4
+            unstable = true # condition C
+        end
         known_neighbors = Dict{Int,SVector{D,Int}}()
         for u in site
             for x in neighbors(net.pge.g, u)
-                get!(known_neighbors, x.v, x.ofs) == x.ofs || return net, nothing # condition B
+                if get!(known_neighbors, x.v, x.ofs) != x.ofs
+                    unstable = true # condition B
+                end
                 x.v ∈ site && continue
-                x.v ∈ collision_vertices_set && return net, nothing # condition A
+                if !unstable && x.v ∈ collision_vertices_set
+                    unstable = true # condition A
+                end
             end
         end
     end
@@ -430,7 +440,7 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     opts = rev_permute_mapping!(net.options, vmap, length(net.types))
     newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, opts)
     # newnodes = [CollisionNode(newnet.pge.g, node) for node in collision_ranges]
-    newnodes = CollisionList(newnet.pge.g, collision_ranges)
+    newnodes = unstable ? (newnet, collision_ranges) : CollisionList(newnet.pge.g, collision_ranges)
     return shrink_collisions(newnet, collision_ranges), newnodes
 end
 
@@ -526,4 +536,152 @@ function expand_collisions(collisions::CollisionList, graph::PeriodicGraph{D}, v
     # of their collision node in graph, each colliding subgraph sorted with order_collision.
 
     return newgraph, perm
+end
+
+# swaps vertices a and a+1 in the list of edges
+function vertex_swap!(edgs::Vector{Tuple{Int,Int,X}}, a) where X
+    i = 1
+    m = length(edgs)
+    while i ≤ m
+        s, d, ofs = edgs[i]
+        if s == a
+            p = i
+            sp = s; dp = d; ofsp = ofs
+            while true
+                edgs[p] = (a+1, dp - (dp==(a+1)) + (dp==a), ofsp)
+                p += 1
+                p > m && break
+                sp, dp, ofsp = edgs[p]
+                sp != a && break
+            end
+            q = p
+            while sp == a+1
+                edgs[p] = (a, dp - (dp==(a+1)) + (dp==a), ofsp)
+                p += 1
+                p > m && break
+                sp, dp, ofsp = edgs[p]
+            end
+            if p != q
+                reverse!(edgs, i, q-1)
+                reverse!(edgs, q, p-1)
+                reverse!(edgs, i, p-1)
+            end
+            i = p
+        elseif s == a+1
+            edgs[i] = (a, d - (d==(a+1)) + (d==a), ofs)
+            i += 1
+        elseif d == a
+            k = i
+            sk = s; dk = d; ofsk = ofs
+            while true
+                edgs[k] = (s, a+1, ofsk)
+                k += 1
+                k > m && break
+                sk, dk, ofsk = edgs[k]
+                (sk != s || dk != a) && break
+            end
+            j = k
+            while sk == s && dk == a+1
+                edgs[k] = (s, a, ofsk)
+                k += 1
+                k > m && break
+                sk, dk, ofsk = edgs[k]
+            end
+            if j != k
+                reverse!(edgs, i, j-1)
+                reverse!(edgs, j, k-1)
+                reverse!(edgs, i, k-1)
+            end
+            i = k
+        elseif d == a+1
+            edgs[i] = (s, a, ofs)
+            i += 1
+        else
+            i += 1
+        end
+    end
+    nothing
+end
+
+function topological_key_unstable(net::CrystalNet{D,T}, collision_ranges, candidates) where {D,T}
+    @assert issorted(first.(collision_ranges))
+    n = length(net.pge)
+    @assert n == last(last(collision_ranges))
+    first_collision = first(first(collision_ranges))
+    @assert sum(length.(collision_ranges)) == n - first_collision + 1
+    collision_vmap = collect(1:(first_collision-1))
+    permutations_d = [[i] for i in 1:(first_collision-1)]
+    for cr in collision_ranges
+        push!(collision_vmap, first(cr))
+        append!(permutations_d, collect(cr) for _ in 1:length(cr))
+    end
+
+    dummy_edges = [(n + 1, 0, zero(SVector{D,T}))]
+    minimal_edgs = copy(dummy_edges)
+    vmap = collect(1:length(net.pge))
+    # TODO: add constraints on equivalent vertices
+
+    force_consecutive = Dict(first(rnge) => length(rnge) for rnge in collision_ranges)
+    for rnge in collision_ranges
+        for x in Iterators.drop(rnge, 1)
+            force_consecutive[x] = -first(rnge)
+        end
+    end
+
+    for (shrunk_v, basis) in candidates
+        v = collision_vmap[shrunk_v]
+        newvmap, edgs = candidate_key(net, v, basis, dummy_edges, force_consecutive)
+        # @show newvmap
+        @toggleassert !isempty(newvmap)
+
+        sort!(edgs)
+        if edgs < minimal_edgs
+            minimal_edgs = copy(edgs)
+            vmap = copy(newvmap)
+            # minimal_basis = basis
+        end
+
+        new_positions = [(j = findfirst(==(first(range)), newvmap); j:(j+length(range)-1)) for range in collision_ranges]
+        @toggleassert [newvmap[x] for x in new_positions] == collision_ranges
+        swaps = ContiguousConstrainedPlainChangesIterator(new_positions)
+
+        # display(edgs)
+        for swap in swaps
+            # @show swap
+            vertex_swap!(edgs, swap)
+            sort!(edgs)
+            # display(edgs)
+            newvmap[swap], newvmap[swap+1] = newvmap[swap+1], newvmap[swap]
+            if edgs < minimal_edgs
+                minimal_edgs = copy(edgs)
+                vmap = copy(newvmap)
+                # minimal_basis = basis
+            end
+        end
+    end
+
+    # rev_vmap = Vector{Int}(undef, n)
+    # for (i, j) in enumerate(minimal_vmap)
+    #     rev_vmap[j] = i
+    # end
+
+    newbasis, newedges = findbasis(minimal_edgs)
+    graph = PeriodicGraph{D}(n, newedges)
+    # return graph, collisions, minimal_vmaps
+
+    # vmap = first(minimal_vmaps)
+    @toggleassert quotient_graph(graph) == quotient_graph(net.pge.g[vmap])
+
+    # tmpnet = CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(graph, net.pge.pos[minimal_vmap], net.pge.cell), net.types[minimal_vmap], net.options)
+    # export_vtf("/tmp/tmpnet.vtf", tmpnet, 3)
+
+    if !isnothing(net.options.track_mapping)
+        map = rev_permute_mapping!(net.options, vmap).track_mapping
+        if !net.options.keep_single_track
+            _clust = first(net.options.clusterings)
+            println("Mapping for ", length(net.options.clusterings) == 1 ? _clust : net.options.clusterings, map)
+        end
+    end
+
+    return graph
 end

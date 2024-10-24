@@ -544,3 +544,122 @@ function isoverfloworinexact(@nospecialize(e))
     end
     return false
 end
+
+
+# PlainChangesIterator for iterating over relevant permutation of vertices in unstable nets
+
+@static if VERSION < v"1.11-"
+    in!(x, s) = in(x, s) ? true : (push!(s, x); false)
+end
+
+"""
+    ConstrainedPlainChangesIterator
+
+Iterator over indices `i` of "plain changes", i.e. such that, starting from a vector of
+`n` distinct elements and permutating successively each pair `(i, i+1)` with `i` given by
+iterating over `ConstrainedPlainChangesIterator(n)` makes the vector undergo all the ``n!``
+permutations.
+
+The iterator can be made to respect ordering constraints on the elements: if
+`constraint_pairs` is a list of pairs `(n,m)` with `n<m` which is given as a second
+argument to the `ConstrainedPlainChangesIterator` constructor, then the order of the
+`n`-th and `m`-th element of the vector will be preserved for all such `(n,m)`
+
+The constraints can also be given as a boolean matrix `b` such that `b[n,m]` with `n<m` is
+`true` when the order of the `n`-th and `m`-th element of the vector must be preserved.
+
+FIXME: the constraints do not work and cannot be made to work as is. Either use a
+spanning tree over the valid permutations, or drop the constraints altogether.
+Currently, only the unconstrained part gives correct results.
+
+See also: Knuth's P" algorithm for the method of plain changes, taken from
+https://mathoverflow.net/a/279874
+"""
+struct ConstrainedPlainChangesIterator
+    n::Int
+    constraints::Matrix{Int}
+    num_constraints::Int
+end
+ConstrainedPlainChangesIterator(n::Integer) = ConstrainedPlainChangesIterator(n, zeros(0, 0), 0)
+function ConstrainedPlainChangesIterator(b::AbstractMatrix{Bool})
+    n = size(b, 1)
+    constraints_pairs = [(i,j) for i in 1:n, j in (i+1):n if b[i,j]]
+    ConstrainedPlainChangesIterator(n, constraints_pairs)
+end
+function ConstrainedPlainChangesIterator(n::Integer, constraints_pairs::AbstractVector)
+    constraints = zeros(Int, n, n)
+    counter = 0
+    for (i, j) in constraints_pairs
+        constraints[minmax(i,j)...] = (counter += 1)
+    end
+    ConstrainedPlainChangesIterator(n, constraints, counter)
+end
+
+Base.IteratorSize(::Type{ConstrainedPlainChangesIterator}) = Base.SizeUnknown()
+Base.eltype(::Type{ConstrainedPlainChangesIterator}) = Int
+
+_init_state(cpci) = (zeros(Int, cpci.n), ones(Int8, cpci.n), collect(1:cpci.n), falses(cpci.num_constraints), 0)
+function Base.iterate(cpci::ConstrainedPlainChangesIterator, state=nothing)
+    n = cpci.n
+    constraints = cpci.constraints
+    c, d, perm, invalid, constrained = state===nothing ? _init_state(cpci) : state
+    j = n
+    s = 0
+    @label P4
+    cj = c[j]
+    q = cj + d[j]
+    q < 0 && @goto P7
+    q == j && @goto P6
+    c[j] = q
+    a = j - cj + s; b = j - q + s
+    iszero(cpci.num_constraints) && return min(a, b), (c, d, perm, invalid, constrained)
+    pa, pb = minmax(perm[a], perm[b])
+    constraint = constraints[pa,pb]
+    if constraint != 0
+        isconstrained = invalid[constraint]
+        invalid[constraint] = !isconstrained
+        constrained += ifelse(isconstrained, -1, 1)
+    end
+    perm[a], perm[b] = perm[b], perm[a]
+    iszero(constrained) && return min(a, b), (c, d, perm, invalid, constrained)
+    @goto P4
+    @label P6
+    j == 1 && return nothing
+    s += 1
+    @label P7
+    d[j] = -d[j]
+    j -= 1
+    @goto P4
+end
+
+struct ContiguousConstrainedPlainChangesIterator
+    ranges::Vector{UnitRange{Int}}
+    cpci::Vector{ConstrainedPlainChangesIterator}
+end
+function ContiguousConstrainedPlainChangesIterator(ranges::Vector{UnitRange{Int}})
+    cpci = [ConstrainedPlainChangesIterator(length(r)) for r in ranges]
+    ContiguousConstrainedPlainChangesIterator(ranges, cpci)
+end
+
+Base.IteratorSize(::Type{ContiguousConstrainedPlainChangesIterator}) = Base.SizeUnknown()
+Base.eltype(::Type{ContiguousConstrainedPlainChangesIterator}) = Int
+
+function Base.iterate(ccpci::ContiguousConstrainedPlainChangesIterator, _state=nothing)
+    T = Tuple{Vector{Int}, Vector{Int8}, Vector{Int}, BitVector, Int}
+    states = _state===nothing ? Union{Nothing,T}[_init_state(cpci) for cpci in ccpci.cpci] : _state
+    for (i, state) in enumerate(states)
+        state===nothing && continue
+        res = iterate(ccpci.cpci[i], states[i])
+        if res===nothing
+            states[i] = nothing
+            continue
+        end
+        a, newstate = res
+        for j in 1:(i-1)
+            states[j] = _init_state(ccpci.cpci[j])
+        end
+        states[i] = newstate
+        return first(ccpci.ranges[i]) + a - 1, states
+    end
+    return nothing
+end

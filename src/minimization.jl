@@ -43,7 +43,7 @@ See also: [`possible_translations`](@ref), `PeriodicGraphEmbeddings.check_valid_
 """
 function find_all_valid_translations(shrunk_net::CrystalNet{D,T}, collisions) where {D,T}
     ret = NTuple{D, Vector{Tuple{Int, Int, SVector{D,T}}}}(ntuple(_->[], Val(D)))
-    check_symmetry = CheckSymmetryWithCollisions(collisions)
+    check_symmetry = CheckSymmetryWithCollisions(collisions, false)
     for (nz, i_max_den, max_den, t) in possible_translations(shrunk_net)
         vmap = check_symmetry(shrunk_net.pge, t, nothing, shrunk_net.types)
         if vmap isa Vector{PeriodicVertex{D}}
@@ -284,7 +284,7 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     for newnode in newcollisions
         if !allunique(newnode.neighs)
             # contravenes rule B of collision_nodes(::CrystalNet))
-            return c, nothing
+            return c, UnitRange{Int}[]
         end
     end
 
@@ -295,21 +295,25 @@ end
 
 
 """
-    minimize(net::CrystalNet, [collisions::Vector{CollisionNode}])
+    minimize(net::CrystalNet, [collisions])
 
 Return a CrystalNet representing the same net as the input, but in a unit cell.
 If `collisions` is given, also return the corresponding collisions after minimization.
 
 The computed unit cell may depend on the representation of the input, i.e. it is not
 topologicallly invariant.
+
+If the input `collisions` is not a [`CollisionList`](@ref) but the returned one is, this
+signals that minimization failed because of unknown collisions.
 """
-function minimize(net::CrystalNet, collisions::CollisionList)
+function minimize(net::CrystalNet, collisions)
     translations = find_all_valid_translations(net, collisions)
     all(isempty.(translations)) && return net, collisions
+    collisions isa CollisionList || return net, CollisionList([])
     mat = minimal_volume_matrix(translations)
-    _net, collisions = reduce_with_matrix(net, mat, collisions)
-    collisions isa CollisionList && @toggleassert all(isempty.(find_all_valid_translations(_net, collisions)))
-    return _net, collisions
+    _net, newcollisions = reduce_with_matrix(net, mat, collisions)
+    newcollisions isa CollisionList && @toggleassert all(isempty.(find_all_valid_translations(_net, newcollisions)))
+    return _net, newcollisions
 end
 minimize(net::CrystalNet) = minimize(net, CollisionList(net.pge.g, UnitRange{Int}[]))[1]
 
