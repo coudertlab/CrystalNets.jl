@@ -432,7 +432,9 @@ end
 
     u1A = PeriodicGraph("1  1 1 1  1 2 0  1 3 0  2 3 0")
     u1B = PeriodicGraph("1  1 1 1  1 2 0  1 3 0  2 3 0  4 5 0  5 4 1  1 4 0  1 5 0")
-    u2 = PeriodicGraph("2 1 4 -1 0 1 4 0 0 1 5 0 -1 2 3 -1 0 2 3 0 0 2 6 0 -1 3 5 -1 1 3 5 0 1 4 6 -1 1 4 6 0 1")
+    u2A = PeriodicGraph("2 1 2 0 0 1 4 -1 0 1 4 0 -1 2 3 -1 -1 2 3 0 0 3 4 0 0")
+    u2B = PeriodicGraph("2 1 4 -1 0 1 4 0 0 1 5 0 -1 2 3 -1 0 2 3 0 0 2 6 0 -1 3 5 -1 1 3 5 0 1 4 6 -1 1 4 6 0 1")
+    u2C = PeriodicGraph("2 1 3 -1 0 1 4 -1 1 1 4 0 -1 2 3 -1 1 2 3 0 -1 2 4 -1 0")
 
     Test.get_testset().n_passed += length(unstabletry) - failures
     @test failures == 0

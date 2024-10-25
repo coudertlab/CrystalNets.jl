@@ -90,26 +90,6 @@ function findbasis(edges::Vector{Tuple{Int,Int,SVector{D,T}}}) where {D,T}
     return basis, newedges
 end
 
-# FIXME: forcing nodes to be consecutive in this fashion influences the end result, this is wrong
-function handle_unstable_force_consecutive(force_consecutive, v, vmap, rev_vmap, newpos, coordinate, offsets, h)
-    consecutive = get(force_consecutive, v, 0)
-    if consecutive < 0
-        newv = -consecutive
-        vmap[h-1] = newv
-        rev_vmap[newv] = h-1
-        consecutive = force_consecutive[newv] # implicitly assert that force_consecutive has an entry for newv
-    end
-    if consecutive > 0
-        for i in 1:(consecutive-1)
-            vmap[h] = v+i
-            rev_vmap[v+i] = h
-            newpos[h] = coordinate
-            offsets[h] = offsets[h-1]
-            h += 1
-        end
-    end
-    h
-end
 
 """
     candidate_key(net::CrystalNet, u, basis, minimal_edgs)
@@ -128,7 +108,7 @@ vertices and their ordered image in the candidate, as well as the key.
 
 See also: [`find_candidates`](@ref)
 """
-function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs, force_consecutive=nothing) where {D,T}
+function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs, ::Val{unstable_pass}=Val(false)) where {D,T,unstable_pass}
     n = nv(net.pge.g)
     h = 2 # next node to assign
     origin = net.pge.pos[u]
@@ -140,10 +120,7 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs, force_conse
     vmap[1] = u
     rev_vmap = zeros(Int, n) # inverse of vmap
     rev_vmap[u] = 1
-    if force_consecutive isa Dict{Int,Int}
-        h = handle_unstable_force_consecutive(force_consecutive, u, vmap, rev_vmap, newpos, zero(SVector{D,T}), offsets, h)
-    end
-    flag_bestedgs = false # marks whether the current list of edges is lexicographically
+    flag_bestedgs = unstable_pass # marks whether the current list of edges is lexicographically
     # below the best known one. If not by the end of the algorithm, return false
     edgs = Tuple{Int,Int,SVector{D,T}}[]
     bigbasis = T == Rational{BigInt} ? basis : widen(T).(basis)
@@ -175,9 +152,6 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs, force_conse
                 offsets[h] = SVector{D,Int32}(bigbasis * coordinate .+ origin .- net.pge.pos[v])
                 push!(edgs, (t, h, zero(SVector{D,T})))
                 h += 1
-                if force_consecutive isa Dict{Int,Int}
-                    h = handle_unstable_force_consecutive(force_consecutive, v, vmap, rev_vmap, newpos, coordinate, offsets, h)
-                end
             else
                 realofs = coordinate .- newpos[idx]
                 # offset between this representative of the node and that which was first encountered
@@ -196,7 +170,7 @@ function candidate_key(net::CrystalNet{D,T}, u, basis, minimal_edgs, force_conse
         @toggleassert minimal_edgs == edgs
         return (vmap, Tuple{Int,Int,SVector{D,T}}[])
     end
-    return vmap, edgs
+    return unstable_pass ? (newpos, offsets, vmap) : (vmap, edgs)
 end
 
 
@@ -716,7 +690,7 @@ function topological_key(net::CrystalNet{D,T}, collisions) where {D,T}
     end
 
     if !(collisions isa CollisionList)
-        return topological_key_unstable(collisions[1], collisions[2], best_candidates)
+        return topological_key_unstable(collisions[1], collisions[2], net, best_candidates)
     end
 
     # rev_vmap = Vector{Int}(undef, n)

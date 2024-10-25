@@ -603,16 +603,61 @@ function vertex_swap!(edgs::Vector{Tuple{Int,Int,X}}, a) where X
     nothing
 end
 
-function topological_key_unstable(net::CrystalNet{D,T}, collision_ranges, candidates) where {D,T}
+
+function candidate_key_unstable(net::CrystalNet{D,T}, shrunk_candidate, u, basis, collision_ranges) where {D,T}
+    n = nv(net.pge.g)
+    newpos_s, offsets_s, vmap_s = shrunk_candidate
+
+    newpos = Vector{SVector{D,T}}(undef, n) # positions of the kept representatives
+    offsets = Vector{SVector{D,Int32}}(undef, n) # offsets of the new representatives w.r.t. the original one, in the original basis
+    vmap = Vector{Int}(undef, n) # bijection from the old to the new node number
+    rev_vmap = Vector{Int}(undef, n)
+    i = 1
+    first_collision_m1 = first(first(collision_ranges)) - 1
+    for (j, v) in enumerate(vmap_s)
+        if v ≤ first_collision_m1
+            vmap[i] = v
+            rev_vmap[v] = i
+            newpos[i] = newpos_s[j]
+            offsets[i] = offsets_s[j]
+            i += 1
+        else
+            rnge = collision_ranges[v - first_collision_m1]
+            newim1 = i + length(rnge) - 1
+            vmap[i:newim1] .= rnge
+            newpos[i:newim1] .= (newpos_s[j],)
+            offsets[i:newim1] .= (offsets_s[j],)
+            rev_vmap[rnge] .= i:newim1
+            i = newim1 + 1
+        end
+    end
+
+    origin = net.pge.pos[u]
+    edgs = Tuple{Int,Int,SVector{D,T}}[]
+    bigbasis = T == Rational{BigInt} ? basis : widen(T).(basis)
+    mat = T == Rational{BigInt} ? inv(bigbasis) : T.(inv(bigbasis))
+    for t in 1:n # t is the node being processed
+        neighs = neighbors(net.pge.g, vmap[t])
+        ofst = offsets[t]
+        for x in neighs
+            coordinate = mat*(net.pge.pos[x.v] .+ x.ofs .- origin .+ ofst)
+            idx = rev_vmap[x.v]
+            realofs = coordinate .- newpos[idx]
+            push!(edgs, (t, idx, realofs))
+        end
+    end
+    @toggleassert allunique(edgs)
+    return vmap, edgs
+end
+
+function topological_key_unstable(net::CrystalNet{D,T}, collision_ranges, shrunk_net, candidates) where {D,T}
     @assert issorted(first.(collision_ranges))
     n = length(net.pge)
     @assert n == last(last(collision_ranges))
     first_collision = first(first(collision_ranges))
     @assert sum(length.(collision_ranges)) == n - first_collision + 1
-    collision_vmap = collect(1:(first_collision-1))
     permutations_d = [[i] for i in 1:(first_collision-1)]
     for cr in collision_ranges
-        push!(collision_vmap, first(cr))
         append!(permutations_d, collect(cr) for _ in 1:length(cr))
     end
 
@@ -628,9 +673,9 @@ function topological_key_unstable(net::CrystalNet{D,T}, collision_ranges, candid
         end
     end
 
-    for (shrunk_v, basis) in candidates
-        v = collision_vmap[shrunk_v]
-        newvmap, edgs = candidate_key(net, v, basis, dummy_edges, force_consecutive)
+    for (v, basis) in candidates
+        shrunk_candidate = candidate_key(shrunk_net, v, basis, dummy_edges, Val(true))
+        newvmap, edgs = candidate_key_unstable(net, shrunk_candidate, v, basis, collision_ranges)
         # @show newvmap
         @toggleassert !isempty(newvmap)
 
@@ -643,7 +688,7 @@ function topological_key_unstable(net::CrystalNet{D,T}, collision_ranges, candid
 
         new_positions = [(j = findfirst(==(first(range)), newvmap); j:(j+length(range)-1)) for range in collision_ranges]
         @toggleassert [newvmap[x] for x in new_positions] == collision_ranges
-        swaps = ContiguousConstrainedPlainChangesIterator(new_positions)
+        swaps = ContiguousPlainChangesIterator(new_positions)
 
         # display(edgs)
         for swap in swaps
