@@ -604,7 +604,7 @@ function vertex_swap!(edgs::Vector{Tuple{Int,Int,X}}, a) where X
 end
 
 
-function candidate_key_unstable(net::CrystalNet{D,T}, shrunk_candidate, u, basis, collision_ranges) where {D,T}
+function candidate_key_unstable(net::CrystalNet{D,T}, shrunk_candidate, u_s, basis, collision_ranges) where {D,T}
     n = nv(net.pge.g)
     newpos_s, offsets_s, vmap_s = shrunk_candidate
 
@@ -632,6 +632,7 @@ function candidate_key_unstable(net::CrystalNet{D,T}, shrunk_candidate, u, basis
         end
     end
 
+    u = u_s ≤ first_collision_m1 ? u_s : first(collision_ranges[u_s - first_collision_m1])
     origin = net.pge.pos[u]
     edgs = Tuple{Int,Int,SVector{D,T}}[]
     bigbasis = T == Rational{BigInt} ? basis : widen(T).(basis)
@@ -703,6 +704,7 @@ function topological_key_unstable(net::CrystalNet{D,T}, collision_ranges, shrunk
                 # minimal_basis = basis
             end
         end
+        yield()
     end
 
     # rev_vmap = Vector{Int}(undef, n)
@@ -715,7 +717,7 @@ function topological_key_unstable(net::CrystalNet{D,T}, collision_ranges, shrunk
     # return graph, collisions, minimal_vmaps
 
     # vmap = first(minimal_vmaps)
-    @toggleassert quotient_graph(graph) == quotient_graph(net.pge.g[vmap])
+    @toggleassert let mapped = net.pge.g[vmap]; degree(graph) == degree(mapped) && quotient_graph(graph) == quotient_graph(mapped) end
 
     # tmpnet = CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(graph, net.pge.pos[minimal_vmap], net.pge.cell), net.types[minimal_vmap], net.options)
     # export_vtf("/tmp/tmpnet.vtf", tmpnet, 3)
