@@ -25,7 +25,7 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
         flag = true
         try
             shrunk_net, newcollisions = minimize(shrunk_net, collisions)
-            if !(collisions isa CollisionList) && newcollisions isa CollisionList
+            if newcollisions isa CollisionList && (!(collisions isa CollisionList) || (isempty(newcollisions.list) && !isempty(collisions.list)))
                 return TopologicalGenome(net.pge.g, nothing, true)
             end
             collisions = newcollisions

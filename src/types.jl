@@ -464,9 +464,8 @@ function Crystal(pge, types, clusters, options)
     end
     return Crystal{Clusters}(pge, types, clusters, options)
 end
-function Crystal(c::Crystal; kwargs...)
-    return Crystal(c.pge, c.types, c.clusters, Options(c.options; kwargs...))
-end
+Crystal(c::Crystal, options) = Crystal(c.pge, c.types, c.clusters, options)
+Crystal(c::Crystal; kwargs...) = Crystal(c, Options(c.options; kwargs...))
 
 function ==(c1::Crystal{T}, c2::Crystal{T}) where T
     c1.pge == c2.pge && c1.types == c2.types && c1.clusters == c2.clusters && c1.options == c2.options
@@ -714,22 +713,53 @@ function PeriodicGraphs.make_supercell(net::CrystalNet{N,T}, t) where {N,T}
     return CrystalNet{N,T}(pge, newtypes, Options(net.options; _pos=SVector{3,Float64}[]))
 end
 
-function separate_components(c::Crystal{T}) where T
-    graph = PeriodicGraph3D(c.pge.g)
-    dimensions = PeriodicGraphs.dimensionality(graph)
-    @ifwarn if haskey(dimensions, 0)
-        _n0 = length(dimensions[0])
-        _s, _it = _n0 > 1 ? ("s", "They") : ("", "It")
-        @warn lazy"Detected $_n0 structure$_s of dimension 0 in $(c.options.name), possibly complex solvent residue$_s. $_it will be ignored for topology computation."
+function skew_crystal(c::Crystal{T}, pvmap, subpge, mat) where T
+    vmap = first.(pvmap)
+    types = c.types[vmap]
+    invmat = inv(Rational{Int}.(mat))
+    clusters = if T <: Clusters
+        newclusters = c.clusters[vmap]
+        @toggleassert length(newclusters.offsets) == length(pvmap)
+        for (i, (clustofs, (_, skewofs))) in enumerate(zip(newclusters.offsets, pvmap))
+            Δofs = clustofs .- skewofs
+            newclusters.offsets[i] = Int.(invmat * Δofs)
+        end
+        for sbu in newclusters.sbus
+            for (j, (v, _)) in enumerate(sbu)
+                sbu[j] = PeriodicVertex3D(v, newclusters.offsets[v])
+            end
+        end
+        newclusters
+    else
+        nothing
     end
-    ret = (Tuple{Crystal{T},Int,Vector{Int}}[], Tuple{Crystal{T},Int,Vector{Int}}[], Tuple{Crystal{T},Int,Vector{Int}}[])
-    for i in 1:3
-        reti = ret[i]
-        for (vmap, nfold) in get(dimensions, i, Vector{Int}[])
-            push!(reti, (c[vmap], nfold, vmap))
+    posofs = invmat * pvmap.ofs
+    newpge = PeriodicGraphEmbedding3D(subpge.g, [pos + posofs for pos in subpge.pos], subpge.cell)
+    Crystal(newpge, types, clusters, c.options)
+end
+
+# separate the different connex composants of the crystal
+function separate_components(c::Crystal{T}) where T
+    splits = split_catenation(c.pge)
+    numdim0 = 0
+    num = 0
+    ret = ntuple(_ -> Tuple{Vector{Crystal{T}},Vector{Int}}[], Val(3))
+    for (subpge, pvmaps, mat, dim) in splits
+        if dim == 0
+            numdim0 += 1
+        else
+            num += 1
+            num > 1 && c.options.track_mapping isa Vector{Int} && c.options.keep_single_track && throw(ArgumentError("Cannot keep a single mapping track for multiple sub-nets. Please use keep_single_track=true only on single components with a single clustering."))
+            newc = Crystal(c, rev_permute_mapping!(c.options, first.(first(pvmaps)), length(c.types)))
+            crystals = [skew_crystal(newc, pvmap, subpge, mat) for pvmap in pvmaps]
+            push!(ret[dim], (crystals, first.(first(pvmaps))))
         end
     end
-    return ret
+    @ifwarn if numdim0 > 0
+        _s, _it = numdim0 > 1 ? ("s", "They") : ("", "It")
+        @warn lazy"Detected $numdim0 structure$_s of dimension 0 in $(c.options.name), possibly complex solvent residue$_s. $_it will be ignored for topology computation."
+    end
+    ret
 end
 
 
@@ -841,13 +871,13 @@ end
 
 macro repeatgroups(ex)
     exs = [deepcopy(ex) for _ in 1:3]
-    for i in 1:3
+    for i in 3:-1:1
         _repeatgroups!(exs[i], i)
     end
     return quote
-        $(esc(exs[1]))
-        $(esc(exs[2]))
         $(esc(exs[3]))
+        $(esc(exs[2]))
+        $(esc(exs[1]))
     end
 end
 
@@ -860,13 +890,21 @@ function UnderlyingNets(c::Crystal)
         push!(groups.D3, (nets, 1, vmap))
         return groups
     end
+    i = 0
     @repeatgroups begin
-        for (i, (comp, nfold, vmap)) in enumerate(components[D])
-            component = Crystal(comp.pge, comp.types, comp.clusters,
-                                Options(comp.options; name=string(comp.options.name,'_',i)))
-            crystals = collapse_clusters(component)
-            nets = collect_nets(crystals, Val(D))
-            push!(groups, (nets, nfold, vmap))
+        for (comps, vmap) in components[D]
+            i += 1
+            has_export = !(isempty(c.options.export_trimmed) &
+                           isempty(c.options.export_subnets) &
+                           isempty(c.options.export_attributions) &
+                           isempty(c.options.export_clusters))
+            for (j, comp) in enumerate(has_export ? comps : (first(comps),))
+                nameext = has_export && length(comps) > 1 ? "_fold$j" : ""
+                component = Crystal(comp; name=string(comp.options.name, '_', i, nameext))
+                crystals = collapse_clusters(component)
+                nets = collect_nets(crystals, Val(D))
+                j == 1 && push!(groups, (nets, length(comps), vmap))
+            end
         end
     end
     return groups
@@ -918,28 +956,31 @@ end
 const SmallPseudoGraph = Union{PseudoGraph{1},PseudoGraph{2},PseudoGraph{3}}
 
 function UnderlyingNets(g::SmallPseudoGraph, options::Options)
-    groups = UnderlyingNets()
     graph = g isa PeriodicGraph ? g : PeriodicGraph(g)
-    dimensions = PeriodicGraphs.dimensionality(graph)
-    @iferror if haskey(dimensions, 0)
-        _n0 = length(dimensions[0])
-        _s, _it = _n0 > 1 ? ("s", "They") : ("", "It")
-        @error lazy"Detected $_n0 substructure$_s of dimension 0 in the input graph. $_it will be ignored for topology computation."
-    end
+    groups = UnderlyingNets()
+    splits = split_catenation(graph)
     cell = Cell()
     num = 0
-    @repeatgroups begin
-        for (vmap, nfold) in get(dimensions, D, Vector{Int}[])
-            nets = PeriodicGraph{D}(graph[vmap])
-            n = nv(nets)
+    numdim0 = 0
+    for (subg, pvmaps, _, D) in splits
+        if D == 0
+            numdim0 += 1
+        else
+            n = nv(subg)
             types = fill(Symbol(""), n)
             num += 1
             num > 1 && options.track_mapping isa Vector{Int} && options.keep_single_track && throw(ArgumentError("Cannot keep a single mapping track for multiple sub-nets. Please use keep_single_track=true only on single components with a single clustering."))
+            vmap = first.(first(pvmaps))
             opts = rev_permute_mapping!(options, vmap, n)
-            push!(groups, (CrystalNet{D}[CrystalNet{D}(cell, types, nets, opts)], nfold, vmap))
+            gD = D == 1 ? groups.D1 : D == 2 ? groups.D2 : groups.D3
+            push!(gD, (CrystalNet{D}[CrystalNet{D}(cell, types, subg, opts)], length(pvmaps), vmap))
         end
     end
-    return groups
+    @ifwarn if numdim0 > 0
+        _s, _it = numdim0 > 1 ? ("s", "They") : ("", "It")
+        @warn lazy"Detected $numdim0 structure$_s of dimension 0 in input graph, possibly complex solvent residue$_s. $_it will be ignored for topology computation."
+    end
+    groups
 end
 UnderlyingNets(g::AbstractString, opts::Options) = UnderlyingNets(PeriodicGraph(g), opts)
 UnderlyingNets(g::Union{SmallPseudoGraph,AbstractString}; kwargs...) = UnderlyingNets(g, Options(; kwargs...))

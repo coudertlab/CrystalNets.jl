@@ -284,7 +284,7 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
     for newnode in newcollisions
         if !allunique(newnode.neighs)
             # contravenes rule B of collision_nodes(::CrystalNet))
-            return c, UnitRange{Int}[]
+            return c, CollisionList(UnitRange{Int}[])
         end
     end
 

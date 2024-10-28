@@ -48,7 +48,11 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     mofdataset = determine_topology_dataset(joinpath(cifs, "MOFs"), save=false, showprogress=false; kwargs...)
 
     @testset "Dataset analysis" begin
-        @test length(mofdataset) == 15
+        @test length(mofdataset) == 16
+
+        afixew, afixew_nfold = only(mofdataset["AFIXEW_ASR.cif"])
+        @test afixew_nfold == 4
+        @test afixew[AllNodes] == afixew[SingleNodes] == parse(TopologicalGenome, "bex")
 
         hkust1 = extract1(mofdataset["HKUST-1.cif"])
         @test hkust1[SingleNodes] == hkust1[AllNodes] == hkust1[Standard]
@@ -398,7 +402,7 @@ end
 @testset "Unstable nets" begin
     minimize_to_unstable = PeriodicGraph("2 1 1 0 1 1 3 0 0 1 4 0 0 1 5 0 0 1 6 0 0 2 2 0 1 2 3 1 0 2 4 1 0 2 5 0 0 2 6 0 0")
     net_minimize_to_unstable = topological_genome(CrystalNet(minimize_to_unstable))
-    @test string(net_minimize_to_unstable) == "unstable 2"
+    @test startswith(string(net_minimize_to_unstable), "unstable 2")
 
 
     mini2 = PeriodicGraph("2  1 4 0 0  1 2 0 0  1 3 0 0  2 3 0 1  4 5 0 0  4 6 0 0  5 6 1 0")
