@@ -369,15 +369,20 @@ B) there is no edge between a collision site and two representatives of the same
 C) for each collision site, the site is made of at most 4 vertices
 
 In this case, return the `CollisionNodeList` with the corresponding `CollisionNode`s, the
-list being empty if the net is truly stable. Otherwise, return `nothing`.
+list being empty if the net is truly stable. Otherwise, return the list of ranges of
+colliding vertices.
 
 Also return an updated net where the vertices in a `CollisionNode` are collapsed into a new
 vertex, appearing after the non-colliding vertices.
+
+Finally, return a net equivalent to the initial one, with its vertices rotated so that
+colliding ones are contiguous, and after non-colliding ones. The "list of ranges" mentioned
+before refers to the vertices of that net.
 """
 function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     collision_sites, collision_vertices = collect_collisions(net)
 
-    isempty(collision_sites) && return net, CollisionList(net.pge.g, UnitRange{Int}[]) # no collision at all
+    isempty(collision_sites) && return CollisionList(net.pge.g, UnitRange{Int}[]), net, net # no collision at all
 
     # Check that conditions A, B and C are respected
     collision_vertices_set = BitSet(collision_vertices)
@@ -440,8 +445,8 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
     opts = rev_permute_mapping!(net.options, vmap, length(net.types))
     newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, opts)
     # newnodes = [CollisionNode(newnet.pge.g, node) for node in collision_ranges]
-    newnodes = unstable ? (newnet, collision_ranges) : CollisionList(newnet.pge.g, collision_ranges)
-    return shrink_collisions(newnet, collision_ranges), newnodes
+    newnodes = unstable ? collision_ranges : CollisionList(newnet.pge.g, collision_ranges)
+    return newnodes, shrink_collisions(newnet, collision_ranges), newnet
 end
 
 
@@ -538,28 +543,41 @@ function expand_collisions(collisions::CollisionList, graph::PeriodicGraph{D}, v
     return newgraph, perm
 end
 
+function _edge_split(x)
+    if x isa Tuple
+        x
+    else
+        s, (d, ofs) = x
+        s, d, ofs
+    end
+end
+
+function _edge_make(x, y, t::SVector{D,T}) where {D,T}
+    T <: Rational ? (x, y, t) : PeriodicEdge{D}(x, y, t)
+end
+
 # swaps vertices a and a+1 in the list of edges
-function vertex_swap!(edgs::Vector{Tuple{Int,Int,X}}, a) where X
+function vertex_swap!(edgs::Vector{T}, a) where T
     i = 1
     m = length(edgs)
     while i ≤ m
-        s, d, ofs = edgs[i]
+        s, d, ofs = _edge_split(edgs[i])
         if s == a
             p = i
             sp = s; dp = d; ofsp = ofs
             while true
-                edgs[p] = (a+1, dp - (dp==(a+1)) + (dp==a), ofsp)
+                edgs[p] = _edge_make(a+1, dp - (dp==(a+1)) + (dp==a), ofsp)
                 p += 1
                 p > m && break
-                sp, dp, ofsp = edgs[p]
+                sp, dp, ofsp = _edge_split(edgs[p])
                 sp != a && break
             end
             q = p
             while sp == a+1
-                edgs[p] = (a, dp - (dp==(a+1)) + (dp==a), ofsp)
+                edgs[p] = _edge_make(a, dp - (dp==(a+1)) + (dp==a), ofsp)
                 p += 1
                 p > m && break
-                sp, dp, ofsp = edgs[p]
+                sp, dp, ofsp = _edge_split(edgs[p])
             end
             if p != q
                 reverse!(edgs, i, q-1)
@@ -568,24 +586,24 @@ function vertex_swap!(edgs::Vector{Tuple{Int,Int,X}}, a) where X
             end
             i = p
         elseif s == a+1
-            edgs[i] = (a, d - (d==(a+1)) + (d==a), ofs)
+            edgs[i] = _edge_make(a, d - (d==(a+1)) + (d==a), ofs)
             i += 1
         elseif d == a
             k = i
             sk = s; dk = d; ofsk = ofs
             while true
-                edgs[k] = (s, a+1, ofsk)
+                edgs[k] = _edge_make(s, a+1, ofsk)
                 k += 1
                 k > m && break
-                sk, dk, ofsk = edgs[k]
+                sk, dk, ofsk = _edge_split(edgs[k])
                 (sk != s || dk != a) && break
             end
             j = k
             while sk == s && dk == a+1
-                edgs[k] = (s, a, ofsk)
+                edgs[k] = _edge_make(s, a, ofsk)
                 k += 1
                 k > m && break
-                sk, dk, ofsk = edgs[k]
+                sk, dk, ofsk = _edge_split(edgs[k])
             end
             if j != k
                 reverse!(edgs, i, j-1)
@@ -594,7 +612,7 @@ function vertex_swap!(edgs::Vector{Tuple{Int,Int,X}}, a) where X
             end
             i = k
         elseif d == a+1
-            edgs[i] = (s, a, ofs)
+            edgs[i] = _edge_make(s, a, ofs)
             i += 1
         else
             i += 1

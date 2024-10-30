@@ -410,7 +410,29 @@ end
     mini3_2 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
     small = PeriodicGraph("3 1 2 1 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 1 6 0 0 0 1 7 0 0 0 2 3 0 0 0 2 4 0 0 0 2 5 0 0 0 2 6 0 0 0 2 7 0 0 0 3 4 0 1 0 3 5 0 0 0 3 6 0 0 0 3 8 0 0 0 4 5 0 0 0 4 6 0 0 0 4 8 0 0 0 5 6 0 0 1 5 9 0 0 0 6 9 0 0 0 7 8 0 0 0 8 9 0 0 0")
 
-    unstabletry = Union{PeriodicGraph2D,PeriodicGraph3D}[mini2, mini3_2, mini3_3, small]
+    u1A = PeriodicGraph("1  1 1 1  1 2 0  1 3 0  2 3 0")
+    u1B = PeriodicGraph("1  1 1 1  1 2 0  1 3 0  2 3 0  4 5 0  5 4 1  1 4 0  1 5 0")
+    u2A = PeriodicGraph("2 1 2 0 0 1 4 -1 0 1 4 0 -1 2 3 -1 -1 2 3 0 0 3 4 0 0")
+    u2B = PeriodicGraph("2 1 4 -1 0 1 4 0 0 1 5 0 -1 2 3 -1 0 2 3 0 0 2 6 0 -1 3 5 -1 1 3 5 0 1 4 6 -1 1 4 6 0 1")
+    u2C = PeriodicGraph("2 1 3 -1 0 1 4 -1 1 1 4 0 -1 2 3 -1 1 2 3 0 -1 2 4 -1 0")
+    u3A = PeriodicGraph("3 1 2 0 0 0 1 3 -1 -1 -1 1 3 -1 0 0 1 3 0 -1 0 1 3 0 0 1 2 3 -1 -1 0 2 3 0 0 0")
+    u3B = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 1 6 -1 0 0 1 7 0 0 0 2 3 0 0 0 2 4 0 0 0 2 5 0 -1 0 2 6 0 0 0 2 9 0 0 0 3 4 0 0 -1 3 5 0 0 0 3 6 0 0 0 3 8 0 0 0 4 5 0 0 0 4 6 0 0 0 4 8 0 0 0 5 6 0 0 0 5 9 0 0 0 6 7 0 0 0 7 9 0 0 0 8 9 0 0 1")
+
+    gm = PeriodicGraph("2  1 1 1 0  1 2 0 0  1 3 0 0  1 4 0 0  1 2 0 1  1 3 0 1  1 4 0 1  2 3 0 0");
+    gmx3 = PeriodicGraph("2  1 2 0 0  1 2 0 -1  1 3 0 0  1 3 0 -1  1 4 0 0  1 4 0 -1  1 5 0 0  1 9 -1 0
+                             5 7 0 0  5 7 0 -1  5 8 0 0  5 8 0 -1  5 6 0 0  5 6 0 -1  5 9 0 0
+                             9 10 0 0  9 10 0 -1  9 11 0 0  9 11 0 -1  9 12 0 0  9 12 0 -1
+                             2 3 0 0  7 8 0 0  10 12 0 0");
+    gmx5 = PeriodicGraph("2  1 6 0 0  1 7 0 0  1 8 0 -1  1 5 0 0  1 2 -1 0  1 3 -1 0  1 4 0 0
+                             4 8 0 0  4 9 0 0  4 10 0 0  4 11 0 0  4 6 0 1  4 7 0 1  4 12 0 1
+                             12 10 0 0  12 11 0 0  12 9 0 0  12 15 0 -1  12 14 0 -1  12 16 0 -1  12 13 0 0
+                             13 14 0 0  13 15 0 0  13 16 0 0  13 17 0 0  13 18 0 0  13 19 0 0  13 20 0 0
+                             20 2 0 0  20 3 0 0  20 1 1 1  20 5 1 0  20 18 0 1  20 17 0 1  20 19 0 1
+                             2 5 1 0  7 8 0 -1  10 11 0 0  14 16 0 0  18 19 0 0");
+
+    unstabletry = Union{PeriodicGraph1D,PeriodicGraph2D,PeriodicGraph3D}[
+        mini2, mini3_2, mini3_3, small, u1A, u1B, u2A, u2B, u2C, u3A, u3B, gm
+    ]
 
     failurelock = ReentrantLock()
     failures = 0
@@ -424,21 +446,18 @@ end
             r = randperm(n)
             offsets = [SVector{N,Int}([rand(-3:3) for _ in 1:N]) for _ in 1:n]
             newgraph = swap_axes!(offset_representatives!(supercell[r], offsets), randperm(N))
-            if topological_genome(CrystalNet(newgraph)) != genome
+            newgenome = topological_genome(CrystalNet(newgraph))
+            if newgenome != genome
                 lock(failurelock) do
                     failures += 1
-                    @error "Unstable graph $graph failed (Module) with g = $(string(newgraph))"
+                    @error "Unstable graph failed (Module): g1 = PeriodicGraph(\"$graph\"); g2 = PeriodicGraph(\"$newgraph\"); gen1 = $genome; gen2 = $newgenome"
                 end
                 break
             end
         end
     end
 
-    u1A = PeriodicGraph("1  1 1 1  1 2 0  1 3 0  2 3 0")
-    u1B = PeriodicGraph("1  1 1 1  1 2 0  1 3 0  2 3 0  4 5 0  5 4 1  1 4 0  1 5 0")
-    u2A = PeriodicGraph("2 1 2 0 0 1 4 -1 0 1 4 0 -1 2 3 -1 -1 2 3 0 0 3 4 0 0")
-    u2B = PeriodicGraph("2 1 4 -1 0 1 4 0 0 1 5 0 -1 2 3 -1 0 2 3 0 0 2 6 0 -1 3 5 -1 1 3 5 0 1 4 6 -1 1 4 6 0 1")
-    u2C = PeriodicGraph("2 1 3 -1 0 1 4 -1 1 1 4 0 -1 2 3 -1 1 2 3 0 -1 2 4 -1 0")
+    @test topological_genome(gm) == topological_genome(gmx3) == topological_genome(gmx5)
 
     Test.get_testset().n_passed += length(unstabletry) - failures
     @test failures == 0

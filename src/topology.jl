@@ -662,8 +662,8 @@ For most non-internal purposes, [`topological_genome`](@ref) should be called in
 """
 function topological_key(net::CrystalNet{D}) where D
     isempty(net.pge.pos) && return PeriodicGraph{D}()
-    newnet, collisions = collision_nodes(net)
-    topological_key(newnet, collisions)
+    collisions, newnet, equiv_net = collision_nodes(net)
+    topological_key(newnet, collisions isa CollisionList ? collisions : (equiv_net, collisions))
 end
 
 function topological_key(net::CrystalNet{D,T}, collisions) where {D,T}

@@ -19,27 +19,40 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.pge, fill(Symbol(""), length(net.types)), net.options)
     end
-    shrunk_net, collisions = collision_nodes(net)
+    collisions, shrunk_net, equiv_net = collision_nodes(net)
 
     if !net.options.skip_minimize
-        flag = true
+        widen_flag = false
+        unstable_flag = false
         try
-            shrunk_net, newcollisions = minimize(shrunk_net, collisions)
+            shrunk_net, newcollisions = minimize(shrunk_net, collisions isa CollisionList ? collisions : (equiv_net, collisions))
             if newcollisions isa CollisionList && (!(collisions isa CollisionList) || (isempty(newcollisions.list) && !isempty(collisions.list)))
-                return TopologicalGenome(net.pge.g, nothing, true)
+                unstable_flag = true
+            else
+                collisions = newcollisions
             end
-            collisions = newcollisions
-            flag = false
         catch e
             isinterrupt(e) && rethrow()
             if T == Rational{BigInt} || !isoverfloworinexact(e)
                 net.options.throw_error && rethrow()
                 return TopologicalGenome(string(e)::String)
             end
+            widen_flag = true
         end
-        if flag # not in the catch to avoid a StackOverflow of errors in case something goes wrong
+        if widen_flag # not in the catch to avoid a StackOverflow of errors in case something goes wrong
             newnet = CrystalNet{D,widen(T)}(net; ignore_types=false)
             return topological_genome(newnet)
+        end
+        if unstable_flag
+            collisions::CollisionList
+            collision_ranges = Vector{UnitRange{Int}}(undef, length(collisions))
+            counter = length(shrunk_net.pge) - length(collisions)
+            for (i, collision_node) in enumerate(collisions)
+                next_counter = counter + length(collision_node)
+                collision_ranges[i] = (counter+1):next_counter
+                counter = next_counter
+            end
+            shrunk_net, collisions = minimize(shrunk_net, (equiv_net, collision_ranges))
         end
     end
 
