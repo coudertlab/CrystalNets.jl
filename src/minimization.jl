@@ -376,6 +376,7 @@ function find_ref_edges(net::CrystalNet{D}, collision_ranges, nodes, shrunk_pge,
         end
     end
     sort!(refedges)
+    # display(refedges)
     @toggleassert begin # assert that each edge is unique
         flag = true
         for i in 1:(length(refedges)-1)
@@ -403,9 +404,11 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
     net, collision_ranges = collisions
     n = length(net.pge)
     collision_offsets = zeros(Int, n)
+    collision_lengths = ones(Int, n)
     for rnge in collision_ranges
         for (i, x) in enumerate(rnge)
             collision_offsets[x] = i-1
+            collision_lengths[x] = length(rnge)
         end
     end
     first_collision_m1 = first(first(collision_ranges)) - 1
@@ -413,19 +416,38 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
         _transformation = MMatrix{D,D,T,D*D}(LinearAlgebra.I)
         _transformation[:,1] .= t
         transformation = SMatrix{D,D,T,D*D}(_transformation)
+        if D == 2 && issingular(transformation)
+            _transformation[:,1] .= (1, 0)
+            _transformation[:,2] .= t
+            transformation = SMatrix{D,D,T,D*D}(_transformation)
+        end
+        if D == 3 && issingular(transformation)
+            _transformation[:,1] .= (1, 0, 0)
+            _transformation[:,2] .= t
+            transformation = SMatrix{D,D,T,D*D}(_transformation)
+            if issingular(transformation)
+                _transformation[:,2] .= (0, 1, 0)
+                _transformation[:,3] .= t
+                transformation = SMatrix{D,D,T,D*D}(_transformation)
+            end
+        end
         inv_transformation = inv(transformation)
         subgraphlists = orbits_pvmap(shrunk_pvmap)
         refdict = Dict{SVector{D,T},Int}()
+        shrunk_refdict = Dict{SVector{D,T},Int}()
         refpos = Vector{SVector{D,T}}(undef, length(first(subgraphlists)))
         first_collision_subgraphlist = 0
+        counter_refdict = 1
         for (i, node) in enumerate(first(subgraphlists))
             npos = inv_transformation * shrunk_net.pge[node]
             newpos = npos .- floor.(Int, npos)
-            refdict[newpos] = i
+            refdict[newpos] = counter_refdict
+            shrunk_refdict[newpos] = i
             refpos[i] = newpos
             if first_collision_subgraphlist == 0 && node.v > first_collision_m1
                 first_collision_subgraphlist = i
             end
+            counter_refdict += collision_lengths[node.v]
         end
         @toggleassert length(refdict) == length(refpos) # assert that all positions are unique
         refedges = find_ref_edges(net, collision_ranges, first(subgraphlists), shrunk_net.pge, inv_transformation, refdict, collision_offsets)
@@ -463,7 +485,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
             end
         end
         if valid # found a translation!
-            shrunk_newedges = find_ref_edges(shrunk_net, UnitRange{Int}[typemax(Int):typemax(Int)], first(subgraphlists), shrunk_net.pge, inv_transformation, refdict, zeros(Int, length(shrunk_net.pge)))
+            shrunk_newedges = find_ref_edges(shrunk_net, UnitRange{Int}[typemax(Int):typemax(Int)], first(subgraphlists), shrunk_net.pge, inv_transformation, shrunk_refdict, zeros(Int, length(shrunk_net.pge)))
             subgraphlist = first(subgraphlists)
             subcollisionindices = first_collision_subgraphlist:length(subgraphlist)
             shrunk_virtualmap = first.(subgraphlist)
@@ -482,10 +504,14 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
             mattransformation[1:D,1] .= t
             new_mat = Cell(net.pge.cell.mat * mattransformation)
             new_shrunk_pos = [inv_transformation * shrunk_net.pge[x] for x in subgraphlist]
+            new_shrunk_ofs = [.-floor.(Int, x) for x in new_shrunk_pos]
             new_shrunk_pge = PeriodicGraphEmbedding{D}(PeriodicGraph{D}(shrunk_newedges), new_shrunk_pos, new_mat)
+            offset_representatives!(new_shrunk_pge, new_shrunk_ofs)
             new_shrunk_net = CrystalNet{D}(new_shrunk_pge, shrunk_net.types[shrunk_virtualmap], shrunk_net.options)
             new_pos = [inv_transformation * net.pge[x] for x in virtualpmap]
+            new_ofs = [.-floor.(Int, x) for x in new_pos]
             new_pge = PeriodicGraphEmbedding{D}(PeriodicGraph{D}(refedges), new_pos, new_mat)
+            offset_representatives!(new_pge, new_ofs)
             new_options = permute_mapping!(net.options, vmap)
             new_net = CrystalNet{D}(new_pge, net.types[first.(virtualpmap)], new_options)
             return (new_shrunk_net, (new_net, new_collision_ranges))
