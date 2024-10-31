@@ -351,7 +351,7 @@ function issingular(x::SMatrix{N,N,T}) where {N,T<:Rational}
     return iszero(det(SMatrix{N,N,widen(T)}(x)))
 end
 
-function issingular(x::SMatrix{3,3,T,9})::Bool where T<:Rational
+function issingular(x::SMatrix{3,3,T,9})::Bool where T
 @inbounds begin
     (i, j, k) = iszero(x[1,1]) ? (iszero(x[1,2]) ? (3,1,2)  : (2,1,3)) : (1,2,3)
     iszero(x[1,i]) && return true
@@ -367,7 +367,7 @@ function issingular(x::SMatrix{3,3,T,9})::Bool where T<:Rational
 end
 end
 
-function issingular(x::SMatrix{2,2,T,4})::Bool where T<:Rational
+function issingular(x::SMatrix{2,2,T,4})::Bool where T
 @inbounds begin
     if iszero(x[1,1])
         (iszero(x[1,2]) || iszero(x[2,1])) && return true
@@ -379,26 +379,28 @@ function issingular(x::SMatrix{2,2,T,4})::Bool where T<:Rational
 end
 end
 
-function issingular(x::SMatrix{1,1,T})::Bool where T<:Rational
+function issingular(x::SMatrix{1,1})::Bool
     iszero(@inbounds x[1,1])
 end
 
-function isrank3(x::Matrix{T}) where T<:Rational
-    _n, n = size(x)
+function isrank3(x::AbstractMatrix{T}) where T<:Rational
+    _n, m = size(x)
     @toggleassert _n == 3
-    n < 3 && return false
+    m < 3 && return false
     cols = collect(eachcol(x))
-    u1 = popfirst!(cols)
-    u2 = u1
+    u1 = pop!(cols)
     while iszero(u1) && !isempty(cols)
-        u1 = popfirst!(cols)
+        u1 = pop!(cols)
     end
     n = length(cols)
+    n < 2 && return false
     k = iszero(@inbounds u1[1]) ? iszero(@inbounds u1[2]) ? 3 : 2 : 1
+    u1k = @inbounds u1[k]
+    u2 = u1
     i = 1
     @inbounds while i < n
         u2 = cols[i]
-        (u2[k]//u1[k])*u1 == u2 || break
+        (u2[k]//u1k)*u1 == u2 || break
         i+=1
     end
     i == n && return false
@@ -409,31 +411,27 @@ function isrank3(x::Matrix{T}) where T<:Rational
     return false
 end
 
-function isrank2(x::Matrix{T}) where T<:Rational
+function isrank2(x::AbstractMatrix{T}) where T<:Rational
     _n, n = size(x)
     @toggleassert _n == 2
     n < 2 && return false
     cols = collect(eachcol(x))
-    u1 = popfirst!(cols)
-    u2 = u1
+    u1 = pop!(cols)
     while iszero(u1) && !isempty(cols)
-        u1 = popfirst!(cols)
+        u1 = pop!(cols)
     end
-    n = length(cols)
-    k = iszero(@inbounds u1[1]) ? 2 : 1
-    i = 1
-    @inbounds while i < n
-        u2 = cols[i]
-        (u2[k]//u1[k])*u1 == u2 || break
-        i+=1
+    length(cols) == 0 && return false
+    # x is at least rank 1
+    k = ifelse(iszero(@inbounds u1[1]), 2, 1)
+    u1k = @inbounds u1[k]
+    @inbounds for u2 in cols
+        (u2[k]//u1k)*u1 == u2 || return true # found a non-colinear vector, thus rank 2
     end
-    i == n && return false
-    return true
+    return false # only colinear vectors: rank 1
 end
 
 function isrank1(x::AbstractMatrix{T}) where T<:Rational
-    _n, n = size(x)
-    @toggleassert _n == 1
+    @toggleassert size(x, 1) == 1
     @inbounds for y in eachcol(x)
         iszero(y[1]) || return true
     end
