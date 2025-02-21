@@ -441,16 +441,18 @@ end
         @test !genome.unstable
         N = ndims(graph)
         for k in 1:40
-            supercell = make_supercell(graph, rand(1:3, N))
+            super = rand(1:3, N)
+            supercell = make_supercell(graph, super)
             n = nv(supercell)
             r = randperm(n)
             offsets = [SVector{N,Int}([rand(-3:3) for _ in 1:N]) for _ in 1:n]
-            newgraph = swap_axes!(offset_representatives!(supercell[r], offsets), randperm(N))
+            axesperm = randperm(N)
+            newgraph = swap_axes!(offset_representatives!(supercell[r], offsets), axesperm)
             newgenome = topological_genome(CrystalNet(newgraph))
             if newgenome != genome
                 lock(failurelock) do
                     failures += 1
-                    @error "Unstable graph failed (Module): g1 = PeriodicGraph(\"$graph\"); g2 = PeriodicGraph(\"$newgraph\"); gen1 = $genome; gen2 = $newgenome"
+                    @error "Unstable graph failed (Module): g1 = PeriodicGraph(\"$graph\"); g2 = PeriodicGraph(\"$newgraph\");\ngen1 = $genome; gen2 = $newgenome;\nsupercell = $super; offsets = $offsets; axesperm = $axesperm"
                 end
                 break
             end
