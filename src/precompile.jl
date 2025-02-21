@@ -1,7 +1,7 @@
 using CrystalNets, PeriodicGraphs, PeriodicGraphEmbeddings, StaticArrays, Graphs
 using PrecompileTools
 
-@setup_workload begin
+@setup_workload let # avoid keeping the introduced names around after precompilation
     tmpdir = tempname()
     mkdir(tmpdir)
     cifs = joinpath(dirname(dirname(pathof(CrystalNets))), "test", "cif")
