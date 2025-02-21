@@ -543,6 +543,25 @@ function expand_collisions(collisions::CollisionList, graph::PeriodicGraph{D}, v
     return newgraph, perm
 end
 
+"""
+    build_collision_ranges(collisions::CollisionList, n_shrunk)
+
+Given the `collisions` list and the number `n_shrunk` of nodes in the shrunk net, return
+the list of ranges of indices such that the `i`-th such range `r` contains the indices of
+the colliding vertices in the expanded net that form the `i`-th collision node.
+"""
+function build_collision_ranges(collisions::CollisionList, n_shrunk)
+    collision_ranges = Vector{UnitRange{Int}}(undef, length(collisions))
+    counter = n_shrunk - length(collisions)
+    for (i, collision_node) in enumerate(collisions)
+        next_counter = counter + length(collision_node)
+        collision_ranges[i] = (counter+1):next_counter
+        counter = next_counter
+    end
+    collision_ranges
+end
+
+
 function _edge_split(x)
     if x isa Tuple
         x

@@ -45,13 +45,7 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
         end
         if unstable_flag
             collisions::CollisionList
-            collision_ranges = Vector{UnitRange{Int}}(undef, length(collisions))
-            counter = length(shrunk_net.pge) - length(collisions)
-            for (i, collision_node) in enumerate(collisions)
-                next_counter = counter + length(collision_node)
-                collision_ranges[i] = (counter+1):next_counter
-                counter = next_counter
-            end
+            collision_ranges = build_collision_ranges(collisions, length(shrunk_net.pge))
             shrunk_net, collisions = minimize(shrunk_net, (equiv_net, collision_ranges))
         end
     end
