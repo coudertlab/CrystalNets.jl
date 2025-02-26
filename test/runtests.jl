@@ -451,8 +451,9 @@ end
             newgenome = topological_genome(CrystalNet(newgraph))
             if newgenome != genome
                 lock(failurelock) do
+                    global failures
                     failures += 1
-                    @error "Unstable graph failed (Module): g1 = PeriodicGraph(\"$graph\"); g2 = PeriodicGraph(\"$newgraph\");\ngen1 = $genome; gen2 = $newgenome;\nsupercell = $super; offsets = $offsets; axesperm = $axesperm"
+                    @error "Unstable graph failed (Module): g1 = PeriodicGraph(\"$graph\"); g2 = PeriodicGraph(\"$newgraph\");\ngen1 = $genome; gen2 = $newgenome;\nsupercell = $super; offsets = $offsets; axesperm = $axesperm; r = $r"
                 end
                 break
             end

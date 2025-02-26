@@ -556,16 +556,14 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
             end
             new_mat = Cell(net.pge.cell.mat * Nmatrix_to_3D(transformation))
             new_shrunk_pos = [inv_transformation * shrunk_net.pge[x] for x in subgraphlist]
-            new_shrunk_ofs = [.-floor.(Int, x) for x in new_shrunk_pos]
+            for (i, x) in enumerate(new_shrunk_pos); new_shrunk_pos[i] -= floor.(Int, x); end
             new_shrunk_pge = PeriodicGraphEmbedding{D}(PeriodicGraph{D}(shrunk_newedges), new_shrunk_pos, new_mat)
-            offset_representatives!(new_shrunk_pge, new_shrunk_ofs)
             new_shrunk_net = CrystalNet{D}(new_shrunk_pge, shrunk_net.types[shrunk_virtualmap], shrunk_net.options)
             new_pos = [inv_transformation * net.pge[x] for x in virtualpmap]
-            new_ofs = [.-floor.(Int, x) for x in new_pos]
+            for (i, x) in enumerate(new_pos); new_pos[i] -= floor.(Int, x); end
             nref = length(refedges)
             new_pge = PeriodicGraphEmbedding{D}(PeriodicGraph{D}(refedges), new_pos, new_mat)
             @toggleassert 2*ne(new_pge.g) == nref # refedges contains both direct and indirect edges
-            offset_representatives!(new_pge, new_ofs)
             new_options = permute_mapping!(net.options, vmap)
             new_net = CrystalNet{D}(new_pge, net.types[first.(virtualpmap)], new_options)
             return (new_shrunk_net, (new_net, new_collision_ranges))
