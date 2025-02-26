@@ -579,20 +579,26 @@ Iterator over indices `i` of "plain changes", i.e. such that, starting from a ve
 iterating over `PlainChangesIterator(n)` makes the vector undergo all the ``n!``
 permutations.
 
+Use `PlainChangesIterator(n, false)` to yield only the `n! - 1` first plain changes. The
+last plain change, which is always 1, returns the vector to its initial state.
+
 See also: Knuth's P" algorithm for the method of plain changes, taken from
 https://mathoverflow.net/a/279874, and the Steinhaus–Johnson–Trotter algorithm wikipedia
 page https://en.wikipedia.org/wiki/Steinhaus%E2%80%93Johnson%E2%80%93Trotter_algorithm
 """
 struct PlainChangesIterator
     n::Int
+    complete::Bool
 end
-Base.length(pci::PlainChangesIterator) = factorial(pci.n) - 1
+PlainChangesIterator(n) = PlainChangesIterator(n, true)
+Base.length(pci::PlainChangesIterator) = factorial(pci.n) - 1 + pci.complete
 Base.eltype(::Type{PlainChangesIterator}) = Int
 
 _init_state(pci) = (zeros(Int, pci.n), ones(Int8, pci.n))
 function Base.iterate(pci::PlainChangesIterator, state=nothing)
     n = pci.n
     c, d = state===nothing ? _init_state(pci) : state
+    isempty(c) && return nothing
     j = n
     s = 0
     @label P4
@@ -605,7 +611,13 @@ function Base.iterate(pci::PlainChangesIterator, state=nothing)
     return min(a, b), (c, d)
     @goto P4
     @label P6
-    j == 1 && return nothing
+    if j == 1
+        if pci.complete
+            empty!(c)
+            return 1, (c, d)
+        end
+        return nothing
+    end
     s += 1
     @label P7
     d[j] = -d[j]
@@ -616,10 +628,11 @@ end
 struct ContiguousPlainChangesIterator
     ranges::Vector{UnitRange{Int}}
     pcis::Vector{PlainChangesIterator}
+    complete::Bool
 end
-function ContiguousPlainChangesIterator(ranges::Vector{UnitRange{Int}})
-    pci = [PlainChangesIterator(length(r)) for r in ranges]
-    ContiguousPlainChangesIterator(ranges, pci)
+function ContiguousPlainChangesIterator(ranges::AbstractVector{UnitRange{Int}}, complete=true)
+    pci = [PlainChangesIterator(length(r), false) for r in ranges]
+    ContiguousPlainChangesIterator(ranges, pci, complete)
 end
 
 Base.IteratorSize(::Type{ContiguousPlainChangesIterator}) = Base.SizeUnknown()
@@ -642,5 +655,7 @@ function Base.iterate(cpci::ContiguousPlainChangesIterator, _state=nothing)
         states[i] = newstate
         return first(cpci.ranges[i]) + a - 1, states
     end
-    return nothing
+    (!cpci.complete || isempty(states)) && return nothing
+    empty!(states)
+    return (1, states)
 end

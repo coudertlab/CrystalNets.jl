@@ -726,7 +726,7 @@ function topological_key_unstable(net::CrystalNet{D,T}, collision_ranges, shrunk
 
         new_positions = [(j = findfirst(==(first(range)), newvmap); j:(j+length(range)-1)) for range in collision_ranges]
         @toggleassert [newvmap[x] for x in new_positions] == collision_ranges
-        swaps = ContiguousPlainChangesIterator(new_positions)
+        swaps = ContiguousPlainChangesIterator(new_positions, false)
 
         # display(edgs)
         for swap in swaps
