@@ -414,7 +414,7 @@ node in this new unit cell.
 
 Note: all edges, both direct and indirect, are returned.
 """
-function find_ref_edges(net::CrystalNet{D}, collision_ranges, nodes, shrunk_pge, inv_transformation, refdict, collision_offsets) where D
+function find_ref_edges(net::CrystalNet{D}, collision_ranges, nodes, shrunk_pge, inv_transformation, refdict, collision_offsets, vmap) where D
     refofss = [floor.(Int, inv_transformation * shrunk_pge[node]) for node in nodes]
     refedges = PeriodicEdge{D}[]
     first_collision_m1 = first(first(collision_ranges)) - 1
@@ -423,11 +423,13 @@ function find_ref_edges(net::CrystalNet{D}, collision_ranges, nodes, shrunk_pge,
     for (_i, (_u, shrunk_ofs)) in enumerate(nodes)
         refofs = refofss[_i]
         for u in (_u > first_collision_m1 ? collision_ranges[_u - first_collision_m1] : _u:_u)
+            v = vmap[u]
             i += 1
-            for x in neighbors(net.pge.g, PeriodicVertex{D}(u, shrunk_ofs))
+            for x in neighbors(net.pge.g, PeriodicVertex{D}(v, shrunk_ofs))
                 pos = inv_transformation * net.pge[x]
                 ofs = floor.(Int, pos)
                 j = refdict[pos .- ofs] + collision_offsets[x.v]
+                i == j && ofs == refofs && (empty!(refedges); return refedges) # forbidden edge: abort
                 push!(refedges, PeriodicEdge{D}(i, j, ofs - refofs))
             end
         end
@@ -460,15 +462,17 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
     isempty(translations_to_check) && return nothing
     net, collision_ranges = collisions
     n = length(net.pge)
+    first_collision_m1 = first(first(collision_ranges)) - 1
+    map_to_collision = zeros(Int, n)
     collision_offsets = zeros(Int, n)
     collision_lengths = ones(Int, n)
-    for rnge in collision_ranges
+    for (idx, rnge) in enumerate(collision_ranges)
         for (i, x) in enumerate(rnge)
             collision_offsets[x] = i-1
             collision_lengths[x] = length(rnge)
+            map_to_collision[x] = idx
         end
     end
-    first_collision_m1 = first(first(collision_ranges)) - 1
 
     for (t, shrunk_pvmap) in translations_to_check
 
@@ -478,14 +482,15 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
 
         ## Identify how this transformation divides the net into subnets related by the translation
         subgraphlists = orbits_pvmap(shrunk_pvmap)
+        subgraphlist_head, subgraphlists_tail = Iterators.peel(subgraphlists)
 
         ## Take one such subnet and compute its corresponding periodic graph
         refdict = Dict{SVector{D,T},Int}() # map each vertex position in the new cell to the index of its first node
         shrunk_refdict = Dict{SVector{D,T},Int}() # same as refdict but without the collisions
-        refpos = Vector{SVector{D,T}}(undef, length(first(subgraphlists))) # inverse of shrunk_refdict
-        first_collision_subgraphlist = 0
+        refpos = Vector{SVector{D,T}}(undef, length(subgraphlist_head)) # inverse of shrunk_refdict
+        first_collision_subgraphlist = 0 # index of the first collision node in the new reduced graph
         counter_refdict = 1
-        for (i, node) in enumerate(first(subgraphlists))
+        for (i, node) in enumerate(subgraphlist_head)
             oldpos = shrunk_net.pge[node]
             npos = inv_transformation * oldpos
             newpos = npos .- floor.(Int, npos)
@@ -498,56 +503,38 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
             counter_refdict += collision_lengths[node.v]
         end
         @toggleassert length(refdict) == length(refpos) # assert that all positions are unique
-        # refedges will be the edges of the periodic graph obtained on the subnet
-        refedges = find_ref_edges(net, collision_ranges, first(subgraphlists), shrunk_net.pge, inv_transformation, refdict, collision_offsets)
 
-        ## For each other subnet, check whether its periodic graph can be described using
-        ## the exact same edges as that of refedges.
         vmap = collect(1:n)
-        valid = true
-        for subgraphlist in Iterators.peel(subgraphlists)[2]
-            newedges = find_ref_edges(net, collision_ranges, subgraphlist, shrunk_net.pge, inv_transformation, refdict, collision_offsets)
-            newedges == refedges && continue # already the correct list of edges
-            # if newedges != refedges, attempt all permutations of the colliding vertices on the subnet
-            subcollisionindices = first_collision_subgraphlist:length(subgraphlist)
-            virtualmap = [subgraphlist[i].v for i in 1:first_collision_subgraphlist-1]
-            subranges = Vector{UnitRange{Int}}(undef, length(subcollisionindices))
-            counter = first_collision_subgraphlist
-            for (i, j) in enumerate(subcollisionindices)
-                rnge = collision_ranges[subgraphlist[j].v - first_collision_m1]
-                append!(virtualmap, rnge)
-                nextcounter = counter + length(rnge)
-                subranges[i] = counter:(nextcounter-1)
-                counter = nextcounter
-            end
-            viewvmap = view(vmap, virtualmap)
-            swaps = ContiguousPlainChangesIterator(subranges)
-            subfound = false
-            for swap in swaps
-                viewvmap[swap], viewvmap[swap+1] = viewvmap[swap+1], viewvmap[swap]
-                vertex_swap!(newedges, swap)
-                sort!(newedges)
-                if newedges == refedges
-                    subfound = true
+        refedges = find_ref_edges(net, collision_ranges, subgraphlist_head, shrunk_net.pge, inv_transformation, refdict, collision_offsets, vmap)
+        cpci = ContiguousPlainChangesIterator(collect(Iterators.drop(collision_ranges, 1)))
+        valid = false
+        for swap in cpci
+            valid = true
+            # refedges will be the edges of the periodic graph obtained on the subnet
+            refedges = find_ref_edges(net, collision_ranges, subgraphlist_head, shrunk_net.pge, inv_transformation, refdict, collision_offsets, vmap)
+            for subgraphlist in subgraphlists_tail
+                newedges = find_ref_edges(net, collision_ranges, subgraphlist, shrunk_net.pge, inv_transformation, refdict, collision_offsets, vmap)
+                if newedges != refedges
+                    valid = false
                     break
                 end
             end
-            if !subfound # no permutation allowed finding refedges: the translation is invalid
-                valid = false
-                break
-            end
+            valid && break
+
+            numcollision = map_to_collision[swap]
+            collision_offsets[swap], collision_offsets[swap+1] = collision_offsets[swap+1], collision_offsets[swap]
+            vmap[swap], vmap[swap+1] = vmap[swap+1], vmap[swap]
         end
 
         if valid # found a valid translation!
-            shrunk_newedges = find_ref_edges(shrunk_net, UnitRange{Int}[typemax(Int):typemax(Int)], first(subgraphlists), shrunk_net.pge, inv_transformation, shrunk_refdict, zeros(Int, length(shrunk_net.pge)))
-            subgraphlist = first(subgraphlists)
-            subcollisionindices = first_collision_subgraphlist:length(subgraphlist)
-            shrunk_virtualmap = first.(subgraphlist)
-            virtualpmap = subgraphlist[1:first_collision_subgraphlist-1]
+            shrunk_newedges = find_ref_edges(shrunk_net, UnitRange{Int}[typemax(Int):typemax(Int)], subgraphlist_head, shrunk_net.pge, inv_transformation, shrunk_refdict, zeros(Int, length(shrunk_net.pge)), 1:length(shrunk_net.pge))
+            subcollisionindices = first_collision_subgraphlist:length(subgraphlist_head)
+            shrunk_virtualmap = first.(subgraphlist_head)
+            virtualpmap = subgraphlist_head[1:first_collision_subgraphlist-1]
             new_collision_ranges = Vector{UnitRange{Int}}(undef, length(subcollisionindices))
             counter = first_collision_subgraphlist
             for (i, j) in enumerate(subcollisionindices)
-                jv, jofs = subgraphlist[j]
+                jv, jofs = subgraphlist_head[j]
                 rnge = collision_ranges[jv - first_collision_m1]
                 append!(virtualpmap, PeriodicVertex{D}(k, jofs) for k in rnge)
                 nextcounter = counter + length(rnge)
@@ -555,7 +542,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
                 counter = nextcounter
             end
             new_mat = Cell(net.pge.cell.mat * Nmatrix_to_3D(transformation))
-            new_shrunk_pos = [inv_transformation * shrunk_net.pge[x] for x in subgraphlist]
+            new_shrunk_pos = [inv_transformation * shrunk_net.pge[x] for x in subgraphlist_head]
             for (i, x) in enumerate(new_shrunk_pos); new_shrunk_pos[i] -= floor.(Int, x); end
             new_shrunk_pge = PeriodicGraphEmbedding{D}(PeriodicGraph{D}(shrunk_newedges), new_shrunk_pos, new_mat)
             new_shrunk_net = CrystalNet{D}(new_shrunk_pge, shrunk_net.types[shrunk_virtualmap], shrunk_net.options)
