@@ -328,6 +328,43 @@ function minimize_unstable(shrunk_net::CrystalNet, collisions)
     shrunk_net, collisions
 end
 
+
+function find_transformation_matrix(t::SVector{D,T}) where {D,T}
+    _transformation = MMatrix{D,D,T,D*D}(LinearAlgebra.I)
+    _transformation[:,1] .= t
+    transformation = SMatrix{D,D,T,D*D}(_transformation)
+    if D == 2 && issingular(transformation)
+        _transformation[:,1] .= (1, 0)
+        _transformation[:,2] .= t
+        transformation = SMatrix{D,D,T,D*D}(_transformation)
+    end
+    if D == 3 && issingular(transformation)
+        _transformation[:,1] .= (1, 0, 0)
+        _transformation[:,2] .= t
+        transformation = SMatrix{D,D,T,D*D}(_transformation)
+        if issingular(transformation)
+            _transformation[:,2] .= (0, 1, 0)
+            _transformation[:,3] .= t
+            transformation = SMatrix{D,D,T,D*D}(_transformation)
+        end
+    end
+    transformation
+end
+
+
+"""
+    orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}) where D
+
+Given a list `shrunk_pvmap` that maps each vertex `i` of the graph to a new vertex
+`shrunk_pvmap[i]` obtained from a valid translation of the graph, return a list
+`subgraphlists` of sublists such that:
+- `subgraphlists[1]` is mapped to `subgraphlists[2]`, which is mapped to `subgraphlists[3]`,
+  etc., and `subgraphlists[end]` is mapped to `subgraphlists[1]` plus an offset (which is
+  `length(subgraphlists)-1` times the valid translation).
+- `subgraphlists` forms a partition of the vertices of the graph: each vertex number
+  appears in exactly one sublist.
+- all vertices in `subgraphlists[1]` have a zero offset.
+"""
 function orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}) where D
     orbits = Vector{PeriodicVertex{D}}[]
     n = length(shrunk_pvmap)
@@ -357,6 +394,26 @@ function orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}) where D
     ret
 end
 
+"""
+    find_ref_edges(net::CrystalNet{D}, collision_ranges, nodes, shrunk_pge, inv_transformation, refdict, collision_offsets) where D
+
+Find the list of edges of the subnet obtained from `net` by only keeping the vertices
+corresponding to the expansion of the `nodes` into the initial vertices they represent
+through `collision_ranges`, obtained from a valid translation.
+
+`shrunk_pge` is the `PeriodicGraphEmbedding` of `net` after grouping colliding vertices
+into "collision nodes" (one node per set of colliding vertices). The `nodes` refer to such
+collision nodes, and the correspondence between collision nodes and the initial vertices
+is given by `collision_ranges` or, equivalently, through `collision_offsets`.
+
+`inv_transformation` is the inverse transformation matrix, such that, given `pos` the
+position of a vertex in `net`, `inv_transformation*pos` is the position of that same vertex
+in the unit cell given the transformation obtained from the valid translation.
+`refdict` maps each such position (after the transformation) to the vertex number of the
+node in this new unit cell.
+
+Note: all edges, both direct and indirect, are returned.
+"""
 function find_ref_edges(net::CrystalNet{D}, collision_ranges, nodes, shrunk_pge, inv_transformation, refdict, collision_offsets) where D
     refofss = [floor.(Int, inv_transformation * shrunk_pge[node]) for node in nodes]
     refedges = PeriodicEdge{D}[]
@@ -412,34 +469,25 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
         end
     end
     first_collision_m1 = first(first(collision_ranges)) - 1
+
     for (t, shrunk_pvmap) in translations_to_check
-        _transformation = MMatrix{D,D,T,D*D}(LinearAlgebra.I)
-        _transformation[:,1] .= t
-        transformation = SMatrix{D,D,T,D*D}(_transformation)
-        if D == 2 && issingular(transformation)
-            _transformation[:,1] .= (1, 0)
-            _transformation[:,2] .= t
-            transformation = SMatrix{D,D,T,D*D}(_transformation)
-        end
-        if D == 3 && issingular(transformation)
-            _transformation[:,1] .= (1, 0, 0)
-            _transformation[:,2] .= t
-            transformation = SMatrix{D,D,T,D*D}(_transformation)
-            if issingular(transformation)
-                _transformation[:,2] .= (0, 1, 0)
-                _transformation[:,3] .= t
-                transformation = SMatrix{D,D,T,D*D}(_transformation)
-            end
-        end
+
+        ## First, compute the transformation matrix corresponding to this valid translation
+        transformation = find_transformation_matrix(t)
         inv_transformation = inv(transformation)
+
+        ## Identify how this transformation divides the net into subnets related by the translation
         subgraphlists = orbits_pvmap(shrunk_pvmap)
-        refdict = Dict{SVector{D,T},Int}()
-        shrunk_refdict = Dict{SVector{D,T},Int}()
-        refpos = Vector{SVector{D,T}}(undef, length(first(subgraphlists)))
+
+        ## Take one such subnet and compute its corresponding periodic graph
+        refdict = Dict{SVector{D,T},Int}() # map each vertex position in the new cell to the index of its first node
+        shrunk_refdict = Dict{SVector{D,T},Int}() # same as refdict but without the collisions
+        refpos = Vector{SVector{D,T}}(undef, length(first(subgraphlists))) # inverse of shrunk_refdict
         first_collision_subgraphlist = 0
         counter_refdict = 1
         for (i, node) in enumerate(first(subgraphlists))
-            npos = inv_transformation * shrunk_net.pge[node]
+            oldpos = shrunk_net.pge[node]
+            npos = inv_transformation * oldpos
             newpos = npos .- floor.(Int, npos)
             refdict[newpos] = counter_refdict
             shrunk_refdict[newpos] = i
@@ -450,12 +498,17 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
             counter_refdict += collision_lengths[node.v]
         end
         @toggleassert length(refdict) == length(refpos) # assert that all positions are unique
+        # refedges will be the edges of the periodic graph obtained on the subnet
         refedges = find_ref_edges(net, collision_ranges, first(subgraphlists), shrunk_net.pge, inv_transformation, refdict, collision_offsets)
+
+        ## For each other subnet, check whether its periodic graph can be described using
+        ## the exact same edges as that of refedges.
         vmap = collect(1:n)
         valid = true
         for subgraphlist in Iterators.peel(subgraphlists)[2]
             newedges = find_ref_edges(net, collision_ranges, subgraphlist, shrunk_net.pge, inv_transformation, refdict, collision_offsets)
-            newedges == refedges && continue
+            newedges == refedges && continue # already the correct list of edges
+            # if newedges != refedges, attempt all permutations of the colliding vertices on the subnet
             subcollisionindices = first_collision_subgraphlist:length(subgraphlist)
             virtualmap = [subgraphlist[i].v for i in 1:first_collision_subgraphlist-1]
             subranges = Vector{UnitRange{Int}}(undef, length(subcollisionindices))
@@ -479,12 +532,13 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
                     break
                 end
             end
-            if !subfound
+            if !subfound # no permutation allowed finding refedges: the translation is invalid
                 valid = false
                 break
             end
         end
-        if valid # found a translation!
+
+        if valid # found a valid translation!
             shrunk_newedges = find_ref_edges(shrunk_net, UnitRange{Int}[typemax(Int):typemax(Int)], first(subgraphlists), shrunk_net.pge, inv_transformation, shrunk_refdict, zeros(Int, length(shrunk_net.pge)))
             subgraphlist = first(subgraphlists)
             subcollisionindices = first_collision_subgraphlist:length(subgraphlist)
@@ -500,9 +554,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
                 new_collision_ranges[i] = counter:(nextcounter-1)
                 counter = nextcounter
             end
-            mattransformation = MMatrix{3,3,T,9}(LinearAlgebra.I)
-            mattransformation[1:D,1] .= t
-            new_mat = Cell(net.pge.cell.mat * mattransformation)
+            new_mat = Cell(net.pge.cell.mat * Nmatrix_to_3D(transformation))
             new_shrunk_pos = [inv_transformation * shrunk_net.pge[x] for x in subgraphlist]
             new_shrunk_ofs = [.-floor.(Int, x) for x in new_shrunk_pos]
             new_shrunk_pge = PeriodicGraphEmbedding{D}(PeriodicGraph{D}(shrunk_newedges), new_shrunk_pos, new_mat)
@@ -510,7 +562,9 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
             new_shrunk_net = CrystalNet{D}(new_shrunk_pge, shrunk_net.types[shrunk_virtualmap], shrunk_net.options)
             new_pos = [inv_transformation * net.pge[x] for x in virtualpmap]
             new_ofs = [.-floor.(Int, x) for x in new_pos]
+            nref = length(refedges)
             new_pge = PeriodicGraphEmbedding{D}(PeriodicGraph{D}(refedges), new_pos, new_mat)
+            @toggleassert 2*ne(new_pge.g) == nref # refedges contains both direct and indirect edges
             offset_representatives!(new_pge, new_ofs)
             new_options = permute_mapping!(net.options, vmap)
             new_net = CrystalNet{D}(new_pge, net.types[first.(virtualpmap)], new_options)

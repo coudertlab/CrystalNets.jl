@@ -438,6 +438,31 @@ function isrank1(x::AbstractMatrix{T}) where T<:Rational
     return false
 end
 
+"""
+    Nmatrix_to_3D(m::StaticArray{Tuple{D,D},T}) where {D,T}
+
+Return a 3×3 SMatrix `mat` of `eltype` `T` such that `mat[1:D,1:D] == m` and the rest of
+`mat` is made of the identity matrix.
+"""
+function Nmatrix_to_3D(m::StaticArray{Tuple{D,D},T}) where {D,T}
+    if D == 3
+        SMatrix{3,3,T,9}(m)
+    elseif D == 2
+        SA[m[1,1] m[1,2] false
+           m[2,1] m[2,2] false
+           false  false  true
+        ]
+    elseif D == 1
+        SA[m[1,1] false  false
+           false  true   false
+           false  false  true
+        ]
+    elseif D == 0
+        SMatrix{3,3,T,9}(true, false, false, false, true, false, false, false, true)
+    else
+        error("Unhandled dimension (> 3)")
+    end
+end
 
 """
     back_to_unit(r::Rational)
