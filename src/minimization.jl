@@ -353,11 +353,11 @@ end
 
 
 """
-    orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}) where D
+    orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}, m) where D
 
 Given a list `shrunk_pvmap` that maps each vertex `i` of the graph to a new vertex
-`shrunk_pvmap[i]` obtained from a valid translation of the graph, return a list
-`subgraphlists` of sublists such that:
+`shrunk_pvmap[i]` obtained from a valid translation of the graph, return a list of `m`
+sublists `subgraphlists` such that:
 - `subgraphlists[1]` is mapped to `subgraphlists[2]`, which is mapped to `subgraphlists[3]`,
   etc., and `subgraphlists[end]` is mapped to `subgraphlists[1]` plus an offset (which is
   `length(subgraphlists)-1` times the valid translation).
@@ -365,7 +365,7 @@ Given a list `shrunk_pvmap` that maps each vertex `i` of the graph to a new vert
   appears in exactly one sublist.
 - all vertices in `subgraphlists[1]` have a zero offset.
 """
-function orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}) where D
+function orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}, m) where D
     orbits = Vector{PeriodicVertex{D}}[]
     n = length(shrunk_pvmap)
     visited = falses(n)
@@ -375,17 +375,25 @@ function orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}) where D
         tot_ofs = zero(SVector{D,Int})
         orbit = [PeriodicVertex{D}(i)]
         j, ofs = shrunk_pvmap[i]
+        k = 1
         while j != i
             @toggleassert !visited[j]
             visited[j] = true
             tot_ofs += ofs
+            if k == m
+                k = 0
+                tot_ofs = zero(SVector{D,Int})
+                push!(orbits, orbit)
+                orbit = PeriodicVertex{D}[]
+            end
             push!(orbit, PeriodicVertex{D}(j, tot_ofs))
             j, ofs = shrunk_pvmap[j]
+            k += 1
         end
+        @toggleassert k == m
         push!(orbits, orbit)
     end
-    @toggleassert(allequal(length, orbits))
-    m = length(first(orbits))
+    @toggleassert m == length(first(orbits))
 
     ret = Vector{Vector{PeriodicVertex{D}}}(undef, m)
     for i in 1:m
@@ -481,7 +489,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
         inv_transformation = inv(transformation)
 
         ## Identify how this transformation divides the net into subnets related by the translation
-        subgraphlists = orbits_pvmap(shrunk_pvmap)
+        subgraphlists = orbits_pvmap(shrunk_pvmap, Int(det(inv_transformation)))
         subgraphlist_head, subgraphlists_tail = Iterators.peel(subgraphlists)
 
         ## Take one such subnet and compute its corresponding periodic graph
