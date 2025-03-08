@@ -1,4 +1,5 @@
 using CrystalNets
+import CrystalNets as CNets
 using Test, Random
 using PeriodicGraphs
 using StaticArrays
@@ -429,6 +430,16 @@ end
                              13 14 0 0  13 15 0 0  13 16 0 0  13 17 0 0  13 18 0 0  13 19 0 0  13 20 0 0
                              20 2 0 0  20 3 0 0  20 1 1 1  20 5 1 0  20 18 0 1  20 17 0 1  20 19 0 1
                              2 5 1 0  7 8 0 -1  10 11 0 0  14 16 0 0  18 19 0 0");
+
+
+    _netgm3 = CrystalNet(make_supercell(gm, (3, 1))[[8, 11, 6, 12, 3, 2, 7, 9, 10, 4, 1, 5]])
+    collisions3, shrunk_net3, equiv_net3 = CNets.collision_nodes(_netgm3)
+    t3 = last(CNets.possible_translations(shrunk_net3)[2])
+    @test t3 == [1//3, 0]
+    pvmap3 = CNets.CheckSymmetryWithCollisions(collisions3, false)(shrunk_net3.pge, t3, nothing, shrunk_net3.types)
+    @test pvmap3 == PeriodicVertex2D[(2, (0,0)), (3, (0,0)), (1, (1,0)), (5, (0,0)), (6, (0,0)), (4, (1,0))]
+    new_shrunk_net3, (new_net3, new_collision_ranges3) = CNets.shrink_unstable_net(shrunk_net3, equiv_net3, collisions3, pvmap3, CNets.find_transformation_matrix(t3), [1, 1, 1, 1, 2, 3, 2, 1, 3, 3, 2, 1])
+    @test topological_genome(new_net3) == topological_genome(CrystalNet(gm))
 
     unstabletry = Union{PeriodicGraph1D,PeriodicGraph2D,PeriodicGraph3D}[
         mini2, mini3_2, mini3_3, small, u1A, u1B, u2A, u2B, u2C, u3A, u3B, gm
