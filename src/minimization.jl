@@ -554,6 +554,30 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, s
     return (new_shrunk_net, (new_net, new_collision_ranges))
 end
 
+function vmap_to_collision_offsets(vmap, collision_ranges)
+    first_collision_m1 = first(first(collision_ranges)) - 1
+    collision_offsets = zeros(Int, length(vmap))
+    collision_offsets[1:first_collision_m1] .= 1
+    for rnge in collision_ranges
+        if collision_offsets[first(rnge)] != 0
+            @toggleassert all(!iszero, @view(collision_offsets[rnge]))
+        else
+            for (i, j) in enumerate(rnge)
+                @toggleassert collision_offsets[j] == 0
+                collision_offsets[j] = i
+                x = vmap[j]
+                while x != j
+                    @toggleassert collision_offsets[x] == 0
+                    collision_offsets[x] = i
+                    x = vmap[x]
+                end
+            end
+        end
+    end
+    @toggleassert all(!iszero, collision_offsets)
+    collision_offsets
+end
+
 
 function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, collisions) where {D,T}
     check_symmetry = CheckSymmetryWithCollisions(collisions, false)
@@ -598,6 +622,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
             oldpos = shrunk_net.pge[node]
             npos = inv_transformation * oldpos
             newpos = npos .- floor.(Int, npos)
+            @toggleassert !haskey(refdict, newpos)
             refdict[newpos] = counter_refdict
             shrunk_refdict[newpos] = i
             refpos[i] = newpos
@@ -607,6 +632,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
             counter_refdict += collision_lengths[node.v]
         end
         @toggleassert length(refdict) == length(refpos) # assert that all positions are unique
+        @toggleassert first_collision_subgraphlist == 1 + (length(shrunk_net.pge) - length(collision_ranges))*length(subgraphlist_head)÷length(shrunk_net.pge)
 
         vmap = collect(1:n)
         refedges = find_ref_edges(net, collision_ranges, subgraphlist_head, shrunk_net.pge, inv_transformation, refdict, collision_offsets, vmap)
@@ -630,7 +656,8 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
         end
 
         if valid # found a valid translation!
-            return reduce_unstable_net(shrunk_net, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets)
+            collision_offsets_final = vmap_to_collision_offsets(vmap, collision_ranges)
+            return reduce_unstable_net(shrunk_net, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets_final)
         end
     end
     return nothing
