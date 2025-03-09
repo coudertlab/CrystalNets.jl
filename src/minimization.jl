@@ -458,7 +458,23 @@ function find_ref_edges(net::CrystalNet{D}, collision_ranges, nodes, shrunk_pge,
     refedges
 end
 
-function shrink_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets) where D
+
+"""
+    reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets) where D
+
+Reduce the `net` with a translation symmetry, given as the corresponding `shrunk_pvmap`
+that maps each vertex of the `shrunk_net` to its image, the cell matrix `transformation`,
+and the `collision_offsets` such that vertices `u` and `v` of `net` are related by the
+translation symmetry if and only if:
+- they are in the same orbit and
+- `collision_offsets[u] == collision_offsets[v]`.
+
+Note that for all vertices `u` which are not in a collision node, `collision_offsets[u] == 1`.
+
+Return `(new_shrunk_net, (new_net, new_collision_ranges))` which mirror the input
+`(shrunk_net, (net, collision_ranges))`.
+"""
+function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets) where D
     inv_transformation = inv(transformation)
     subgraphlists = orbits_pvmap(shrunk_pvmap, Int(det(inv_transformation)))
     _subgraphlist_head = first(subgraphlists)
@@ -614,7 +630,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
         end
 
         if valid # found a valid translation!
-            return shrink_unstable_net(shrunk_net, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets)
+            return reduce_unstable_net(shrunk_net, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets)
         end
     end
     return nothing
