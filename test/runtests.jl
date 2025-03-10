@@ -438,7 +438,7 @@ end
     @test t3 == [1//3, 0]
     pvmap3 = CNets.CheckSymmetryWithCollisions(collisions3, false)(shrunk_net3.pge, t3, nothing, shrunk_net3.types)
     @test pvmap3 == PeriodicVertex2D[(2, (0,0)), (3, (0,0)), (1, (1,0)), (5, (0,0)), (6, (0,0)), (4, (1,0))]
-    to_shrunk3 = [i for (i, rnge) in enumerate(collisions3) for _ in rnge]
+    to_shrunk3 = [i+3 for (i, rnge) in enumerate(collisions3) for _ in rnge]
     direct_map3 = translation_to_direct_map(pvmap3, equiv_net3, collisions3, to_shrunk3)
     @test direct_map3 == [2, 3, 1, 8, 7, 9, 10, 12, 11, 5, 6, 4]
     collision_offsets3 = direct_map_to_collision_offsets(direct_map3, collisions3)
@@ -456,7 +456,7 @@ end
     pvmap4 = check_symmetry4(shrunk_net4.pge, t4, nothing, shrunk_net4.types)
     @test pvmap4 == PeriodicVertex2D[(4, (0,0)), (3, (0,1)), (2, (1,0)), (1, (1,1)), (8, (0,1)), (7, (0,0)), (6, (1,1)), (5, (1,0))]
     collision_offsets4 = [1, 1, 1, 1, 1, 2, 3, 3, 2, 1, 2, 1, 3, 3, 1, 2]
-    @test vmap_to_collision_offsets([4, 3, 2, 1, 10, 9, 8, 13, 11, 12, 16, 15, 14, 7, 5, 6], [5:7,8:10,11:13,14:16]) == collision_offsets4
+    @test direct_map_to_collision_offsets([4, 3, 2, 1, 10, 9, 8, 13, 11, 12, 16, 15, 14, 7, 5, 6], [5:7,8:10,11:13,14:16]) == collision_offsets4
     new_shrunk_net4, (new_net4, new_collision_ranges4) = CNets.reduce_unstable_net(shrunk_net4, equiv_net4, collision_ranges4, pvmap4, CNets.find_transformation_matrix(t4), collision_offsets4)
 
     t2 = last(CNets.possible_translations(new_shrunk_net4)[1])
