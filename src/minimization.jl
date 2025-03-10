@@ -581,18 +581,19 @@ function attribute_next_available_modify!(vmapprogress, thisindex, returnto, col
     return true
 end
 
-function backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+function backtrack_to!(vmapprogress, index, (direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, reference_direct_map, reference_reverse_map))
+    first_collision_m1 = first(first(collision_ranges)) - 1
     returnto, (before, idx_after) = vmapprogress[index]
     shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
     shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
-        k0 = collision_ranges[-reference_direct_map[before]][idx_after]
-        reverse_map[k0] = reference_reverse_map[k0]
-        for (_, (i, j)) in @view vmapprogress[index+1:end]
-            mi_rnge = direct_map[i] = reference_direct_map[i]
-            k = collision_ranges[-mi_rnge][j]
-            reverse_map[k] = reference_reverse_map[k]
-        end
-        resize!(vmapprogress, index)
+    k0 = collision_ranges[-reference_direct_map[before]][idx_after]
+    reverse_map[k0] = reference_reverse_map[k0]
+    for (_, (i, j)) in @view vmapprogress[index+1:end]
+        mi_rnge = direct_map[i] = reference_direct_map[i]
+        k = collision_ranges[-mi_rnge][j]
+        reverse_map[k] = reference_reverse_map[k]
+    end
+    resize!(vmapprogress, index)
     wasavail_backtrack = attribute_next_available_modify!(vmapprogress, index, returnto, collision_ranges, direct_map, reverse_map, shrunk_after-first_collision_m1, before, idx_after)
     if !wasavail_backtrack
         backtracking = true
@@ -615,6 +616,7 @@ If no such `direct_map` can be found, i.e. if the translation is not valid on th
 net, return `nothing`.
 """
 function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrunk)
+    # @show shrunk_pvmap, collision_ranges, to_shrunk
     valid = true # determine if the translation is valid
     first_collision_m1 = first(first(collision_ranges)) - 1
     shrunk_indirect_vmap = zeros(Int, length(shrunk_pvmap) - first_collision_m1)
@@ -634,8 +636,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
         reverse_map[j] = -shrunk_indirect_vmap[i]
     end
     @toggleassert !any(iszero, direct_map) && !any(iszero, reverse_map)
-    reference_direct_map = copy(direct_map)
-    reference_reverse_map = copy(reverse_map)
+    backtrackstack = (direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, copy(direct_map), copy(reverse_map))
 
     for grand_index in (first_collision_m1+1):n
         vgi = direct_map[grand_index]
@@ -655,14 +656,14 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
 
             # "before" is currently mapped to "rnge[after]"
             if backtracking
-                backtracking, index = backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+                backtracking, index = backtrack_to!(vmapprogress, index, backtrackstack)
                 continue
             end
 
             after = rnge[idx_after]
             m = degree(net.pge.g, before)
             if m != degree(net.pge.g, after)
-                backtracking, index = backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+                backtracking, index = backtrack_to!(vmapprogress, index, backtrackstack)
                 continue
             end
 
@@ -689,7 +690,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                     end
                     if actual.v == expected.v
                         failure = true
-                        backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+                        backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), backtrackstack)
                         break
                     end
                 end
@@ -711,12 +712,12 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                                 break
                             end
                         else
-                        wasavail = attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, targetrnge, actual.v)
-                        if wasavail
-                            hadaction = true
-                            failure = false
-                        else
-                            backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+                            wasavail = attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, targetrnge, actual.v)
+                            if wasavail
+                                hadaction = true
+                                failure = false
+                            else
+                                backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), backtrackstack)
                                 break
                             end
                         end
