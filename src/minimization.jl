@@ -702,12 +702,23 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                     if expected_nonattributed == shrunk_actual
                         nonattributed_progress[i] = true
                         targetrnge = first(shrunk_pvmap[to_shrunk[actual.v-first_collision_m1]]) - first_collision_m1
+                        attributed_previously = direct_map[actual.v]
+                        if attributed_previously > 0
+                            if attributed_previously in collision_ranges[targetrnge]
+                                failure = false
+                            else
+                                backtracking, index = backtrack_to!(vmapprogress, findlast(x -> first(x[2]) == actual.v, vmapprogress), backtrackstack)
+                                break
+                            end
+                        else
                         wasavail = attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, targetrnge, actual.v)
                         if wasavail
                             hadaction = true
                             failure = false
                         else
                             backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+                                break
+                            end
                         end
                         break
                     end
@@ -715,7 +726,6 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                 failure && break
             end
             failure && continue
-            # TODO: remove identical edges in both expected_neighbors and actual_neighbors, then make both lists match. Check that the offsets match and that each vertex belongs its proper collision node.
 
             if !hadaction && index == length(vmapprogress)
                 valid = true
