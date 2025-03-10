@@ -360,7 +360,7 @@ function find_transformation_matrix(t::SVector{D,T}) where {D,T}
             transformation2[:,1] = images[i]
             for j in (i+1):n
                 transformation2[:,2] = images[j]
-                d = det(transformation2)
+                d = abs(det(transformation2))
                 if 0 < d < mindet2
                     mindet2 = d
                     best2 = (i,j)
@@ -382,7 +382,7 @@ function find_transformation_matrix(t::SVector{D,T}) where {D,T}
                 transformation3[:,2] = images[j]
                 for k in (j+1):n
                     transformation3[:,2] = images[k]
-                    d = det(transformation3)
+                    d = abs(det(transformation3))
                     if 0 < d < mindet3
                         mindet3 = d
                         best3 = (i,j,k)
@@ -392,7 +392,7 @@ function find_transformation_matrix(t::SVector{D,T}) where {D,T}
         end
         SMatrix{3,3,T,9}(images[best3[1]]..., images[best3[2]]..., images[best3[3]]...)
     end
-    @toggleassert LinearAlgebra.det(ret) == 1//periodicity
+    @toggleassert abs(LinearAlgebra.det(ret)) == 1//periodicity
     ret
 end
 
@@ -457,8 +457,8 @@ Return `(new_shrunk_net, (new_net, new_collision_ranges))` which mirror the inpu
 `(shrunk_net, (net, collision_ranges))`.
 """
 function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets) where D
-    inv_transformation = inv(transformation)
-    periodicity = Int(det(inv_transformation))
+    inv_transformation = Int.(inv(transformation))
+    periodicity = abs(det(inv_transformation))
     subgraphlists = orbits_pvmap(shrunk_pvmap)
     @toggleassert periodicity == length(subgraphlists)
     _subgraphlist_head = first(subgraphlists)
