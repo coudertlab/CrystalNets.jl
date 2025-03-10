@@ -546,7 +546,7 @@ function backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_r
     returnto, (before, idx_after) = vmapprogress[index]
     shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
     shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
-    wasavail_backtrack = attribute_next_available_modify!(vmapprogress, index, returnto, collision_ranges, direct_map, reverse_map, shrunk_after, before, idx_after)
+    wasavail_backtrack = attribute_next_available_modify!(vmapprogress, index, returnto, collision_ranges, direct_map, reverse_map, shrunk_after-first_collision_m1, before, idx_after)
     if !wasavail_backtrack
         backtracking = true
         index -= 1
@@ -601,7 +601,7 @@ function direct_map_from_translation(shrunk_pvmap, net::CrystalNet{D,T}, collisi
             returnto, (before, idx_after) = vmapprogress[index]
             shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
             shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
-            rnge = collision_ranges[shrunk_after]
+            rnge = collision_ranges[shrunk_after - first_collision_m1]
 
             # "before" is currently mapped to "rnge[after]"
             if backtracking
@@ -618,14 +618,18 @@ function direct_map_from_translation(shrunk_pvmap, net::CrystalNet{D,T}, collisi
 
             hadaction = false
             actual_neighbors = neighbors(net.pge.g, before)
-            expected_neighbors = [PeriodicVertex(reverse_map[x.v], x.ofs) for x in neighbors(net.pge.g, after)]
+            expected_neighbors = [begin
+                w = reverse_map[x.v]
+                src = to_shrunk[after - first_collision_m1]
+                dst = x.v ≤ first_collision_m1 ? x.v : to_shrunk[x.v - first_collision_m1]
+                PeriodicVertex(w, x.ofs + shrunk_pvmap[dst].ofs - shrunk_pvmap[src].ofs)
+            end for x in neighbors(net.pge.g, after)]
 
             sort!(expected_neighbors; by=x->x.v>0 ? x : PeriodicVertex(typemin(Int) - x.v, x.ofs))
             first_attributed_neighbor_m1 = (@something findfirst(x -> x.v > 0, expected_neighbors) length(expected_neighbors)+1) - 1
             nonattributed_progress = falses(first_attributed_neighbor_m1)
             idx_attributed = 1
             failure = false
-            length(vmapprogress) == 3 && error("!")
             for actual in actual_neighbors
                 if first_attributed_neighbor_m1+idx_attributed ≤ m
                     expected = expected_neighbors[first_attributed_neighbor_m1+idx_attributed]
@@ -640,14 +644,14 @@ function direct_map_from_translation(shrunk_pvmap, net::CrystalNet{D,T}, collisi
                     end
                 end
 
-                shrunk_actual = PeriodicVertex(-to_shrunk[actual.v - first_collision_m1], actual.ofs)
+                shrunk_actual = PeriodicVertex(-to_shrunk[actual.v - first_collision_m1] + first_collision_m1, actual.ofs)
                 failure = true
                 for i in 1:first_attributed_neighbor_m1
                     nonattributed_progress[i] && continue
                     expected_nonattributed = expected_neighbors[i]
                     if expected_nonattributed == shrunk_actual
                         nonattributed_progress[i] = true
-                        targetrnge = first(shrunk_pvmap[to_shrunk[actual.v-first_collision_m1]])
+                        targetrnge = first(shrunk_pvmap[to_shrunk[actual.v-first_collision_m1]]) - first_collision_m1
                         wasavail = attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, targetrnge, actual.v)
                         if wasavail
                             hadaction = true
@@ -690,7 +694,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
     net, collision_ranges = collisions
     first_collision_m1 = first(first(collision_ranges)) - 1
 
-    to_shrunk = [i for (i, rnge) in enumerate(collision_ranges) for _ in rnge]
+    to_shrunk = [i+first_collision_m1 for (i, rnge) in enumerate(collision_ranges) for _ in rnge]
     # to_shrunk[j-first_collision_m1] is the index of the shrunk node corresponding to vertex j
 
     for (t, shrunk_pvmap) in translations_to_check
