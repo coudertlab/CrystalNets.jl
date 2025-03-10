@@ -329,26 +329,71 @@ function minimize_unstable(shrunk_net::CrystalNet, collisions)
 end
 
 
+"""
+    find_transformation_matrix(t::SVector{D,T}) where {D,T}
+
+Given a valid translation `t` of a periodic graph, return the smallest unit cell that can be
+extracted from that translation.
+
+The returned matrix only has non-negative coefficients.
+"""
 function find_transformation_matrix(t::SVector{D,T}) where {D,T}
-    _transformation = MMatrix{D,D,T,D*D}(LinearAlgebra.I)
-    _transformation[:,1] .= t
-    transformation = SMatrix{D,D,T,D*D}(_transformation)
-    if D == 2 && issingular(transformation)
-        _transformation[:,1] .= (1, 0)
-        _transformation[:,2] .= t
-        transformation = SMatrix{D,D,T,D*D}(_transformation)
+    images_set = Set((t - floor.(Int, t),))
+    current_image = t
+    while true
+        current_image += t
+        all(isinteger, current_image) && break
+        push!(images_set, current_image - floor.(Int, current_image))
     end
-    if D == 3 && issingular(transformation)
-        _transformation[:,1] .= (1, 0, 0)
-        _transformation[:,2] .= t
-        transformation = SMatrix{D,D,T,D*D}(_transformation)
-        if issingular(transformation)
-            _transformation[:,2] .= (0, 1, 0)
-            _transformation[:,3] .= t
-            transformation = SMatrix{D,D,T,D*D}(_transformation)
+    images = collect(images_set)
+    n = length(images)
+    periodicity = 1 + length(images)
+    ret = if D == 1
+        SMatrix{1,1,T,1}(minimum(x[1] for x in images))
+    elseif D == 2
+        push!(images, SA[one(T), zero(T)], SA[zero(T), one(T)])
+        n += 2
+        transformation2 = zero(MMatrix{2,2,T,4})
+        mindet2 = (typemax(Int)-1)//1
+        best2 = (0,0)
+        for i in 1:(n-1)
+            transformation2[:,1] = images[i]
+            for j in (i+1):n
+                transformation2[:,2] = images[j]
+                d = det(transformation2)
+                if 0 < d < mindet2
+                    mindet2 = d
+                    best2 = (i,j)
+                end
+            end
         end
+        SMatrix{2,2,T,4}(images[best2[1]]..., images[best2[2]]...)
+    else
+        @toggleassert D == 3
+        oT = one(T); zT = zero(T)
+        push!(images, SA[oT, zT, zT], SA[zT, oT, zT], SA[zT, zT, oT])
+        n += 3
+        transformation3 = zero(MMatrix{3,3,T,9})
+        mindet3 = (typemax(Int)-1)//1
+        best3 = (0,0,0)
+        for i in 1:(n-1)
+            transformation3[:,1] = images[i]
+            for j in (i+1):n
+                transformation3[:,2] = images[j]
+                for k in (j+1):n
+                    transformation3[:,2] = images[k]
+                    d = det(transformation3)
+                    if 0 < d < mindet3
+                        mindet3 = d
+                        best3 = (i,j,k)
+                    end
+                end
+            end
+        end
+        SMatrix{3,3,T,9}(images[best3[1]]..., images[best3[2]]..., images[best3[3]]...)
     end
-    transformation
+    @toggleassert LinearAlgebra.det(ret) == 1//periodicity
+    ret
 end
 
 
