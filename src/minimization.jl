@@ -403,61 +403,6 @@ function orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}, m) where D
     ret
 end
 
-"""
-    find_ref_edges(net::CrystalNet{D}, collision_ranges, nodes, shrunk_pge, inv_transformation, refdict, collision_offsets) where D
-
-Find the list of edges of the subnet obtained from `net` by only keeping the vertices
-corresponding to the expansion of the `nodes` into the initial vertices they represent
-through `collision_ranges`, obtained from a valid translation.
-
-`shrunk_pge` is the `PeriodicGraphEmbedding` of `net` after grouping colliding vertices
-into "collision nodes" (one node per set of colliding vertices). The `nodes` refer to such
-collision nodes, and the correspondence between collision nodes and the initial vertices
-is given by `collision_ranges` or, equivalently, through `collision_offsets`.
-
-`inv_transformation` is the inverse transformation matrix, such that, given `pos` the
-position of a vertex in `net`, `inv_transformation*pos` is the position of that same vertex
-in the unit cell given the transformation obtained from the valid translation.
-`refdict` maps each such position (after the transformation) to the vertex number of the
-node in this new unit cell.
-
-Note: all edges, both direct and indirect, are returned.
-"""
-function find_ref_edges(net::CrystalNet{D}, collision_ranges, nodes, shrunk_pge, inv_transformation, refdict, collision_offsets, vmap) where D
-    refofss = [floor.(Int, inv_transformation * shrunk_pge[node]) for node in nodes]
-    refedges = PeriodicEdge{D}[]
-    first_collision_m1 = first(first(collision_ranges)) - 1
-
-    i = 0
-    for (_i, (_u, shrunk_ofs)) in enumerate(nodes)
-        refofs = refofss[_i]
-        for u in (_u > first_collision_m1 ? collision_ranges[_u - first_collision_m1] : _u:_u)
-            v = vmap[u]
-            i += 1
-            for x in neighbors(net.pge.g, PeriodicVertex{D}(v, shrunk_ofs))
-                pos = inv_transformation * net.pge[x]
-                ofs = floor.(Int, pos)
-                j = refdict[pos .- ofs] + collision_offsets[x.v]
-                i == j && ofs == refofs && (empty!(refedges); return refedges) # forbidden edge: abort
-                push!(refedges, PeriodicEdge{D}(i, j, ofs - refofs))
-            end
-        end
-    end
-    sort!(refedges)
-    # display(refedges)
-    @toggleassert begin # assert that each edge is unique
-        flag = true
-        for i in 1:(length(refedges)-1)
-            if refedges[i] == refedges[i+1]
-                flag = false
-                break
-            end
-        end
-        flag
-    end
-    refedges
-end
-
 
 """
     reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets) where D
@@ -554,9 +499,9 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, s
     return (new_shrunk_net, (new_net, new_collision_ranges))
 end
 
-function vmap_to_collision_offsets(vmap, collision_ranges)
+function direct_map_to_collision_offsets(direct_map, collision_ranges)
     first_collision_m1 = first(first(collision_ranges)) - 1
-    collision_offsets = zeros(Int, length(vmap))
+    collision_offsets = zeros(Int, length(direct_map))
     collision_offsets[1:first_collision_m1] .= 1
     for rnge in collision_ranges
         if collision_offsets[first(rnge)] != 0
@@ -565,17 +510,169 @@ function vmap_to_collision_offsets(vmap, collision_ranges)
             for (i, j) in enumerate(rnge)
                 @toggleassert collision_offsets[j] == 0
                 collision_offsets[j] = i
-                x = vmap[j]
-                while x != j
-                    @toggleassert collision_offsets[x] == 0
-                    collision_offsets[x] = i
-                    x = vmap[x]
+                k = direct_map[j]
+                while k != j
+                    @toggleassert collision_offsets[k] == 0
+                    collision_offsets[k] = i
+                    k = direct_map[k]
                 end
             end
         end
     end
     @toggleassert all(!iszero, collision_offsets)
     collision_offsets
+end
+
+function attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, irnge, iactual)
+    attribute_next_available_modify!(vmapprogress, 0, index, collision_ranges, direct_map, reverse_map, irnge, iactual, 0)
+end
+
+function attribute_next_available_modify!(vmapprogress, thisindex, returnto, collision_ranges, direct_map, reverse_map, irnge, iactual, exclude)
+    rnge = @view (collision_ranges[irnge])[exclude+1:end]
+    firstavailrnge = findfirst(<(0), @view reverse_map[rnge])
+    firstavailrnge isa Nothing && return false
+    if thisindex == 0
+        push!(vmapprogress, (returnto, iactual => firstavailrnge+exclude))
+    else
+        vmapprogress[thisindex] = (returnto, iactual => firstavailrnge+exclude)
+    end
+    newval = rnge[firstavailrnge]
+    direct_map[iactual] = newval
+    reverse_map[newval] = iactual
+    return true
+end
+
+function backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+    returnto, (before, idx_after) = vmapprogress[index]
+    shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
+    shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
+    wasavail_backtrack = attribute_next_available_modify!(vmapprogress, index, returnto, collision_ranges, direct_map, reverse_map, shrunk_after, before, idx_after)
+    if !wasavail_backtrack
+        backtracking = true
+        index -= 1
+    else
+        k0 = collision_ranges[-reference_direct_map[before]][idx_after]
+        reverse_map[k0] = reference_reverse_map[k0]
+        backtracking = false
+        for (_, (i, j)) in @view vmapprogress[index+1:end]
+            mi_rnge = direct_map[i] = reference_direct_map[i]
+            k = collision_ranges[-mi_rnge][j]
+            reverse_map[k] = reference_reverse_map[k]
+        end
+        resize!(vmapprogress, index)
+        index = returnto
+    end
+    backtracking, index
+end
+
+function direct_map_from_translation(shrunk_pvmap, net::CrystalNet{D,T}, collision_ranges, first_collision_m1, to_shrunk) where {D,T}
+    valid = true # determine if the translation is valid
+    shrunk_indirect_vmap = zeros(Int, length(shrunk_pvmap) - first_collision_m1)
+    for (i, (v, _)) in enumerate(@view shrunk_pvmap[first_collision_m1+1:end])
+        shrunk_indirect_vmap[v - first_collision_m1] = i
+    end
+    n = length(net.pge)
+    direct_map = zeros(Int, n)
+    reverse_map = zeros(Int, n)
+    for i in 1:first_collision_m1
+        direct_map[i] = _v = first(shrunk_pvmap[i])
+        @toggleassert reverse_map[_v] == 0
+        reverse_map[_v] = i
+    end
+    for (i, rnge) in enumerate(collision_ranges), j in rnge
+        direct_map[j] = -first(shrunk_pvmap[first_collision_m1+i]) + first_collision_m1
+        reverse_map[j] = -shrunk_indirect_vmap[i]
+    end
+    @toggleassert !any(iszero, direct_map) && !any(iszero, reverse_map)
+    reference_direct_map = copy(direct_map)
+    reference_reverse_map = copy(reverse_map)
+
+    for grand_index in (first_collision_m1+1):n
+        vgi = direct_map[grand_index]
+        vgi > 0 && continue
+        vmapprogress = Tuple{Int,Pair{Int,Int}}[]
+        grand_wasavail = attribute_next_available!(vmapprogress, 1, collision_ranges, direct_map, reverse_map, -vgi, grand_index)
+        @toggleassert grand_wasavail
+        index = 1
+        valid = false
+        backtracking = false
+
+        while index > 0
+            returnto, (before, idx_after) = vmapprogress[index]
+            shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
+            shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
+            rnge = collision_ranges[shrunk_after]
+
+            # "before" is currently mapped to "rnge[after]"
+            if backtracking
+                backtracking, index = backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+                continue
+            end
+
+            after = rnge[idx_after]
+            m = degree(net.pge.g, before)
+            if m != degree(net.pge.g, after)
+                backtracking, index = backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+                continue
+            end
+
+            hadaction = false
+            actual_neighbors = neighbors(net.pge.g, before)
+            expected_neighbors = [PeriodicVertex(reverse_map[x.v], x.ofs) for x in neighbors(net.pge.g, after)]
+
+            sort!(expected_neighbors; by=x->x.v>0 ? x : PeriodicVertex(typemin(Int) - x.v, x.ofs))
+            first_attributed_neighbor_m1 = (@something findfirst(x -> x.v > 0, expected_neighbors) length(expected_neighbors)+1) - 1
+            nonattributed_progress = falses(first_attributed_neighbor_m1)
+            idx_attributed = 1
+            failure = false
+            length(vmapprogress) == 3 && error("!")
+            for actual in actual_neighbors
+                if first_attributed_neighbor_m1+idx_attributed ≤ m
+                    expected = expected_neighbors[first_attributed_neighbor_m1+idx_attributed]
+                    if actual == expected
+                        idx_attributed += 1
+                        continue
+                    end
+                    if actual.v == expected.v
+                        failure = true
+                        backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+                        break
+                    end
+                end
+
+                shrunk_actual = PeriodicVertex(-to_shrunk[actual.v - first_collision_m1], actual.ofs)
+                failure = true
+                for i in 1:first_attributed_neighbor_m1
+                    nonattributed_progress[i] && continue
+                    expected_nonattributed = expected_neighbors[i]
+                    if expected_nonattributed == shrunk_actual
+                        nonattributed_progress[i] = true
+                        targetrnge = first(shrunk_pvmap[to_shrunk[actual.v-first_collision_m1]])
+                        wasavail = attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, targetrnge, actual.v)
+                        if wasavail
+                            hadaction = true
+                            failure = false
+                        else
+                            backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, first_collision_m1, reference_direct_map, reference_reverse_map)
+                        end
+                        break
+                    end
+                end
+                failure && break
+            end
+            failure && continue
+            # TODO: remove identical edges in both expected_neighbors and actual_neighbors, then make both lists match. Check that the offsets match and that each vertex belongs its proper collision node.
+
+            if !hadaction && index == length(vmapprogress)
+                valid = true
+                break
+            end
+            index += 1
+        end
+
+        valid || break
+    end
+    valid ? direct_map : nothing
 end
 
 
@@ -591,73 +688,18 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
     end
     isempty(translations_to_check) && return nothing
     net, collision_ranges = collisions
-    n = length(net.pge)
     first_collision_m1 = first(first(collision_ranges)) - 1
-    collision_offsets = zeros(Int, n)
-    collision_lengths = ones(Int, n)
-    for rnge in collision_ranges
-        for (i, x) in enumerate(rnge)
-            collision_offsets[x] = i-1
-            collision_lengths[x] = length(rnge)
-        end
-    end
+
+    to_shrunk = [i for (i, rnge) in enumerate(collision_ranges) for _ in rnge]
+    # to_shrunk[j-first_collision_m1] is the index of the shrunk node corresponding to vertex j
 
     for (t, shrunk_pvmap) in translations_to_check
-
-        ## First, compute the transformation matrix corresponding to this valid translation
-        transformation = find_transformation_matrix(t)
-        inv_transformation = inv(transformation)
-
-        ## Identify how this transformation divides the net into subnets related by the translation
-        subgraphlists = orbits_pvmap(shrunk_pvmap, Int(det(inv_transformation)))
-        subgraphlist_head, subgraphlists_tail = Iterators.peel(subgraphlists)
-
-        ## Take one such subnet and compute its corresponding periodic graph
-        refdict = Dict{SVector{D,T},Int}() # map each vertex position in the new cell to the index of its first node
-        shrunk_refdict = Dict{SVector{D,T},Int}() # same as refdict but without the collisions
-        refpos = Vector{SVector{D,T}}(undef, length(subgraphlist_head)) # inverse of shrunk_refdict
-        first_collision_subgraphlist = 0 # index of the first collision node in the new reduced graph
-        counter_refdict = 1
-        for (i, node) in enumerate(subgraphlist_head)
-            oldpos = shrunk_net.pge[node]
-            npos = inv_transformation * oldpos
-            newpos = npos .- floor.(Int, npos)
-            @toggleassert !haskey(refdict, newpos)
-            refdict[newpos] = counter_refdict
-            shrunk_refdict[newpos] = i
-            refpos[i] = newpos
-            if first_collision_subgraphlist == 0 && node.v > first_collision_m1
-                first_collision_subgraphlist = i
-            end
-            counter_refdict += collision_lengths[node.v]
-        end
-        @toggleassert length(refdict) == length(refpos) # assert that all positions are unique
-        @toggleassert first_collision_subgraphlist == 1 + (length(shrunk_net.pge) - length(collision_ranges))*length(subgraphlist_head)÷length(shrunk_net.pge)
-
-        vmap = collect(1:n)
-        refedges = find_ref_edges(net, collision_ranges, subgraphlist_head, shrunk_net.pge, inv_transformation, refdict, collision_offsets, vmap)
-        cpci = ContiguousPlainChangesIterator(collect(Iterators.drop(collision_ranges, 1)))
-        valid = false
-        for swap in cpci
-            valid = true
-            # refedges will be the edges of the periodic graph obtained on the subnet
-            refedges = find_ref_edges(net, collision_ranges, subgraphlist_head, shrunk_net.pge, inv_transformation, refdict, collision_offsets, vmap)
-            for subgraphlist in subgraphlists_tail
-                newedges = find_ref_edges(net, collision_ranges, subgraphlist, shrunk_net.pge, inv_transformation, refdict, collision_offsets, vmap)
-                if newedges != refedges
-                    valid = false
-                    break
-                end
-            end
-            valid && break
-
-            collision_offsets[swap], collision_offsets[swap+1] = collision_offsets[swap+1], collision_offsets[swap]
-            vmap[swap], vmap[swap+1] = vmap[swap+1], vmap[swap]
-        end
-
-        if valid # found a valid translation!
-            collision_offsets_final = vmap_to_collision_offsets(vmap, collision_ranges)
-            return reduce_unstable_net(shrunk_net, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets_final)
+        direct_map = direct_map_from_translation(shrunk_pvmap, net, collision_ranges, first_collision_m1, to_shrunk)
+        if !(direct_map isa Nothing) # found a valid translation!
+            @toggleassert isperm(direct_map)
+            collision_offsets = direct_map_to_collision_offsets(direct_map, collision_ranges)
+            transformation = find_transformation_matrix(t)
+            return reduce_unstable_net(shrunk_net, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets)
         end
     end
     return nothing
