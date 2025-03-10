@@ -610,8 +610,19 @@ function backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_r
     backtracking, index
 end
 
-function direct_map_from_translation(shrunk_pvmap, net, collision_ranges, first_collision_m1, to_shrunk)
+"""
+    translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrunk)
+
+Given a `shrunk_pvmap` representing the mapping of the shrunk vertices obtained from a
+translation (valid on the shrunk net), return a `direct_map` which is a mapping of the
+vertex numbers of the initial `net` obtained from the same translation.
+
+If no such `direct_map` can be found, i.e. if the translation is not valid on the initial
+net, return `nothing`.
+"""
+function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrunk)
     valid = true # determine if the translation is valid
+    first_collision_m1 = first(first(collision_ranges)) - 1
     shrunk_indirect_vmap = zeros(Int, length(shrunk_pvmap) - first_collision_m1)
     for (i, (v, _)) in enumerate(@view shrunk_pvmap[first_collision_m1+1:end])
         shrunk_indirect_vmap[v - first_collision_m1] = i
@@ -743,7 +754,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
     # to_shrunk[j-first_collision_m1] is the index of the shrunk node corresponding to vertex j
 
     for (t, shrunk_pvmap) in translations_to_check
-        direct_map = direct_map_from_translation(shrunk_pvmap, net, collision_ranges, first_collision_m1, to_shrunk)
+        direct_map = translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrunk)
         if !(direct_map isa Nothing) # found a valid translation!
             @toggleassert isperm(direct_map)
             collision_offsets = direct_map_to_collision_offsets(direct_map, collision_ranges)
