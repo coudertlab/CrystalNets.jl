@@ -398,10 +398,10 @@ end
 
 
 """
-    orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}, m) where D
+    orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}) where D
 
 Given a list `shrunk_pvmap` that maps each vertex `i` of the graph to a new vertex
-`shrunk_pvmap[i]` obtained from a valid translation of the graph, return a list of `m`
+`shrunk_pvmap[i]` obtained from a valid translation of the graph, return a list of
 sublists `subgraphlists` such that:
 - `subgraphlists[1]` is mapped to `subgraphlists[2]`, which is mapped to `subgraphlists[3]`,
   etc., and `subgraphlists[end]` is mapped to `subgraphlists[1]` plus an offset (which is
@@ -411,7 +411,7 @@ sublists `subgraphlists` such that:
 - within each element of `subgraphlists`, the collision nodes appear after the rest.
 - all vertices in `subgraphlists[1]` have a zero offset.
 """
-function orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}, m) where D
+function orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}) where D
     orbits = Vector{PeriodicVertex{D}}[]
     n = length(shrunk_pvmap)
     visited = falses(n)
@@ -421,26 +421,18 @@ function orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}, m) where D
         tot_ofs = zero(SVector{D,Int})
         orbit = [PeriodicVertex{D}(i)]
         j, ofs = shrunk_pvmap[i]
-        k = 1
         while j != i
             @toggleassert !visited[j]
             visited[j] = true
             tot_ofs += ofs
-            if k == m
-                k = 0
-                tot_ofs = zero(SVector{D,Int})
-                push!(orbits, orbit)
-                orbit = PeriodicVertex{D}[]
-            end
             push!(orbit, PeriodicVertex{D}(j, tot_ofs))
             j, ofs = shrunk_pvmap[j]
-            k += 1
         end
-        @toggleassert k == m
         push!(orbits, orbit)
     end
-    @toggleassert m == length(first(orbits))
+    @toggleassert allequal(length, orbits)
 
+    m = length(first(orbits))
     ret = Vector{Vector{PeriodicVertex{D}}}(undef, m)
     for i in 1:m
         ret[i] = [orbit[i] for orbit in orbits]
@@ -466,7 +458,9 @@ Return `(new_shrunk_net, (new_net, new_collision_ranges))` which mirror the inpu
 """
 function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets) where D
     inv_transformation = inv(transformation)
-    subgraphlists = orbits_pvmap(shrunk_pvmap, Int(det(inv_transformation)))
+    periodicity = Int(det(inv_transformation))
+    subgraphlists = orbits_pvmap(shrunk_pvmap)
+    @toggleassert periodicity == length(subgraphlists)
     _subgraphlist_head = first(subgraphlists)
     @toggleassert all(iszero, last.(_subgraphlist_head))
     subgraphlist_head = first.(_subgraphlist_head)
