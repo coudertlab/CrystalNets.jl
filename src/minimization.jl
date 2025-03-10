@@ -585,20 +585,20 @@ function backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_r
     returnto, (before, idx_after) = vmapprogress[index]
     shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
     shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
-    wasavail_backtrack = attribute_next_available_modify!(vmapprogress, index, returnto, collision_ranges, direct_map, reverse_map, shrunk_after-first_collision_m1, before, idx_after)
-    if !wasavail_backtrack
-        backtracking = true
-        index -= 1
-    else
         k0 = collision_ranges[-reference_direct_map[before]][idx_after]
         reverse_map[k0] = reference_reverse_map[k0]
-        backtracking = false
         for (_, (i, j)) in @view vmapprogress[index+1:end]
             mi_rnge = direct_map[i] = reference_direct_map[i]
             k = collision_ranges[-mi_rnge][j]
             reverse_map[k] = reference_reverse_map[k]
         end
         resize!(vmapprogress, index)
+    wasavail_backtrack = attribute_next_available_modify!(vmapprogress, index, returnto, collision_ranges, direct_map, reverse_map, shrunk_after-first_collision_m1, before, idx_after)
+    if !wasavail_backtrack
+        backtracking = true
+        index -= 1
+    else
+        backtracking = false
         index = returnto
     end
     backtracking, index
