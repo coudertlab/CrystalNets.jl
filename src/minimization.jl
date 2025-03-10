@@ -565,7 +565,7 @@ function backtrack_to!(vmapprogress, index, direct_map, reverse_map, collision_r
     backtracking, index
 end
 
-function direct_map_from_translation(shrunk_pvmap, net::CrystalNet{D,T}, collision_ranges, first_collision_m1, to_shrunk) where {D,T}
+function direct_map_from_translation(shrunk_pvmap, net, collision_ranges, first_collision_m1, to_shrunk)
     valid = true # determine if the translation is valid
     shrunk_indirect_vmap = zeros(Int, length(shrunk_pvmap) - first_collision_m1)
     for (i, (v, _)) in enumerate(@view shrunk_pvmap[first_collision_m1+1:end])
@@ -620,9 +620,9 @@ function direct_map_from_translation(shrunk_pvmap, net::CrystalNet{D,T}, collisi
             actual_neighbors = neighbors(net.pge.g, before)
             expected_neighbors = [begin
                 w = reverse_map[x.v]
-                src = to_shrunk[after - first_collision_m1]
-                dst = x.v ≤ first_collision_m1 ? x.v : to_shrunk[x.v - first_collision_m1]
-                PeriodicVertex(w, x.ofs + shrunk_pvmap[dst].ofs - shrunk_pvmap[src].ofs)
+                src = to_shrunk[before - first_collision_m1]
+                dst = w < 0 ? -w + first_collision_m1 : w ≤ first_collision_m1 ? w : to_shrunk[w - first_collision_m1]
+                PeriodicVertex(w, x.ofs + shrunk_pvmap[src].ofs - shrunk_pvmap[dst].ofs)
             end for x in neighbors(net.pge.g, after)]
 
             sort!(expected_neighbors; by=x->x.v>0 ? x : PeriodicVertex(typemin(Int) - x.v, x.ofs))
