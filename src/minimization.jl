@@ -381,7 +381,7 @@ function find_transformation_matrix(t::SVector{D,T}) where {D,T}
             for j in (i+1):n
                 transformation3[:,2] = images[j]
                 for k in (j+1):n
-                    transformation3[:,2] = images[k]
+                    transformation3[:,3] = images[k]
                     d = abs(det(transformation3))
                     if 0 < d < mindet3
                         mindet3 = d
@@ -651,6 +651,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
         backtracking = false
 
         while index > 0
+            # @show vmapprogress
             returnto, (before, idx_after) = vmapprogress[index]
             shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
             shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
@@ -677,54 +678,67 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                 dst = w < 0 ? -w + first_collision_m1 : w ≤ first_collision_m1 ? w : to_shrunk[w - first_collision_m1]
                 PeriodicVertex(w, x.ofs + shrunk_pvmap[src].ofs - shrunk_pvmap[dst].ofs)
             end for x in neighbors(net.pge.g, after)]
+            # a negative vertex in expected_neighbors indicates a vertex to be assigned part of a given collision node (whose index is the opposite of that given)
 
             sort!(expected_neighbors; by=x->x.v>0 ? x : PeriodicVertex(typemin(Int) - x.v, x.ofs))
             first_attributed_neighbor_m1 = (@something findfirst(x -> x.v > 0, expected_neighbors) length(expected_neighbors)+1) - 1
-            nonattributed_progress = falses(first_attributed_neighbor_m1)
-            idx_attributed = 1
+            met_attributed = falses(m)
             failure = false
-            backtrack_target = 0
-            for actual in actual_neighbors
-                if first_attributed_neighbor_m1+idx_attributed ≤ m
-                    expected = expected_neighbors[first_attributed_neighbor_m1+idx_attributed]
+            for i_attributed in (first_attributed_neighbor_m1+1):m
+                failure = true
+                expected = expected_neighbors[i_attributed]
+                for (i_actual, actual) in enumerate(actual_neighbors)
+                    met_attributed[i_actual] && continue
                     if actual == expected
-                        idx_attributed += 1
-                        continue
-                    end
-                    if actual.v == expected.v
-                        failure = true
-                        backtrack_target = length(vmapprogress)
+                        met_attributed[i_actual] = true
+                        failure = false
                         break
                     end
                 end
+                failure && break
+            end
+            if failure
+                # TODO: improve precision of backtrack_target for performance
+                backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), backtrackstack)
+                continue
+            end
 
+            nonattributed_progress = falses(first_attributed_neighbor_m1)
+            backtrack_target = 0
+            for (i_actual, actual) in enumerate(actual_neighbors)
+                met_attributed[i_actual] && continue
+
+                # mapping of a colliding vertex
                 shrunk_actual = PeriodicVertex(-to_shrunk[actual.v - first_collision_m1] + first_collision_m1, actual.ofs)
+                targetrnge = first(shrunk_pvmap[to_shrunk[actual.v - first_collision_m1]]) - first_collision_m1
+
+                # check that there is an available expected neighbor compatible with the actual one
                 failure = true
                 for i in 1:first_attributed_neighbor_m1
                     nonattributed_progress[i] && continue
-                    expected_nonattributed = expected_neighbors[i]
-                    if expected_nonattributed == shrunk_actual
-                        nonattributed_progress[i] = true
-                        targetrnge = first(shrunk_pvmap[to_shrunk[actual.v-first_collision_m1]]) - first_collision_m1
-                        attributed_previously = direct_map[actual.v]
-                        if attributed_previously > 0
-                            if attributed_previously in collision_ranges[targetrnge]
-                                failure = false
-                            else
-                                backtrack_target = findlast(x -> first(x[2]) == actual.v, vmapprogress)
-                                break
-                            end
-                        else
-                            wasavail = attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, targetrnge, actual.v)
-                            if wasavail
-                                hadaction = true
-                                failure = false
-                            else
-                                backtrack_target = length(vmapprogress)
-                                break
-                            end
-                        end
+                    expected_neighbors[i] == shrunk_actual || continue
+                    nonattributed_progress[i] = true
+                    failure = false
+                    break
+                end
+                failure && break
+
+                attributed_previously = direct_map[actual.v]
+                if attributed_previously > 0
+                    # this situation can happen due to interference of a previous iteration
+                    # of the "for actual in actual_neighbors" loop. For example, if there
+                    # are two neighbors with the same vertex number but different offsets
+                    if !(attributed_previously in collision_ranges[targetrnge])
+                        backtrack_target = findlast(x -> first(x[2]) == actual.v, vmapprogress)
                         break
+                    end
+                else
+                    wasavail = attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, targetrnge, actual.v)
+                    if wasavail
+                        hadaction = true
+                    else
+                        failure = true
+                        backtrack_target = length(vmapprogress)
                     end
                 end
                 failure && break
