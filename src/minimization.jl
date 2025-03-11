@@ -565,20 +565,51 @@ function direct_map_to_collision_offsets(direct_map, collision_ranges, periodici
     collision_offsets
 end
 
-function attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, irnge, iactual)
-    attribute_next_available_modify!(vmapprogress, 0, index, collision_ranges, direct_map, reverse_map, irnge, iactual, 0)
+# ensure that there cannot be any orbit of the form i -> ... -> j -> ... where i and j are in the same collision node
+function find_necessary_image(iactual, (direct_map, reverse_map, collision_ranges, to_shrunk))
+    first_collision_m1 = first(first(collision_ranges)) - 1
+    directactual = direct_map[iactual]
+    irnge = directactual < 0 ? -directactual : (to_shrunk[directactual-first_collision_m1] - first_collision_m1)
+    currentrnge = to_shrunk[iactual-first_collision_m1] - first_collision_m1
+    postprev = iactual
+    prev = reverse_map[postprev]
+    niter = 0
+    nitermax = length(direct_map)
+    while niter < nitermax && prev > 0 && to_shrunk[prev-first_collision_m1] != irnge
+        niter += 1
+        postprev = prev
+        prev = reverse_map[postprev]
+    end
+    niter == nitermax && return -1
+    prev > 0 && return prev
+    -prev == currentrnge && return postprev
+    return 0
 end
 
-function attribute_next_available_modify!(vmapprogress, thisindex, returnto, collision_ranges, direct_map, reverse_map, irnge, iactual, exclude)
+function attribute_next_available!(vmapprogress, index, iactual, modifystack)
+    attribute_next_available_modify!(vmapprogress, 0, index, iactual, 0, modifystack)
+end
+
+function attribute_next_available_modify!(vmapprogress, thisindex, returnto, iactual, exclude, modifystack)
+    direct_map, reverse_map, collision_ranges, to_shrunk = modifystack
+    first_collision_m1 = first(first(collision_ranges)) - 1
+    directactual = direct_map[iactual]
+    irnge = directactual < 0 ? -directactual : (to_shrunk[directactual-first_collision_m1] - first_collision_m1)
+    necessaryimage = find_necessary_image(iactual, modifystack)
+    necessaryimage == -1 && return false
     rnge = @view (collision_ranges[irnge])[exclude+1:end]
-    firstavailrnge = findfirst(<(0), @view reverse_map[rnge])
-    firstavailrnge isa Nothing && return false
-    if thisindex == 0
-        push!(vmapprogress, (returnto, iactual => firstavailrnge+exclude))
+    idxinrnge = if necessaryimage > 0
+        necessaryimage in rnge ? necessaryimage-first(rnge)+1 : nothing
     else
-        vmapprogress[thisindex] = (returnto, iactual => firstavailrnge+exclude)
+        findfirst(<(0), @view reverse_map[rnge])
     end
-    newval = rnge[firstavailrnge]
+    idxinrnge isa Nothing && return false
+    if thisindex == 0
+        push!(vmapprogress, (returnto, iactual => idxinrnge+exclude))
+    else
+        vmapprogress[thisindex] = (returnto, iactual => idxinrnge+exclude)
+    end
+    newval = rnge[idxinrnge]
     previous = direct_map[iactual]
     @toggleassert previous != newval
     direct_map[iactual] = newval
@@ -589,18 +620,16 @@ function attribute_next_available_modify!(vmapprogress, thisindex, returnto, col
     return true
 end
 
-function backtrack_to!(vmapprogress, index, (direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, reference_direct_map, reference_reverse_map))
-    first_collision_m1 = first(first(collision_ranges)) - 1
+function backtrack_to!(vmapprogress, index, (modifystack, shrunk_pvmap, reference_direct_map, reference_reverse_map))
+    direct_map, reverse_map, collision_ranges, _ = modifystack
     returnto, (before, idx_after) = vmapprogress[index]
-    shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
-    shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
     for (_, (i, j)) in @view vmapprogress[index+1:end]
         mi_rnge = direct_map[i] = reference_direct_map[i]
         k = collision_ranges[-mi_rnge][j]
         reverse_map[k] = reference_reverse_map[k]
     end
     resize!(vmapprogress, index)
-    wasavail_backtrack = attribute_next_available_modify!(vmapprogress, index, returnto, collision_ranges, direct_map, reverse_map, shrunk_after-first_collision_m1, before, idx_after)
+    wasavail_backtrack = attribute_next_available_modify!(vmapprogress, index, returnto, before, idx_after, modifystack)
     if wasavail_backtrack # stop backtracking
         false, returnto
     else # continue backtracking
@@ -641,13 +670,14 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
         reverse_map[j] = -shrunk_indirect_vmap[i]
     end
     @toggleassert !any(iszero, direct_map) && !any(iszero, reverse_map)
-    backtrackstack = (direct_map, reverse_map, collision_ranges, to_shrunk, shrunk_pvmap, copy(direct_map), copy(reverse_map))
+    modifystack = direct_map, reverse_map, collision_ranges, to_shrunk
+    backtrackstack = (modifystack, shrunk_pvmap, copy(direct_map), copy(reverse_map))
 
     for grand_index in (first_collision_m1+1):n
         vgi = direct_map[grand_index]
         vgi > 0 && continue
         vmapprogress = Tuple{Int,Pair{Int,Int}}[]
-        grand_wasavail = attribute_next_available!(vmapprogress, 1, collision_ranges, direct_map, reverse_map, -vgi, grand_index)
+        grand_wasavail = attribute_next_available!(vmapprogress, 1, grand_index, modifystack)
         @toggleassert grand_wasavail
         index = 1
         valid = false
@@ -736,7 +766,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                         break
                     end
                 else
-                    wasavail = attribute_next_available!(vmapprogress, index, collision_ranges, direct_map, reverse_map, targetrnge, actual.v)
+                    wasavail = attribute_next_available!(vmapprogress, index, actual.v, modifystack)
                     if wasavail
                         hadaction = true
                     else
