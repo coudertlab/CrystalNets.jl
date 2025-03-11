@@ -7,7 +7,7 @@ using Graphs
 using Combinatorics
 import Base.Threads
 
-CrystalNets.toggle_export(false)
+CNets.toggle_export(false)
 
 function _finddirs()
     root = dirname(dirname(pathof(CrystalNets)))
@@ -17,20 +17,20 @@ end
 function capture_out(name)
     result = open(name, "w") do out
         redirect_stderr(devnull) do
-            redirect_stdout(CrystalNets.julia_main, out)
+            redirect_stdout(CNets.julia_main, out)
         end
     end
     written = readlines(name)
     return result, written
 end
 
-const safeARCHIVE = deepcopy(CrystalNets.CRYSTALNETS_ARCHIVE)
-const safeREVERSE = deepcopy(CrystalNets.REVERSE_CRYSTALNETS_ARCHIVE)
+const safeARCHIVE = deepcopy(CNets.CRYSTALNETS_ARCHIVE)
+const safeREVERSE = deepcopy(CNets.REVERSE_CRYSTALNETS_ARCHIVE)
 function __reset_archive!(safeARCHIVE, safeREVERSE)
-    empty!(CrystalNets.CRYSTALNETS_ARCHIVE)
-    empty!(CrystalNets.REVERSE_CRYSTALNETS_ARCHIVE)
-    merge!(CrystalNets.CRYSTALNETS_ARCHIVE, safeARCHIVE)
-    merge!(CrystalNets.REVERSE_CRYSTALNETS_ARCHIVE, safeREVERSE)
+    empty!(CNets.CRYSTALNETS_ARCHIVE)
+    empty!(CNets.REVERSE_CRYSTALNETS_ARCHIVE)
+    merge!(CNets.CRYSTALNETS_ARCHIVE, safeARCHIVE)
+    merge!(CNets.REVERSE_CRYSTALNETS_ARCHIVE, safeREVERSE)
     nothing
 end
 
@@ -120,7 +120,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
         @test string(webzekB[1]) == "AllNodes, SingleNodes, Standard, PEM: dia\nPE: dia-a"
     end
 
-    CrystalNets.toggle_warning(false)
+    CNets.toggle_warning(false)
 
     @test mofdataset["MIL-53.cif"] == determine_topology(joinpath(cifs, "MIL-53.cif"); kwargs...)
     @test_throws ArgumentError determine_topology(joinpath(cifs, "MIL-53.cif"); kwargs..., bonding=Bonding.Input)
@@ -145,7 +145,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     @test wemfif[AllNodes] == wemfif[SingleNodes] == wemfif[Standard] == wemfif[PEM]
     @test wemfif[AllNodes].name == "dia"
     @test wemfif[PE].name == "crs"
-    CrystalNets.toggle_warning(true)
+    CNets.toggle_warning(true)
 
     println(stderr, "The following warning about symmetry and the three warnings about 0-dimensional structures are expected.")
 
@@ -182,14 +182,14 @@ end
 @testset "Archive" begin
     @info "Checking that all known topologies are recognized (this can take a few minutes)."
     Threads.nthreads() == 1 && @info "Use multiple threads to reduce this time"
-    reverse_archive = collect(CrystalNets.CRYSTALNETS_ARCHIVE)
+    reverse_archive = collect(CNets.CRYSTALNETS_ARCHIVE)
     failurelock = ReentrantLock()
     failures = 0
     Threads.@threads for (genome, id) in reverse_archive
         test = try
             topological_genome(CrystalNet(PeriodicGraph(genome))).name == id
         catch e
-            CrystalNets.isinterrupt(e) && rethrow()
+            CNets.isinterrupt(e) && rethrow()
             false
         end
         if !test
@@ -211,7 +211,7 @@ end
     failures = 0
     Threads.@threads for target in targets
         @info "Testing $target"
-        graph = PeriodicGraph(CrystalNets.REVERSE_CRYSTALNETS_ARCHIVE[target])
+        graph = PeriodicGraph(CNets.REVERSE_CRYSTALNETS_ARCHIVE[target])
         for k in 1:10
             superg = make_supercell(graph, clamp.(rand(0:fld(30, nv(graph)), 3), 1, 5))
             n = nv(superg)
@@ -239,7 +239,7 @@ end
 
 # # The following testset is too long to be run on CI
 # @testset "Full-randomization test 3D" begin
-#     reverse_archive3D = Tuple{String,String}[(g, id) for (g, id) in CrystalNets.CRYSTALNETS_ARCHIVE if g[1] == '3']
+#     reverse_archive3D = Tuple{String,String}[(g, id) for (g, id) in CNets.CRYSTALNETS_ARCHIVE if g[1] == '3']
 #     failurelock = ReentrantLock()
 #     failures = 0
 #     Threads.@threads for (genome, id) in reverse_archive3D
@@ -286,7 +286,7 @@ end
 
     empty!(ARGS)
     path = joinpath(cifs, "ABW.cif")
-    push!(ARGS, "-a", joinpath(CrystalNets.arc_location, "rcsr.arc"), path)
+    push!(ARGS, "-a", joinpath(CNets.arc_location, "rcsr.arc"), path)
     result, written = capture_out(out)
     @test result == 0
     @test written == ["sra"]
@@ -301,7 +301,7 @@ end
 
     empty!(ARGS)
     path = joinpath(cifs, "RRO.cif")
-    push!(ARGS, "-a", joinpath(CrystalNets.arc_location, "rcsr.arc"), path)
+    push!(ARGS, "-a", joinpath(CNets.arc_location, "rcsr.arc"), path)
     result, written = capture_out(out)
     @test result == 0
     @test startswith(only(written), "UNKNOWN")
@@ -396,16 +396,11 @@ end
     empty!(ARGS)
     append!(ARGS, safeARGS)
     if basename(@__DIR__) != "test" # if used with include("runtests.jl")
-        CrystalNets._reset_archive!()
+        CNets._reset_archive!()
     end
 end
 
 @testset "Unstable nets" begin
-    minimize_to_unstable = PeriodicGraph("2 1 1 0 1 1 3 0 0 1 4 0 0 1 5 0 0 1 6 0 0 2 2 0 1 2 3 1 0 2 4 1 0 2 5 0 0 2 6 0 0")
-    net_minimize_to_unstable = topological_genome(CrystalNet(minimize_to_unstable))
-    @test startswith(string(net_minimize_to_unstable), "unstable 2")
-
-
     mini2 = PeriodicGraph("2  1 4 0 0  1 2 0 0  1 3 0 0  2 3 0 1  4 5 0 0  4 6 0 0  5 6 1 0")
     mini3_3 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
     mini3_2 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
@@ -431,6 +426,9 @@ end
                              20 2 0 0  20 3 0 0  20 1 1 1  20 5 1 0  20 18 0 1  20 17 0 1  20 19 0 1
                              2 5 1 0  7 8 0 -1  10 11 0 0  14 16 0 0  18 19 0 0");
 
+    # Nets with invalid translations
+    u1D = PeriodicGraph("1  1 2 0  2 1 1  1 3 0 3 4 0 3 5 0 4 6 0 5 6 0 4 7 0 5 7 0  2 8 0 8 9 0 8 10 0 9 10 0 9 11 0 10 12 0 11 12 0")
+    u2D = PeriodicGraph("2  1 5 0 0  1 8 0 0  1 10 -1 0  1 9 -1 0  2 6 0 0  2 7 0 0  2 6 0 1  2 7 0 1  3 11 0 0  3 12 0 0  3 11 0 1  3 12 0 1  4 5 0 0  4 8 0 0  4 9 0 0  4 10 0 0  5 8 0 0  5 7 0 0  6 8 0 0  9 11 0 0  10 12 0 0  11 12 0 0")
 
     _netgm3 = CrystalNet(make_supercell(gm, (3, 1))[[8, 11, 6, 12, 3, 2, 7, 9, 10, 4, 1, 5]])
     collisions3, shrunk_net3, equiv_net3 = CNets.collision_nodes(_netgm3)
@@ -439,9 +437,9 @@ end
     pvmap3 = CNets.CheckSymmetryWithCollisions(collisions3, false)(shrunk_net3.pge, t3, nothing, shrunk_net3.types)
     @test pvmap3 == PeriodicVertex2D[(2, (0,0)), (3, (0,0)), (1, (1,0)), (5, (0,0)), (6, (0,0)), (4, (1,0))]
     to_shrunk3 = [i+3 for (i, rnge) in enumerate(collisions3) for _ in rnge]
-    direct_map3 = translation_to_direct_map(pvmap3, equiv_net3, collisions3, to_shrunk3)
+    direct_map3 = CNets.translation_to_direct_map(pvmap3, equiv_net3, collisions3, to_shrunk3)
     @test direct_map3 == [2, 3, 1, 8, 7, 9, 10, 12, 11, 5, 6, 4]
-    collision_offsets3 = direct_map_to_collision_offsets(direct_map3, collisions3)
+    collision_offsets3 = CNets.direct_map_to_collision_offsets(direct_map3, collisions3)
     new_shrunk_net3, (new_net3, new_collision_ranges3) = CNets.reduce_unstable_net(shrunk_net3, equiv_net3, collisions3, pvmap3, CNets.find_transformation_matrix(t3), collision_offsets3)
     collision_offsets3_alt = [1, 1, 1, 1, 2, 3, 2, 1, 3, 3, 2, 1]
     new_shrunk_net3_alt, (new_net3_alt, new_collision_ranges3_alt) = CNets.reduce_unstable_net(shrunk_net3, equiv_net3, collisions3, pvmap3, CNets.find_transformation_matrix(t3), collision_offsets3)
@@ -456,7 +454,7 @@ end
     pvmap4 = check_symmetry4(shrunk_net4.pge, t4, nothing, shrunk_net4.types)
     @test pvmap4 == PeriodicVertex2D[(4, (0,0)), (3, (0,1)), (2, (1,0)), (1, (1,1)), (8, (0,1)), (7, (0,0)), (6, (1,1)), (5, (1,0))]
     collision_offsets4 = [1, 1, 1, 1, 1, 2, 3, 3, 2, 1, 2, 1, 3, 3, 1, 2]
-    @test direct_map_to_collision_offsets([4, 3, 2, 1, 10, 9, 8, 13, 11, 12, 16, 15, 14, 7, 5, 6], [5:7,8:10,11:13,14:16]) == collision_offsets4
+    @test CNets.direct_map_to_collision_offsets([4, 3, 2, 1, 10, 9, 8, 13, 11, 12, 16, 15, 14, 7, 5, 6], [5:7,8:10,11:13,14:16]) == collision_offsets4
     new_shrunk_net4, (new_net4, new_collision_ranges4) = CNets.reduce_unstable_net(shrunk_net4, equiv_net4, collision_ranges4, pvmap4, CNets.find_transformation_matrix(t4), collision_offsets4)
 
     t2 = last(CNets.possible_translations(new_shrunk_net4)[2])
@@ -467,14 +465,16 @@ end
     new_shrunk_net2, (new_net2, new_collision_ranges2) = CNets.reduce_unstable_net(new_shrunk_net4, new_net4, new_collision_ranges4, pvmap2, CNets.find_transformation_matrix(t2), collision_offsets2)
     @test topological_genome(new_net2) == topological_genome(CrystalNet(gm))
 
+    @test nv(CNets.one_topology(topological_genome(u1D)).genome) == 12
+
     unstabletry = Union{PeriodicGraph1D,PeriodicGraph2D,PeriodicGraph3D}[
-        mini2, mini3_2, mini3_3, small, u1A, u1B, u2A, u2B, u2C, u3A, u3B, gm
+        mini2, mini3_2, mini3_3, small, u1A, u1B, u2A, u2B, u2C, u3A, u3B, gm, u1D, u2D
     ]
 
     failurelock = ReentrantLock()
     failures = 0
     Threads.@threads for graph in unstabletry
-        genome = topological_genome(CrystalNet(graph))
+        genome = CNets.one_topology(topological_genome(graph))
         @test !genome.unstable
         N = ndims(graph)
         for k in 1:40
@@ -485,7 +485,7 @@ end
             offsets = [SVector{N,Int}([rand(-3:3) for _ in 1:N]) for _ in 1:n]
             axesperm = randperm(N)
             newgraph = swap_axes!(offset_representatives!(supercell[r], offsets), axesperm)
-            newgenome = topological_genome(CrystalNet(newgraph))
+            newgenome = CNets.one_topology(topological_genome(newgraph))
             if newgenome != genome
                 lock(failurelock) do
                     global failures
