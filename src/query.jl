@@ -25,12 +25,19 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
         widen_flag = false
         unstable_flag = false
         try
-            shrunk_net, newcollisions = minimize(shrunk_net, collisions isa CollisionList ? collisions : (equiv_net, collisions))
-            if newcollisions isa CollisionList && (!(collisions isa CollisionList) || (isempty(newcollisions.list) && !isempty(collisions.list)))
-                unstable_flag = true
+            shrunk_net, collisions = if !isempty(collisions)
+                collision_ranges = collisions isa CollisionList ? build_collision_ranges(collisions, length(shrunk_net.pge)) : collisions
+                minimize(shrunk_net, (equiv_net, collision_ranges))
             else
-                collisions = newcollisions
+                collisions::CollisionList
+                minimize(shrunk_net, collisions)
             end
+            # shrunk_net, newcollisions = minimize(shrunk_net, collisions isa CollisionList ? collisions : (equiv_net, collisions))
+            # if newcollisions isa CollisionList && (!(collisions isa CollisionList) || (isempty(newcollisions.list) && !isempty(collisions.list)))
+            #     unstable_flag = true
+            # else
+            #     collisions = newcollisions
+            # end
         catch e
             isinterrupt(e) && rethrow()
             if T == Rational{BigInt} || !isoverfloworinexact(e)
@@ -43,11 +50,11 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
             newnet = CrystalNet{D,widen(T)}(net; ignore_types=false)
             return topological_genome(newnet)
         end
-        if unstable_flag
-            collisions::CollisionList
-            collision_ranges = build_collision_ranges(collisions, length(shrunk_net.pge))
-            shrunk_net, collisions = minimize(shrunk_net, (equiv_net, collision_ranges))
-        end
+        # if unstable_flag
+        #     collisions::CollisionList
+        #     collision_ranges = build_collision_ranges(collisions, length(shrunk_net.pge))
+        #     shrunk_net, collisions = minimize(shrunk_net, (equiv_net, collision_ranges))
+        # end
     end
 
     export_net = isempty(net.options.export_net) ? isempty(net.options._pos) ?

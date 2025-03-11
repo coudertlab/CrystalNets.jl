@@ -66,9 +66,6 @@ Base.size(::EmptyList) = (0,)
     CollisionList <: AbstractVector{CollisionNode}
 
 List of [`CollisionNode`](@ref).
-
-Also contains a `priorities` field that give a priority to each non-colliding vertex of
-the net
 """
 struct CollisionList <: AbstractVector{CollisionNode}
     list::Vector{CollisionNode}
