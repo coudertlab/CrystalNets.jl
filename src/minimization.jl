@@ -576,7 +576,12 @@ function attribute_next_available_modify!(vmapprogress, thisindex, returnto, col
         vmapprogress[thisindex] = (returnto, iactual => firstavailrnge+exclude)
     end
     newval = rnge[firstavailrnge]
+    previous = direct_map[iactual]
+    @toggleassert previous != newval
     direct_map[iactual] = newval
+    if previous > 0
+        reverse_map[previous] = reverse_map[newval]
+    end
     reverse_map[newval] = iactual
     return true
 end
