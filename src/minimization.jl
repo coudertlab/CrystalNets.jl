@@ -591,8 +591,6 @@ function backtrack_to!(vmapprogress, index, (direct_map, reverse_map, collision_
     returnto, (before, idx_after) = vmapprogress[index]
     shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
     shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
-    k0 = collision_ranges[-reference_direct_map[before]][idx_after]
-    reverse_map[k0] = reference_reverse_map[k0]
     for (_, (i, j)) in @view vmapprogress[index+1:end]
         mi_rnge = direct_map[i] = reference_direct_map[i]
         k = collision_ranges[-mi_rnge][j]
@@ -600,14 +598,13 @@ function backtrack_to!(vmapprogress, index, (direct_map, reverse_map, collision_
     end
     resize!(vmapprogress, index)
     wasavail_backtrack = attribute_next_available_modify!(vmapprogress, index, returnto, collision_ranges, direct_map, reverse_map, shrunk_after-first_collision_m1, before, idx_after)
-    if !wasavail_backtrack
-        backtracking = true
-        index -= 1
-    else
-        backtracking = false
-        index = returnto
+    if wasavail_backtrack # stop backtracking
+        false, returnto
+    else # continue backtracking
+        # k0 = collision_ranges[-reference_direct_map[before]][idx_after]
+        # reverse_map[k0] = reference_reverse_map[k0]
+        true, index - 1
     end
-    backtracking, index
 end
 
 """
@@ -686,6 +683,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
             nonattributed_progress = falses(first_attributed_neighbor_m1)
             idx_attributed = 1
             failure = false
+            backtrack_target = 0
             for actual in actual_neighbors
                 if first_attributed_neighbor_m1+idx_attributed ≤ m
                     expected = expected_neighbors[first_attributed_neighbor_m1+idx_attributed]
@@ -695,7 +693,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                     end
                     if actual.v == expected.v
                         failure = true
-                        backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), backtrackstack)
+                        backtrack_target = length(vmapprogress)
                         break
                     end
                 end
@@ -713,7 +711,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                             if attributed_previously in collision_ranges[targetrnge]
                                 failure = false
                             else
-                                backtracking, index = backtrack_to!(vmapprogress, findlast(x -> first(x[2]) == actual.v, vmapprogress), backtrackstack)
+                                backtrack_target = findlast(x -> first(x[2]) == actual.v, vmapprogress)
                                 break
                             end
                         else
@@ -722,7 +720,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                                 hadaction = true
                                 failure = false
                             else
-                                backtracking, index = backtrack_to!(vmapprogress, length(vmapprogress), backtrackstack)
+                                backtrack_target = length(vmapprogress)
                                 break
                             end
                         end
@@ -731,7 +729,13 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                 end
                 failure && break
             end
-            failure && continue
+            if failure
+                if backtrack_target == 0
+                    backtrack_target = length(vmapprogress)
+                end
+                backtracking, index = backtrack_to!(vmapprogress, backtrack_target, backtrackstack)
+                continue
+            end
 
             if !hadaction && index == length(vmapprogress)
                 valid = true
