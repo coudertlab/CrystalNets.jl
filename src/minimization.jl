@@ -46,7 +46,6 @@ function find_all_valid_translations(shrunk_net::CrystalNet{D,T}, collisions::Co
     check_symmetry = CheckSymmetryWithCollisions(collisions)
     for (nz, i_max_den, max_den, t) in possible_translations(shrunk_net)
         vmap = check_symmetry(shrunk_net.pge, t, nothing, shrunk_net.types)
-        @show vmap
         if vmap isa Vector{PeriodicVertex{D}}
             push!(ret[nz+1], (i_max_den, max_den, t))
         end
@@ -548,12 +547,10 @@ function direct_map_to_collision_offsets(direct_map, collision_ranges, periodici
             @toggleassert all(!iszero, @view(collision_offsets[rnge]))
         else
             for (i, j) in enumerate(rnge)
-                @show (i,j)
                 @toggleassert collision_offsets[j] == 0
                 collision_offsets[j] = i
                 k = direct_map[j]
                 while k != j
-                    @show k
                     @toggleassert collision_offsets[k] == 0
                     collision_offsets[k] = i
                     k = direct_map[k]
