@@ -390,7 +390,7 @@ function find_initial_candidates(net::CrystalNet{D,T}, candidates_v, category_ma
     _initial_candidates = Vector{Pair{Int,Tuple{Matrix{T},Vector{Int}}}}(undef, n)
     valid_initial_candidates = falses(n)
 
-    @threads for i in 1:n
+    for i in 1:n
         v = candidates_v[i]
         a = Matrix{T}(undef, D, deg)
         cats = Vector{Int}(undef, deg)
