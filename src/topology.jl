@@ -284,7 +284,7 @@ See also: [`candidate_key`](@ref)
 """
 function find_candidates(net::CrystalNet{D,T}, collisions) where {D,T}
     L = D*D
-    if D == 3
+    if D == 3 && collisions isa CollisionList && isempty(collisions)
         check_symmetry = CheckSymmetryWithCollisions(collisions, true)
         symmetries = find_symmetries(net.pge, net.types, check_symmetry)
         categories, unique_reprs = partition_by_coordination_sequence(net.pge.g, symmetries)
@@ -323,7 +323,7 @@ function find_candidates(net::CrystalNet{D,T}, collisions) where {D,T}
         check_dimensionality(net)
         error("Internal error: no candidate found.")
     end
-    if D == 3
+    if D == 3 && collisions isa CollisionList && isempty(collisions)
         return extract_through_symmetry(candidates, symmetries), category_map
     else
         flattened_candidates = Pair{Int,SMatrix{D,D,T,L}}[]
