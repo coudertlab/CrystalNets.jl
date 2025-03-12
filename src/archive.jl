@@ -1,7 +1,7 @@
 ## Handling of the topological archive internally used to recognize topologies.
 using Pkg.Artifacts
 
-const CRYSTALNETS_ARCHIVE_VERSION = "2.5"
+const CRYSTALNETS_ARCHIVE_VERSION = "3"
 const arc_location = artifact"archives"
 
 """
