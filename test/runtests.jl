@@ -206,7 +206,7 @@ end
 @testset "Module" begin
     targets = ["pcu", "afy, AFY", "apc, APC", "bam", "bcf", "cdp", "cnd", "ecb", "fiv",
     "ftd", "ftj", "ins", "kgt", "mot", "moz", "muh", "pbz", "qom", "sig",
-    "sma", "sod-f", "sod-h", "utj", "utp", "nts", "lth"]
+    "sma", "sod-f", "sod-h", "utj", "utp", "nts", "lth", "cys", "llw-z", "nts"]
     failurelock = ReentrantLock()
     failures = 0
     Threads.@threads for target in targets
@@ -402,8 +402,8 @@ end
 
 @testset "Unstable nets" begin
     mini2 = PeriodicGraph("2  1 4 0 0  1 2 0 0  1 3 0 0  2 3 0 1  4 5 0 0  4 6 0 0  5 6 1 0")
-    mini3_3 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
     mini3_2 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
+    mini3_3 = PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 7 0 0 0 2 3 0 0 1 4 5 0 0 0 4 6 0 0 0 4 7 0 0 0 5 6 0 1 0 7 8 0 0 0 7 9 0 0 0 8 9 1 0 0")
     small = PeriodicGraph("3 1 2 1 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 1 6 0 0 0 1 7 0 0 0 2 3 0 0 0 2 4 0 0 0 2 5 0 0 0 2 6 0 0 0 2 7 0 0 0 3 4 0 1 0 3 5 0 0 0 3 6 0 0 0 3 8 0 0 0 4 5 0 0 0 4 6 0 0 0 4 8 0 0 0 5 6 0 0 1 5 9 0 0 0 6 9 0 0 0 7 8 0 0 0 8 9 0 0 0")
 
     u1A = PeriodicGraph("1  1 1 1  1 2 0  1 3 0  2 3 0")
@@ -471,7 +471,7 @@ end
     @test nv(CNets.one_topology(topological_genome(u1D)).genome) == 12
 
     unstabletry = Union{PeriodicGraph1D,PeriodicGraph2D,PeriodicGraph3D}[
-        mini2, mini3_2, mini3_3, small, u1A, u1B, u2A, u2B, u2C, u3A, u3B, gm, u1D, u2D
+        mini2, mini3_2, mini3_3, small, u1A, u1B, u2A, u2B, u2C, u3A, u3B, gm, u2D, u1D
     ]
 
     failurelock = ReentrantLock()
@@ -480,7 +480,8 @@ end
         genome = CNets.one_topology(topological_genome(graph))
         @test !genome.unstable
         N = ndims(graph)
-        for k in 1:40
+        for k in 1:100
+            local super, supercell, n, r, offsets, axesperm, newgraph, newgenome
             super = rand(1:3, N)
             supercell = make_supercell(graph, super)
             n = nv(supercell)
@@ -491,9 +492,8 @@ end
             newgenome = CNets.one_topology(topological_genome(newgraph))
             if newgenome != genome
                 lock(failurelock) do
-                    global failures
                     failures += 1
-                    @error "Unstable graph failed (Module): g1 = PeriodicGraph(\"$graph\"); g2 = PeriodicGraph(\"$newgraph\");\ngen1 = $genome; gen2 = $newgenome;\nsupercell = $super; offsets = $offsets; axesperm = $axesperm; r = $r"
+                    @error "Unstable graph failed (n°$i): g1 = PeriodicGraph(\"$graph\"); g2 = PeriodicGraph(\"$newgraph\");\ngen1 = $genome; gen2 = $newgenome;\nsupercell = $super; offsets = $offsets; axesperm = $axesperm; r = $r"
                 end
                 break
             end
