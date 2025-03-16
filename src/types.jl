@@ -915,14 +915,14 @@ function CrystalNet{D}(group::UnderlyingNets) where D
     D == 0 && return CrystalNet{0}(Cell(), Options(; error="Cannot create a CrystalNet{0} from an UnderlyingNets instance."))
     if D == 3
         isempty(group.D3) && return _nonet(3)
-        length(group.D3) > 1 && return _interpenetrating(3)
+        length(group.D3) > 1 && return _interpenetrating(group.D3[1][1][1])
         (isempty(group.D1) && isempty(group.D2)) || __warn_nonunique(D)
         _D3 = first(first(group.D3))
         length(_D3) > 1 && return _multiplenets(3)
         return first(_D3)
     elseif D == 2
         isempty(group.D2) && return _nonet(2)
-        length(group.D2) > 1 && return _interpenetrating(2)
+        length(group.D2) > 1 && return _interpenetrating(group.D2[1][1][1])
         isempty(group.D2) || __warn_nonunique(D)
         _D2 = first(first(group.D2))
         length(_D2) > 1 && return _multiplenets(2)
@@ -930,7 +930,7 @@ function CrystalNet{D}(group::UnderlyingNets) where D
     end
     @toggleassert D == 1
     isempty(group.D1) && return _nonet(1)
-    length(group.D1) > 1 && return _interpenetrating(1)
+    length(group.D1) > 1 && return _interpenetrating(group.D1[1][1][1])
     _D1 = first(first(group.D1))
     length(_D1) > 1 && return _multiplenets(1)
     return first(_D1)
@@ -942,7 +942,9 @@ function CrystalNet(group::UnderlyingNets)
 end
 __warn_nonunique(D) = @ifwarn @warn "Presence of periodic structures of different dimensionalities. Only the highest dimensionality ($D here) will be retained."
 _nonet(D) = CrystalNet{0}(Cell(), Options(; error="UnderlyingNets contains no net of dimension $D"))
-_interpenetrating(D) = CrystalNet{0}(Cell(), Options(; error="UnderlyingNets contain multiple interpenetrating $D-dimensional nets, cannot be converted to a single CrystalNet."))
+function _interpenetrating(net::CrystalNet{D}) where {D}
+    CrystalNet{0}(Cell(), Options(net.options; error="UnderlyingNets contain multiple interpenetrating $D-dimensional nets, cannot be converted to a single CrystalNet."))
+end
 _multiplenets(D) = CrystalNet{0}(Cell(), Options(; error="Found multiple nets of dimension $D, please specify a single `Clustering` option."))
 
 CrystalNet{D}(c::Crystal) where {D} = CrystalNet{D}(UnderlyingNets(c))

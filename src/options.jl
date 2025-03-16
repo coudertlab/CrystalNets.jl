@@ -299,6 +299,11 @@ function ifbooltempdirorempty(x)::String
     end
 end
 
+struct IdentifiedError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, eoe::IdentifiedError) = print(io, eoe.msg)
+
 """
     Options
 
@@ -511,6 +516,10 @@ struct Options
                        track_mapping=nothing,
                        keep_single_track=true
                     )
+
+        if throw_error && !isempty(error)
+            throw(IdentifiedError(error))
+        end
 
         _export_input = ifbooltempdirorempty(export_input)
         _export_trimmed = ifbooltempdirorempty(export_trimmed)
