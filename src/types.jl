@@ -946,10 +946,21 @@ _interpenetrating(D) = CrystalNet{0}(Cell(), Options(; error="UnderlyingNets con
 _multiplenets(D) = CrystalNet{0}(Cell(), Options(; error="Found multiple nets of dimension $D, please specify a single `Clustering` option."))
 
 CrystalNet{D}(c::Crystal) where {D} = CrystalNet{D}(UnderlyingNets(c))
-CrystalNet{0}(c::Crystal) = CrystalNet{0}(c[1].pge.cell, c[1].options)
+function CrystalNet{0}(c::Crystal)
+    CrystalNet{0}(PeriodicGraphEmbedding{0}(c.pge), c.types, c.options)
+end
 function CrystalNet(c::Crystal)
     ret = CrystalNet(UnderlyingNets(c))
-    ret isa CrystalNet{0} ? CrystalNet{0}(c) : ret
+    if ret isa CrystalNet{0}
+        d = dimensionality(c.pge.g)
+        if length(d) != 1 || only(keys(d)) != 0
+            ret
+        else
+            CrystalNet{0}(c)
+        end
+    else
+        ret
+    end
 end
 
 
