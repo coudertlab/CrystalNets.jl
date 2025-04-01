@@ -2,6 +2,7 @@
 
 [![Build Status](https://github.com/coudertlab/CrystalNets.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/coudertlab/CrystalNets.jl/actions/workflows/CI.yml?query=branch%3Amaster)
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://coudertlab.github.io/CrystalNets.jl/dev)
+[![Zenodo DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15009597.svg)](https://doi.org/10.5281/zenodo.15009597)
 
 A Julia package for determining the topology of a net.
 
