@@ -503,6 +503,10 @@ end
 
     @test topological_genome(gm) == topological_genome(gmx3) == topological_genome(gmx5)
 
+    g1 = PeriodicGraph("2 1 4 -1 0 1 4 0 0 1 5 0 -1 2 3 -1 0 2 3 0 0 2 6 0 -1 3 5 -1 1 3 5 0 1 4 6 -1 1 4 6 0 1");
+    g2 = PeriodicGraph("2 1 2 2 1 1 6 3 -1 1 17 -2 1 2 9 0 -1 2 11 4 1 3 5 -7 1 3 6 -1 -2 3 17 -6 0 4 6 2 2 4 7 3 4 4 12 -2 6 5 8 4 -3 5 11 5 1 6 14 -2 2 7 13 -2 2 7 14 -3 0 7 18 -4 -3 8 10 -2 1 8 15 -4 -1 8 16 -5 4 9 12 1 2 9 15 -1 -2 9 16 -2 3 10 11 3 3 10 13 -1 3 11 12 -3 0 13 17 -4 -1 14 16 -1 2 15 18 3 -1 17 18 2 -4");
+    @test topological_genome(g1) == topological_genome(g2)
+
     Test.get_testset().n_passed += length(unstabletry) - failures
     @test failures == 0
 end
