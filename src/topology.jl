@@ -245,16 +245,8 @@ end
 struct CheckSymmetryWithCollisions
     collisions::CollisionList
 end
-function CheckSymmetryWithCollisions(x, eachnodeunique::Bool)
-    x isa CollisionList && return CheckSymmetryWithCollisions(x)
-    clist = if eachnodeunique
-        [CollisionNode(i) for i in 1:length(last(x))]
-    else
-        [CollisionNode(length(r)) for r in last(x)]
-    end
-    CheckSymmetryWithCollisions(CollisionList(clist))
-end
 function (cswc::CheckSymmetryWithCollisions)(pge::PeriodicGraphEmbedding{D,T}, t::SVector{D,T}, r, vtypes) where {D,T}
+    r isa Nothing || error("Cannot check non-translation symmetries in presence of collisions")
     collisions = cswc.collisions
     vmap = check_valid_symmetry(pge, t, r, vtypes, isempty(collisions))
     (vmap isa Nothing || isempty(collisions)) && return vmap
@@ -264,14 +256,14 @@ function (cswc::CheckSymmetryWithCollisions)(pge::PeriodicGraphEmbedding{D,T}, t
     for (i, node) in enumerate(collisions)
         j = vmapv[m+i]
         j ≤ m && return nothing # a non-collision node is mapped to a collision node
-        collisions[j-m] == CollisionNode(node, vmapv) || return nothing
+        possibly_equivalent_nodes(collisions[j-m], node) || return nothing
     end
     return vmap
 end
 
 
 """
-    find_candidates(net::CrystalNet{D}, collisions::Vector{CollisionNode}) where D
+    find_candidates(net::CrystalNet{D}, hascollisions) where D
 
 Return a non-empty set of candidates `u => basis` where `u` is a vertex and `basis` is
 matrix whose columns are `D` linearly independent euclidean embeddings of edges.
@@ -282,11 +274,10 @@ Also return a `category_map` linking each vertex to its category number, as defi
 
 See also: [`candidate_key`](@ref)
 """
-function find_candidates(net::CrystalNet{D,T}, collisions) where {D,T}
+function find_candidates(net::CrystalNet{D,T}, hascollisions) where {D,T}
     L = D*D
-    if D == 3 && collisions isa CollisionList && isempty(collisions)
-        check_symmetry = CheckSymmetryWithCollisions(collisions, true)
-        symmetries = find_symmetries(net.pge, net.types, check_symmetry)
+    if D == 3 && !hascollisions
+        symmetries = find_symmetries(net.pge, net.types, check_valid_symmetry)
         categories, unique_reprs = partition_by_coordination_sequence(net.pge.g, symmetries)
     else
         categories, unique_reprs = partition_by_coordination_sequence(net.pge.g)
@@ -323,7 +314,7 @@ function find_candidates(net::CrystalNet{D,T}, collisions) where {D,T}
         check_dimensionality(net)
         error("Internal error: no candidate found.")
     end
-    if D == 3 && collisions isa CollisionList && isempty(collisions)
+    if D == 3 && !hascollisions
         return extract_through_symmetry(candidates, symmetries), category_map
     else
         flattened_candidates = Pair{Int,SMatrix{D,D,T,L}}[]
@@ -662,14 +653,14 @@ For most non-internal purposes, [`topological_genome`](@ref) should be called in
 """
 function topological_key(net::CrystalNet{D}) where D
     isempty(net.pge.pos) && return PeriodicGraph{D}()
-    collisions, newnet, equiv_net = collision_nodes(net)
-    topological_key(newnet, collisions isa CollisionList ? collisions : (equiv_net, collisions))
+    shrunk_net, collisionsetup = collision_nodes(net)
+    topological_key(shrunk_net, collisionsetup)
 end
 
-function topological_key(net::CrystalNet{D,T}, collisions) where {D,T}
-    candidates, category_map = find_candidates(net, collisions)
+function topological_key(net::CrystalNet{D,T}, (equiv_net, collisions)) where {D,T}
+    candidates, category_map = find_candidates(net, !isempty(collisions))
     v, minimal_basis = popfirst!(candidates)
-    collisions isa CollisionList || (best_candidates = [(v, minimal_basis)])
+    best_candidates = [(v, minimal_basis)]
     n = length(net.pge)
     _edgs = [(n + 1, 0, zero(SVector{D,T}))]
     _minimal_vmap, minimal_edgs = candidate_key(net, v, minimal_basis, _edgs)
@@ -680,17 +671,17 @@ function topological_key(net::CrystalNet{D,T}, collisions) where {D,T}
         @toggleassert edgs < minimal_edgs
         if isempty(edgs)
             push!(minimal_vmaps, newvmap)
-            collisions isa CollisionList || push!(best_candidates, (v, basis))
+            push!(best_candidates, (v, basis))
         elseif edgs < minimal_edgs
             minimal_edgs = edgs
             minimal_vmaps = [newvmap]
             minimal_basis = basis
-            collisions isa CollisionList || (best_candidates = [(v, basis)])
+            best_candidates = [(v, basis)]
         end
     end
 
-    if !(collisions isa CollisionList)
-        return topological_key_unstable(collisions[1], collisions[2], net, best_candidates)
+    if !isempty(collisions)
+        return topological_key_unstable(equiv_net, collisions, net, best_candidates)
     end
 
     # rev_vmap = Vector{Int}(undef, n)
@@ -707,20 +698,6 @@ function topological_key(net::CrystalNet{D,T}, collisions) where {D,T}
 
     # tmpnet = CrystalNet{D,T}(PeriodicGraphEmbedding{D,T}(graph, net.pge.pos[minimal_vmap], net.pge.cell), net.types[minimal_vmap], net.options)
     # export_vtf("/tmp/tmpnet.vtf", tmpnet, 3)
-
-    if !isempty(collisions)
-        sort!(minimal_vmaps); unique!(minimal_vmaps)
-        first_minimal_vmap = pop!(minimal_vmaps)
-        ming, vmap = expand_collisions(collisions, graph, first_minimal_vmap)
-        for map in minimal_vmaps
-            newg, expanded_map = expand_collisions(collisions, graph, map)
-            if edges(newg) ≤ edges(ming)
-                ming = newg
-                vmap = expanded_map
-            end
-        end
-        graph = ming
-    end
 
     if !isnothing(net.options.track_mapping)
         map = rev_permute_mapping!(net.options, vmap).track_mapping

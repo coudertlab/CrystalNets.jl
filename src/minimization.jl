@@ -31,7 +31,7 @@ end
 
 
 """
-    find_all_valid_translations(c::Union{Crystal,CrystalNet{D}}, collisions::CollisionList) where D
+    find_all_valid_translations(net::CrystalNet{D}) where D
 
 Return a `D`-tuple of list of tuples `(i_max_den, max_den, t)` (see
 [`possible_translations`](@ref) for interpretation) where the `n`-th list contains all
@@ -41,11 +41,10 @@ A translation is valid if it maps exactly each vertex to a vertex and each edge 
 
 See also: [`possible_translations`](@ref), `PeriodicGraphEmbeddings.check_valid_symmetry`
 """
-function find_all_valid_translations(shrunk_net::CrystalNet{D,T}, collisions::CollisionList) where {D,T}
+function find_all_valid_translations(net::CrystalNet{D,T}) where {D,T}
     ret = NTuple{D, Vector{Tuple{Int, Int, SVector{D,T}}}}(ntuple(_->[], Val(D)))
-    check_symmetry = CheckSymmetryWithCollisions(collisions)
-    for (nz, i_max_den, max_den, t) in possible_translations(shrunk_net)
-        vmap = check_symmetry(shrunk_net.pge, t, nothing, shrunk_net.types)
+    for (nz, i_max_den, max_den, t) in possible_translations(net)
+        vmap = check_valid_symmetry(net.pge, t, nothing, net.types)
         if vmap isa Vector{PeriodicVertex{D}}
             push!(ret[nz+1], (i_max_den, max_den, t))
         end
@@ -194,12 +193,12 @@ end
 
 
 """
-    reduce_with_matrix(c::CrystalNet, mat, collisions)
+    reduce_with_matrix(c::CrystalNet, mat)
 
 Given the net and the output of `minimal_volume_matrix` computed on the valid translations
 of the net, return the new net representing the initial net in the computed unit cell.
 """
-function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where {D,T}
+function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat) where {D,T}
     if D == 3
         cell = Cell(c.pge.cell, c.pge.cell.mat * mat)
     else
@@ -235,39 +234,15 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
         end
     end
 
-    kept_collisions = Int[]
-    if !isempty(collisions)
-        m = n - length(collisions)
-        reorder = Vector{Int}(undef, length(I_kept))
-        idx = 0
-        for (j, i) in enumerate(I_kept)
-            if i > m
-                reorder[end-idx] = j
-                idx += 1
-                push!(kept_collisions, i-m)
-            else
-                reorder[j-idx] = j
-            end
-        end
-        I_kept = I_kept[reorder]
-        reverse!(@view I_kept[end-idx+1:end])
-    end
-
     sortedcol = SVector{D,Rational{T}}[SVector{D,Rational{T}}(poscol[i]) for i in I_kept]
     # @toggleassert allunique(sortedcol)
 
-    local vmap::Vector{Int}
-    if isempty(collisions) # implies issorted(sortedcol)
-        vmap = Vector{Int}(undef, n)
-        # @toggleassert issorted(sortedcol)
-        for (i, pos) in enumerate(poscol)
-            j = searchsortedfirst(sortedcol, pos)
-            @toggleassert j <= length(sortedcol) && sortedcol[j] == pos
-            vmap[i] = j
-        end
-    else
-        rev_dict = Dict{SVector{D,Rational{T}},Int}(pos => j for (j, pos) in enumerate(sortedcol))
-        vmap = [rev_dict[pos] for pos in poscol]
+    vmap = Vector{Int}(undef, n)
+    # @toggleassert issorted(sortedcol)
+    for (i, pos) in enumerate(poscol)
+        j = searchsortedfirst(sortedcol, pos)
+        @toggleassert j <= length(sortedcol) && sortedcol[j] == pos
+        vmap[i] = j
     end
 
     edges = PeriodicEdge{D}[]
@@ -280,52 +255,40 @@ function reduce_with_matrix(c::CrystalNet{D,Rational{T}}, mat, collisions) where
         end
     end
 
-    newcollisions = CollisionList(collisions, vmap, kept_collisions)
-    for newnode in newcollisions
-        if !allunique(newnode.neighs)
-            # contravenes rule B of collision_nodes(::CrystalNet))
-            return c, CollisionList(UnitRange{Int}[])
-        end
-    end
-
     graph = PeriodicGraph{D}(edges)
     opts = permute_mapping!(c.options, vmap)
-    return CrystalNet{D,Rational{T}}(cell, c.types[I_kept], sortedcol, graph, opts), newcollisions
+    return CrystalNet{D,Rational{T}}(cell, c.types[I_kept], sortedcol, graph, opts)
 end
 
 
 """
-    minimize(net::CrystalNet, [collisions])
+    minimize(net::CrystalNet, [collisionsetup])
 
 Return a CrystalNet representing the same net as the input, but in a unit cell.
-If `collisions` is given, also return the corresponding collisions after minimization.
+If `collisionsetup` is given, also return the corresponding collisions after minimization.
 
 The computed unit cell may depend on the representation of the input, i.e. it is not
 topologicallly invariant.
-
-If the input `collisions` is not a [`CollisionList`](@ref) but the returned one is, this
-signals that minimization failed because of unknown collisions.
 """
-function minimize(net::CrystalNet, collisions)
-    collisions isa CollisionList || return minimize_unstable(net, collisions)
-    collisions::CollisionList
-    translations = find_all_valid_translations(net, collisions)
-    all(isempty.(translations)) && return net, collisions
+function minimize(net::CrystalNet, collisionsetup)
+    isempty(collisionsetup[2]) || return minimize_unstable(net, collisionsetup)
+    translations = find_all_valid_translations(net)
+    all(isempty.(translations)) && return net, collisionsetup
     mat = minimal_volume_matrix(translations)
-    _net, newcollisions = reduce_with_matrix(net, mat, collisions)
-    @toggleassert all(isempty.(find_all_valid_translations(_net, newcollisions)))
-    return _net, newcollisions
+    _net = reduce_with_matrix(net, mat)
+    @toggleassert all(isempty.(find_all_valid_translations(_net)))
+    return _net, collisionsetup
 end
-minimize(net::CrystalNet) = minimize(net, CollisionList(net.pge.g, UnitRange{Int}[]))[1]
+minimize(net::CrystalNet) = minimize(net, (net, CollisionList()))[1]
 
 
-function minimize_unstable(shrunk_net::CrystalNet, collisions)
+function minimize_unstable(shrunk_net::CrystalNet, collisionsetup)
     while true
-        x = find_first_valid_translation_unstable(shrunk_net, collisions)
+        x = find_first_valid_translation_unstable(shrunk_net, collisionsetup)
         x isa Nothing && break
-        shrunk_net, collisions = x
+        shrunk_net, collisionsetup = x
     end
-    shrunk_net, collisions
+    shrunk_net, collisionsetup
 end
 
 
@@ -442,7 +405,7 @@ end
 
 
 """
-    reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets) where D
+    reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collisions, shrunk_pvmap, transformation, collision_offsets) where D
 
 Reduce the `net` with a translation symmetry, given as the corresponding `shrunk_pvmap`
 that maps each vertex of the `shrunk_net` to its image, the cell matrix `transformation`,
@@ -453,10 +416,10 @@ translation symmetry if and only if:
 
 Note that for all vertices `u` which are not in a collision node, `collision_offsets[u] == 1`.
 
-Return `(new_shrunk_net, (new_net, new_collision_ranges))` which mirror the input
-`(shrunk_net, (net, collision_ranges))`.
+Return `(new_shrunk_net, (new_net, new_collisions))` which mirror the input
+`(shrunk_net, (net, collisions))`.
 """
-function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets) where D
+function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collisions, shrunk_pvmap, transformation, collision_offsets) where D
     inv_transformation = Int.(inv(transformation))
     periodicity = abs(det(inv_transformation))
     subgraphlists = orbits_pvmap(shrunk_pvmap)
@@ -470,8 +433,8 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, s
         rev_shrunkmap[v] = i
     end
 
-    first_collision_subgraphlist = 1 + (length(shrunk_net.pge) - length(collision_ranges))*length(subgraphlist_head)÷length(shrunk_net.pge)
-    first_collision_m1 = first_collision_m1 = first(first(collision_ranges)) - 1
+    first_collision_subgraphlist = 1 + (length(shrunk_net.pge) - length(collisions))*length(subgraphlist_head)÷length(shrunk_net.pge)
+    first_collision_m1 = first_collision_m1 = first(first(collisions).rnge) - 1
 
     rev_map = zeros(Int, length(net.pge))
     for list in subgraphlists
@@ -481,7 +444,7 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, s
                 counter += 1
                 rev_map[v] = counter
             else
-                rnge = collision_ranges[v-first_collision_m1]
+                rnge = collisions[v-first_collision_m1].rnge
                 for u in rnge
                     colloffs = collision_offsets[u]
                     rev_map[u] = counter + colloffs
@@ -506,7 +469,7 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, s
             newofs = floor.(Int, posshrunkx) - ofsi
             push!(shrunk_newedges, PeriodicEdge{D}(i, rev_shrunkmap[shrunkx.v], newofs))
         end
-        for u in (v ≤ first_collision_m1 ? (v,) : collision_ranges[v-first_collision_m1]), x in neighbors(net.pge.g, u)
+        for u in (v ≤ first_collision_m1 ? (v,) : collisions[v-first_collision_m1].rnge), x in neighbors(net.pge.g, u)
             posx = inv_transformation * net.pge[x]
             newofs = floor.(Int, posx) - ofsi
             push!(newedges, PeriodicEdge{D}(rev_map[u], rev_map[x.v], newofs))
@@ -515,14 +478,14 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, s
 
     subcollisionindices = first_collision_subgraphlist:length(subgraphlist_head)
     virtualvmap = subgraphlist_head[1:first_collision_subgraphlist-1]
-    new_collision_ranges = Vector{UnitRange{Int}}(undef, length(subcollisionindices))
+    new_collisions = Vector{CollisionNode}(undef, length(subcollisionindices))
     counter = first_collision_subgraphlist
     for (i, j) in enumerate(subcollisionindices)
         jv = subgraphlist_head[j]
-        rnge = collision_ranges[jv - first_collision_m1]
-        append!(virtualvmap, rnge)
-        nextcounter = counter + length(rnge)
-        new_collision_ranges[i] = counter:(nextcounter-1)
+        node = collisions[jv - first_collision_m1]
+        append!(virtualvmap, node.rnge)
+        nextcounter = counter + length(node.rnge)
+        new_collisions[i] = CollisionNode(counter:(nextcounter-1), node.property)
         counter = nextcounter
     end
 
@@ -535,7 +498,7 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collision_ranges, s
     new_pge = PeriodicGraphEmbedding{D}(PeriodicGraph{D}(newedges), new_pos, new_mat)
     new_options = permute_mapping!(net.options, virtualvmap)
     new_net = CrystalNet{D}(new_pge, net.types[virtualvmap], new_options)
-    return (new_shrunk_net, (new_net, new_collision_ranges))
+    return (new_shrunk_net, (new_net, CollisionList(new_collisions)))
 end
 
 function direct_map_to_collision_offsets(direct_map, collision_ranges, periodicity)
@@ -794,8 +757,8 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
 end
 
 
-function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, collisions) where {D,T}
-    check_symmetry = CheckSymmetryWithCollisions(collisions, false)
+function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, (net, collisions)) where {D,T}
+    check_symmetry = CheckSymmetryWithCollisions(collisions)
     translations_to_check = Tuple{SVector{D,T},Vector{PeriodicVertex{D}}}[]
     for pt in possible_translations(shrunk_net)
         t = last(pt)
@@ -805,19 +768,19 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, coll
         end
     end
     isempty(translations_to_check) && return nothing
-    net, collision_ranges = collisions
-    first_collision_m1 = first(first(collision_ranges)) - 1
+    first_collision_m1 = first(first(collisions).rnge) - 1
 
-    to_shrunk = [i+first_collision_m1 for (i, rnge) in enumerate(collision_ranges) for _ in rnge]
+    to_shrunk = [i+first_collision_m1 for (i, node) in enumerate(collisions) for _ in node.rnge]
     # to_shrunk[j-first_collision_m1] is the index of the shrunk node corresponding to vertex j
 
+    collision_ranges = [node.rnge for node in collisions]
     for (t, shrunk_pvmap) in translations_to_check
         direct_map = translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrunk)
         if !(direct_map isa Nothing) # found a valid translation!
             @toggleassert isperm(direct_map)
             periodicity, transformation = find_transformation_matrix(t)
             collision_offsets = direct_map_to_collision_offsets(direct_map, collision_ranges, periodicity)
-            return reduce_unstable_net(shrunk_net, net, collision_ranges, shrunk_pvmap, transformation, collision_offsets)
+            return reduce_unstable_net(shrunk_net, net, collisions, shrunk_pvmap, transformation, collision_offsets)
         end
     end
     return nothing

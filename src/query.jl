@@ -19,25 +19,22 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.pge, fill(Symbol(""), length(net.types)), net.options)
     end
-    collisions, shrunk_net, equiv_net = collision_nodes(net)
+    shrunk_net, collisionsetup = collision_nodes(net)
+    # timefactor = prod(float(factorial(length(rnge))) for rnge in collisions)
+    # @show timefactor
+    # @show maximum(length, collisions)
+    # @show length(collisions)
+    # println()
+    # error("!")
 
     if !net.options.skip_minimize
         widen_flag = false
-        unstable_flag = false
         try
-            shrunk_net, collisions = if !isempty(collisions)
-                collision_ranges = collisions isa CollisionList ? build_collision_ranges(collisions, length(shrunk_net.pge)) : collisions
-                minimize(shrunk_net, (equiv_net, collision_ranges))
+            shrunk_net, collisionsetup = if !isempty(collisionsetup[2])
+                minimize(shrunk_net, collisionsetup)
             else
-                collisions::CollisionList
-                minimize(shrunk_net, collisions)
+                minimize(shrunk_net), collisionsetup
             end
-            # shrunk_net, newcollisions = minimize(shrunk_net, collisions isa CollisionList ? collisions : (equiv_net, collisions))
-            # if newcollisions isa CollisionList && (!(collisions isa CollisionList) || (isempty(newcollisions.list) && !isempty(collisions.list)))
-            #     unstable_flag = true
-            # else
-            #     collisions = newcollisions
-            # end
         catch e
             isinterrupt(e) && rethrow()
             if T == Rational{BigInt} || !isoverfloworinexact(e)
@@ -50,29 +47,23 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
             newnet = CrystalNet{D,widen(T)}(net; ignore_types=false)
             return topological_genome(newnet)
         end
-        # if unstable_flag
-        #     collisions::CollisionList
-        #     collision_ranges = build_collision_ranges(collisions, length(shrunk_net.pge))
-        #     shrunk_net, collisions = minimize(shrunk_net, (equiv_net, collision_ranges))
-        # end
     end
 
     export_net = isempty(net.options.export_net) ? isempty(net.options._pos) ?
                  net.options.export_subnets : "" : net.options.export_net
     export_default(net, "net", net.options.name, export_net)
 
-    return topological_genome(shrunk_net, collisions)
+    return topological_genome(shrunk_net, collisionsetup)
 end
 
 topological_genome(net::CrystalNet{0}) = TopologicalGenome(net.options.error)
 
-function topological_genome(net::CrystalNet{D,T}, collisions)::TopologicalGenome where {D,T}
+function topological_genome(net::CrystalNet{D,T}, collisionsetup)::TopologicalGenome where {D,T}
     try
-        g::PeriodicGraph{D} = topological_key(net, collisions)
-        unstable = g.width[] == -2
-        unstable && (g.width[] = -1)
+        g::PeriodicGraph{D} = topological_key(net, collisionsetup)
+        g.width[] == -2 && error("Internal error: should not be any unstable net left here!")
         ne(g) == 0 && return TopologicalGenome(net.options.error)
-        return TopologicalGenome(g, recognize_topology(g), unstable)
+        return TopologicalGenome(g, recognize_topology(g), false)
     catch e
         isinterrupt(e) && rethrow()
         if T == Rational{BigInt} || !isoverfloworinexact(e)
@@ -80,7 +71,7 @@ function topological_genome(net::CrystalNet{D,T}, collisions)::TopologicalGenome
             return TopologicalGenome(string(e)::String)
         end
     end
-    return topological_genome(CrystalNet{D,widen(T)}(net), collisions)
+    return topological_genome(CrystalNet{D,widen(T)}(net), collisionsetup)
 end
 
 """

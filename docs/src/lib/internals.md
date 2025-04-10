@@ -82,9 +82,6 @@ CrystalNets.allnodes_to_singlenodes
 ## Unstable nets
 
 ```@docs
-CrystalNets.shrink_collisions
-CrystalNets.order_collision
-CrystalNets.expand_collisions
 CrystalNets.collision_nodes
 ```
 

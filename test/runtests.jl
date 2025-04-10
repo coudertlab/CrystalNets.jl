@@ -431,41 +431,42 @@ end
     u2D = PeriodicGraph("2  1 5 0 0  1 8 0 0  1 10 -1 0  1 9 -1 0  2 6 0 0  2 7 0 0  2 6 0 1  2 7 0 1  3 11 0 0  3 12 0 0  3 11 0 1  3 12 0 1  4 5 0 0  4 8 0 0  4 9 0 0  4 10 0 0  5 8 0 0  5 7 0 0  6 8 0 0  9 11 0 0  10 12 0 0  11 12 0 0")
 
     _netgm3 = CrystalNet(make_supercell(gm, (3, 1))[[8, 11, 6, 12, 3, 2, 7, 9, 10, 4, 1, 5]])
-    collisions3, shrunk_net3, equiv_net3 = CNets.collision_nodes(_netgm3)
+    shrunk_net3, (equiv_net3, collisions3) = CNets.collision_nodes(_netgm3)
     t3 = last(CNets.possible_translations(shrunk_net3)[2])
     @test t3 == [1//3, 0]
-    pvmap3 = CNets.CheckSymmetryWithCollisions(collisions3, false)(shrunk_net3.pge, t3, nothing, shrunk_net3.types)
+    pvmap3 = CNets.CheckSymmetryWithCollisions(collisions3)(shrunk_net3.pge, t3, nothing, shrunk_net3.types)
     @test pvmap3 == PeriodicVertex2D[(2, (0,0)), (3, (0,0)), (1, (1,0)), (5, (0,0)), (6, (0,0)), (4, (1,0))]
-    to_shrunk3 = [i+3 for (i, rnge) in enumerate(collisions3) for _ in rnge]
-    direct_map3 = CNets.translation_to_direct_map(pvmap3, equiv_net3, collisions3, to_shrunk3)
+    collisions_ranges3 = [node.rnge for node in collisions3]
+    to_shrunk3 = [i+3 for (i, rnge) in enumerate(collisions_ranges3) for _ in rnge]
+    direct_map3 = CNets.translation_to_direct_map(pvmap3, equiv_net3, collisions_ranges3, to_shrunk3)
     @test direct_map3 == [2, 3, 1, 8, 7, 9, 10, 12, 11, 5, 6, 4]
     periodicity3, transformation3 = CNets.find_transformation_matrix(t3)
-    collision_offsets3 = CNets.direct_map_to_collision_offsets(direct_map3, collisions3, periodicity3)
+    collision_offsets3 = CNets.direct_map_to_collision_offsets(direct_map3, collisions_ranges3, periodicity3)
     new_shrunk_net3, (new_net3, new_collision_ranges3) = CNets.reduce_unstable_net(shrunk_net3, equiv_net3, collisions3, pvmap3, transformation3, collision_offsets3)
     collision_offsets3_alt = [1, 1, 1, 1, 2, 3, 2, 1, 3, 3, 2, 1]
     new_shrunk_net3_alt, (new_net3_alt, new_collision_ranges3_alt) = CNets.reduce_unstable_net(shrunk_net3, equiv_net3, collisions3, pvmap3, transformation3, collision_offsets3)
     @test topological_genome(new_net3) == topological_genome(new_net3_alt) == topological_genome(CrystalNet(gm))
 
     _netgm4 = CrystalNet(make_supercell(gm, (2, 2))[[12, 5, 15, 16, 13, 1, 6, 2, 8, 3, 11, 10, 9, 7, 14, 4]])
-    collisions4, shrunk_net4, equiv_net4 = CNets.collision_nodes(_netgm4)
+    shrunk_net4, (equiv_net4, collisions4) = CNets.collision_nodes(_netgm4)
     collision_ranges4 = [5:7, 8:10, 11:13, 14:16]
     t4 = last(CNets.possible_translations(shrunk_net4)[1])
     @test t4 == [1//2, 1//2]
-    check_symmetry4 = CNets.CheckSymmetryWithCollisions((equiv_net4, collision_ranges4), false)
+    check_symmetry4 = CNets.CheckSymmetryWithCollisions(collisions4)
     pvmap4 = check_symmetry4(shrunk_net4.pge, t4, nothing, shrunk_net4.types)
     @test pvmap4 == PeriodicVertex2D[(4, (0,0)), (3, (0,1)), (2, (1,0)), (1, (1,1)), (8, (0,1)), (7, (0,0)), (6, (1,1)), (5, (1,0))]
     collision_offsets4 = [1, 1, 1, 1, 1, 2, 3, 3, 2, 1, 2, 1, 3, 3, 1, 2]
     periodicity4, transformation4 = CNets.find_transformation_matrix(t4)
     @test CNets.direct_map_to_collision_offsets([4, 3, 2, 1, 10, 9, 8, 13, 11, 12, 16, 15, 14, 7, 5, 6], [5:7,8:10,11:13,14:16], periodicity4) == collision_offsets4
-    new_shrunk_net4, (new_net4, new_collision_ranges4) = CNets.reduce_unstable_net(shrunk_net4, equiv_net4, collision_ranges4, pvmap4, transformation4, collision_offsets4)
+    new_shrunk_net4, (new_net4, new_collisions4) = CNets.reduce_unstable_net(shrunk_net4, equiv_net4, collisions4, pvmap4, transformation4, collision_offsets4)
 
     t2 = last(CNets.possible_translations(new_shrunk_net4)[2])
     @test t2 == [0, 1//2]
-    pvmap2 = CNets.CheckSymmetryWithCollisions((new_net4, new_collision_ranges4), false)(new_shrunk_net4.pge, t2, nothing, new_shrunk_net4.types)
+    pvmap2 = CNets.CheckSymmetryWithCollisions(new_collisions4)(new_shrunk_net4.pge, t2, nothing, new_shrunk_net4.types)
     @test pvmap2 == PeriodicVertex2D[(2, (0,0)), (1, (0,1)), (4, (0,0)), (3, (0,1))]
     collision_offsets2 = [1, 1, 1, 2, 3, 1, 3, 2]
     periodicity2, transformation2 = CNets.find_transformation_matrix(t2)
-    new_shrunk_net2, (new_net2, new_collision_ranges2) = CNets.reduce_unstable_net(new_shrunk_net4, new_net4, new_collision_ranges4, pvmap2, transformation2, collision_offsets2)
+    new_shrunk_net2, (new_net2, new_collision_ranges2) = CNets.reduce_unstable_net(new_shrunk_net4, new_net4, new_collisions4, pvmap2, transformation2, collision_offsets2)
     @test topological_genome(new_net2) == topological_genome(CrystalNet(gm))
 
     @test nv(CNets.one_topology(topological_genome(u1D)).genome) == 12
