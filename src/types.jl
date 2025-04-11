@@ -662,35 +662,39 @@ end
 function CrystalNet{D}(pge::PeriodicGraphEmbedding{D,T}, types::Vector{Symbol}, options::Options) where {D,T}
     CrystalNet{D,T}(pge, types, options)
 end
-function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
-                       graph::PeriodicGraph{D}, options::Options) where D
+function CrystalNet{D}(cell::Cell, types::Vector{Symbol}, graph::PeriodicGraph{D}, options::Options, check_dimensionality=true) where D
+    if check_dimensionality
+        dims = dimensionality(graph)
+        if length(dims) > 1 || length(first(values(dims))) > 1 || first(first(values(dims)))[2] > 1
+            throw(ArgumentError("Cannot construct a CrystalNet from a disconnected graph, use UnderylingNets instead"))
+        end
+    end
     placement = equilibrium(graph) # from PeriodicGraphEquilibriumPlacement.jl
     pge, s = SortedPeriodicGraphEmbedding(copy(graph), placement, cell)
     return CrystalNet{D}(pge, types[s], rev_permute_mapping!(options, s))
 end
 
-function CrystalNet{D}(graph::PeriodicGraph{D}, options::Options) where D
-    CrystalNet{D}(Cell(), fill(Symbol(""), nv(graph)), graph, options)
+function CrystalNet{D}(graph::PeriodicGraph{D}, options::Options, check_dimensionality=true) where D
+    CrystalNet{D}(Cell(), fill(Symbol(""), nv(graph)), graph, options, check_dimensionality)
 end
-function CrystalNet(graph::PeriodicGraph{D}, options::Options) where D
-    CrystalNet{D}(Cell(), fill(Symbol(""), nv(graph)), graph, options)
+function CrystalNet(graph::PeriodicGraph{D}, options::Options, check_dimensionality=true) where D
+    CrystalNet{D}(Cell(), fill(Symbol(""), nv(graph)), graph, options, check_dimensionality)
 end
 
 
 const PseudoGraph{D} = Union{PeriodicGraph{D},AbstractVector{PeriodicEdge{D}}}
 
-function CrystalNet(g::Union{PseudoGraph,AbstractString}; kwargs...)
-    CrystalNet(g isa PeriodicGraph ? g : PeriodicGraph(g), Options(; kwargs...))
+function CrystalNet(g::Union{PseudoGraph,AbstractString}, check_dimensionality=true; kwargs...)
+    CrystalNet(g isa PeriodicGraph ? g : PeriodicGraph(g), Options(; kwargs...), check_dimensionality)
 end
-function CrystalNet{D}(g::Union{PseudoGraph,AbstractString}; kwargs...) where {D}
-    CrystalNet{D}(g isa PeriodicGraph ? g : PeriodicGraph{D}(g), Options(; kwargs...))
+function CrystalNet{D}(g::Union{PseudoGraph,AbstractString}, check_dimensionality=true; kwargs...) where {D}
+    CrystalNet{D}(g isa PeriodicGraph ? g : PeriodicGraph{D}(g), Options(; kwargs...), check_dimensionality)
 end
 
 
-function CrystalNet{D}(cell::Cell, types::Vector{Symbol},
-                       graph::PeriodicGraph, options::Options) where D
-    ne(graph) == 0 && return CrystalNet{D}(cell, types, PeriodicGraph{D}(nv(graph)), options)
-    return CrystalNet{D}(cell, types, PeriodicGraph{D}(graph), options)
+function CrystalNet{D}(cell::Cell, types::Vector{Symbol}, graph::PeriodicGraph, options::Options, check_dimensionality=true) where D
+    ne(graph) == 0 && return CrystalNet{D}(cell, types, PeriodicGraph{D}(nv(graph)), options, check_dimensionality)
+    return CrystalNet{D}(cell, types, PeriodicGraph{D}(graph), options, check_dimensionality)
 end
 
 
