@@ -328,7 +328,16 @@ function candidate_key_unstable(net::CrystalNet{D,T}, shrunk_candidate, u_s, bas
     return vmap, edgs
 end
 
-function topological_key_unstable(net::CrystalNet{D,T}, collisions, shrunk_net, candidates) where {D,T}
+function minute_collision_ranges(collisions)
+    ret = UnitRange{Int}[]
+    for node in collisions
+        cofs = first(node.rnge) - 1
+        append!(ret, rnge .+ cofs for rnge in node.subranges if length(rnge) > 1)
+    end
+    ret
+end
+
+function topological_key_unstable(net::CrystalNet{D,T}, collisions::CollisionList, shrunk_net, candidates) where {D,T}
     collision_ranges = [node.rnge for node in collisions]
     @assert issorted(first.(collision_ranges))
     n = length(net.pge)
@@ -352,6 +361,8 @@ function topological_key_unstable(net::CrystalNet{D,T}, collisions, shrunk_net, 
         end
     end
 
+    permutationranges = minute_collision_ranges(collisions)
+
     for (v, basis) in candidates
         shrunk_candidate = candidate_key(shrunk_net, v, basis, dummy_edges, Val(true))
         newvmap, edgs = candidate_key_unstable(net, shrunk_candidate, v, basis, collision_ranges)
@@ -365,8 +376,8 @@ function topological_key_unstable(net::CrystalNet{D,T}, collisions, shrunk_net, 
             # minimal_basis = basis
         end
 
-        new_positions = [(j = findfirst(==(first(range)), newvmap); j:(j+length(range)-1)) for range in collision_ranges]
-        @toggleassert [newvmap[x] for x in new_positions] == collision_ranges
+        new_positions = [(j = findfirst(==(first(range)), newvmap); j:(j+length(range)-1)) for range in permutationranges]
+        @toggleassert [newvmap[x] for x in new_positions] == permutationranges
         swaps = ContiguousPlainChangesIterator(new_positions, false)
 
         # display(edgs)
