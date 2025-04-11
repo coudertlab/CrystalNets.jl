@@ -3,12 +3,34 @@
 
 struct CollisionNode
     rnge::UnitRange{Int}
-    property::Vector{Int}
+    uniquecsequences::Vector{Vector{Int}}
+    subranges::Vector{UnitRange{Int}}
 end
-CollisionNode(g, node::UnitRange) = CollisionNode(node, sort!([degree(g, i) for i in node]))
+
+function get_CollisionNode(g::PeriodicGraph, node::UnitRange)
+    csequences = [coordination_sequence(g, i, 6) for i in node]
+    I = sortperm(csequences)
+    subranges = UnitRange{Int}[]
+    next_start = 1
+    last_csequence = csequences[I[1]]
+    uniques = Int[I[1]]
+    for i in 2:length(csequences)
+        csequence = csequences[I[i]]
+        if csequence != last_csequence
+            last_csequence = csequence
+            push!(subranges, next_start:(i-1))
+            next_start = i
+            push!(uniques, I[i])
+        end
+    end
+    push!(subranges, next_start:length(node))
+    CollisionNode(node, csequences[uniques], subranges), I
+end
 
 function possibly_equivalent_nodes(node1::CollisionNode, node2::CollisionNode)
-    length(node1.rnge) == length(node2.rnge) && node1.property == node2.property
+    length(node1.rnge) == length(node2.rnge) &&
+        node1.uniquecsequences == node2.uniquecsequences &&
+        node1.subranges == node2.subranges
 end
 
 """
@@ -23,8 +45,15 @@ end
 Base.size(cl::CollisionList) = (length(cl.list),)
 Base.getindex(cl::CollisionList, i::Int) = cl.list[i]
 
-function CollisionList(g::PeriodicGraph, collision_ranges::Vector{UnitRange{Int}})
-    return CollisionList([CollisionNode(g, node) for node in collision_ranges])
+function get_CollisionList(g::PeriodicGraph, collision_ranges::Vector{UnitRange{Int}})
+    vmap = collect(1:nv(g))
+    list = Vector{CollisionNode}(undef, length(collision_ranges))
+    for (i, node) in enumerate(collision_ranges)
+        cnode, I = get_CollisionNode(g, node)
+        list[i] = cnode
+        vmap[node] .= (first(node)-1) .+ I
+    end
+    CollisionList(list), vmap
 end
 CollisionList() = CollisionList(CollisionNode[])
 
@@ -165,9 +194,11 @@ function collision_nodes(net::CrystalNet{D,T}) where {D,T}
 
     @toggleassert iszero(first(net.pge.pos))
 
+    clist, cvmap = get_CollisionList(newgraph, collision_ranges)
+    vmap = vmap[cvmap]
     opts = rev_permute_mapping!(net.options, vmap, length(net.types))
-    newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph, opts)
-    return shrink_collisions(newnet, collision_ranges), (newnet, CollisionList(newnet.pge.g, collision_ranges))
+    newnet = CrystalNet{D,T}(net.pge.cell, net.types[vmap], newpos, newgraph[cvmap], opts)
+    return shrink_collisions(newnet, collision_ranges), (newnet, clist)
 end
 
 

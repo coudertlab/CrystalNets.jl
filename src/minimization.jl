@@ -356,7 +356,7 @@ function find_transformation_matrix(t::SVector{D,T}) where {D,T}
         SMatrix{3,3,T,9}(images[best3[1]]..., images[best3[2]]..., images[best3[3]]...)
     end
     @toggleassert abs(LinearAlgebra.det(ret)) == 1//periodicity
-    periodicity, ret
+    ret
 end
 
 
@@ -485,7 +485,7 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collisions, shrunk_
         node = collisions[jv - first_collision_m1]
         append!(virtualvmap, node.rnge)
         nextcounter = counter + length(node.rnge)
-        new_collisions[i] = CollisionNode(counter:(nextcounter-1), node.property)
+        new_collisions[i] = CollisionNode(counter:(nextcounter-1), node.uniquecsequences, node.subranges)
         counter = nextcounter
     end
 
@@ -501,7 +501,7 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collisions, shrunk_
     return (new_shrunk_net, (new_net, CollisionList(new_collisions)))
 end
 
-function direct_map_to_collision_offsets(direct_map, collision_ranges, periodicity)
+function direct_map_to_collision_offsets(direct_map, collision_ranges)
     first_collision_m1 = first(first(collision_ranges)) - 1
     collision_offsets = zeros(Int, length(direct_map))
     collision_offsets[1:first_collision_m1] .= 1
@@ -647,7 +647,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
             # @show vmapprogress
             returnto, (before, idx_after) = vmapprogress[index]
             shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
-            shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "before" belongs
+            shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "after" belongs
             rnge = collision_ranges[shrunk_after - first_collision_m1]
 
             # "before" is currently mapped to "rnge[after]"
@@ -778,8 +778,8 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, (net
         direct_map = translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrunk)
         if !(direct_map isa Nothing) # found a valid translation!
             @toggleassert isperm(direct_map)
-            periodicity, transformation = find_transformation_matrix(t)
-            collision_offsets = direct_map_to_collision_offsets(direct_map, collision_ranges, periodicity)
+            transformation = find_transformation_matrix(t)
+            collision_offsets = direct_map_to_collision_offsets(direct_map, collision_ranges)
             return reduce_unstable_net(shrunk_net, net, collisions, shrunk_pvmap, transformation, collision_offsets)
         end
     end
