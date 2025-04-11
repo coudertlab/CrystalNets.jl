@@ -3,33 +3,39 @@
 
 struct CollisionNode
     rnge::UnitRange{Int}
-    uniquecsequences::Vector{Vector{Int}}
-    subranges::Vector{UnitRange{Int}}
+    uniquecsequences::Vector{Vector{Int}} # unique coordination sequences
+    uniques::Vector{Int} # position of the first unique sequences in the sorted list of coordination sequences
+    subranges::Vector{UnitRange{Int}} # indices of rnge; the first subrange starts at 1
 end
 
 function get_CollisionNode(g::PeriodicGraph, node::UnitRange)
     csequences = [coordination_sequence(g, i, 6) for i in node]
     I = sortperm(csequences)
+    csequences = csequences[I]
     subranges = UnitRange{Int}[]
     next_start = 1
-    last_csequence = csequences[I[1]]
-    uniques = Int[I[1]]
+    last_csequence = csequences[1]
+    uniques = Int[1]
     for i in 2:length(csequences)
-        csequence = csequences[I[i]]
+        csequence = csequences[i]
         if csequence != last_csequence
             last_csequence = csequence
             push!(subranges, next_start:(i-1))
             next_start = i
-            push!(uniques, I[i])
+            push!(uniques, i)
         end
     end
+    keepat!(csequences, uniques)
     push!(subranges, next_start:length(node))
-    CollisionNode(node, csequences[uniques], subranges), I
+    filter!(>(1)∘length, subranges)
+    # TODO: remove subranges containing only equivalent nodes
+    CollisionNode(node, csequences, uniques, subranges), I
 end
 
 function possibly_equivalent_nodes(node1::CollisionNode, node2::CollisionNode)
     length(node1.rnge) == length(node2.rnge) &&
         node1.uniquecsequences == node2.uniquecsequences &&
+        node1.uniques == node2.uniques
         node1.subranges == node2.subranges
 end
 
@@ -332,7 +338,7 @@ function minute_collision_ranges(collisions)
     ret = UnitRange{Int}[]
     for node in collisions
         cofs = first(node.rnge) - 1
-        append!(ret, rnge .+ cofs for rnge in node.subranges if length(rnge) > 1)
+        append!(ret, rnge .+ cofs for rnge in node.subranges)
     end
     ret
 end

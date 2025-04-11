@@ -485,7 +485,7 @@ function reduce_unstable_net(shrunk_net::CrystalNet{D}, net, collisions, shrunk_
         node = collisions[jv - first_collision_m1]
         append!(virtualvmap, node.rnge)
         nextcounter = counter + length(node.rnge)
-        new_collisions[i] = CollisionNode(counter:(nextcounter-1), node.uniquecsequences, node.subranges)
+        new_collisions[i] = CollisionNode(counter:(nextcounter-1), node.uniquecsequences, node.uniques, node.subranges)
         counter = nextcounter
     end
 
@@ -526,8 +526,8 @@ function direct_map_to_collision_offsets(direct_map, collision_ranges)
 end
 
 # ensure that there cannot be any orbit of the form i -> ... -> j -> ... where i and j are in the same collision node
-function find_necessary_image(iactual, (direct_map, reverse_map, collision_ranges, to_shrunk))
-    first_collision_m1 = first(first(collision_ranges)) - 1
+function find_necessary_image(iactual, (direct_map, reverse_map, collisions, to_shrunk))
+    first_collision_m1 = first(first(collisions).rnge) - 1
     directactual = direct_map[iactual]
     irnge = directactual < 0 ? -directactual : (to_shrunk[directactual-first_collision_m1] - first_collision_m1)
     currentrnge = to_shrunk[iactual-first_collision_m1] - first_collision_m1
@@ -551,13 +551,14 @@ function attribute_next_available!(vmapprogress, index, iactual, modifystack)
 end
 
 function attribute_next_available_modify!(vmapprogress, thisindex, returnto, iactual, exclude, modifystack)
-    direct_map, reverse_map, collision_ranges, to_shrunk = modifystack
-    first_collision_m1 = first(first(collision_ranges)) - 1
+    direct_map, reverse_map, collisions, to_shrunk = modifystack
+    first_collision_m1 = first(first(collisions).rnge) - 1
     directactual = direct_map[iactual]
     irnge = directactual < 0 ? -directactual : (to_shrunk[directactual-first_collision_m1] - first_collision_m1)
     necessaryimage = find_necessary_image(iactual, modifystack)
     necessaryimage == -1 && return false
-    rnge = @view (collision_ranges[irnge])[exclude+1:end]
+    crnge = collisions[irnge].rnge
+    rnge = @view crnge[exclude+1:end]
     idxinrnge = if necessaryimage > 0
         necessaryimage in rnge ? necessaryimage-first(rnge)+1 : nothing
     else
@@ -581,11 +582,11 @@ function attribute_next_available_modify!(vmapprogress, thisindex, returnto, iac
 end
 
 function backtrack_to!(vmapprogress, index, (modifystack, shrunk_pvmap, reference_direct_map, reference_reverse_map))
-    direct_map, reverse_map, collision_ranges, _ = modifystack
+    direct_map, reverse_map, collisions, _ = modifystack
     returnto, (before, idx_after) = vmapprogress[index]
     for (_, (i, j)) in @view vmapprogress[index+1:end]
         mi_rnge = direct_map[i] = reference_direct_map[i]
-        k = collision_ranges[-mi_rnge][j]
+        k = collisions[-mi_rnge].rnge[j]
         reverse_map[k] = reference_reverse_map[k]
     end
     resize!(vmapprogress, index)
@@ -600,7 +601,7 @@ function backtrack_to!(vmapprogress, index, (modifystack, shrunk_pvmap, referenc
 end
 
 """
-    translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrunk)
+    translation_to_direct_map(shrunk_pvmap, net, collisions::CollisionList, to_shrunk)
 
 Given a `shrunk_pvmap` representing the mapping of the shrunk vertices obtained from a
 translation (valid on the shrunk net), return a `direct_map` which is a mapping of the
@@ -609,10 +610,11 @@ vertex numbers of the initial `net` obtained from the same translation.
 If no such `direct_map` can be found, i.e. if the translation is not valid on the initial
 net, return `nothing`.
 """
-function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrunk)
-    # @show shrunk_pvmap, collision_ranges, to_shrunk
+function translation_to_direct_map(shrunk_pvmap, net, collisions::CollisionList, to_shrunk)
+    # @show shrunk_pvmap, collisions, to_shrunk
+    @toggleassert !isempty(collisions)
     valid = true # determine if the translation is valid
-    first_collision_m1 = first(first(collision_ranges)) - 1
+    first_collision_m1 = first(first(collisions).rnge) - 1
     shrunk_indirect_vmap = zeros(Int, length(shrunk_pvmap) - first_collision_m1)
     for (i, (v, _)) in enumerate(@view shrunk_pvmap[first_collision_m1+1:end])
         shrunk_indirect_vmap[v - first_collision_m1] = i
@@ -625,12 +627,36 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
         @toggleassert reverse_map[_v] == 0
         reverse_map[_v] = i
     end
-    for (i, rnge) in enumerate(collision_ranges), j in rnge
-        direct_map[j] = -first(shrunk_pvmap[first_collision_m1+i]) + first_collision_m1
-        reverse_map[j] = -shrunk_indirect_vmap[i]
+    last_j = first_collision_m1
+    targetnodeidx = 0
+    cofs = 0
+    for (i, node) in enumerate(collisions)
+        targetnodeidx = first(shrunk_pvmap[first_collision_m1+i]) - first_collision_m1
+        targetnode = collisions[targetnodeidx]
+        @toggleassert possibly_equivalent_nodes(node, targetnode)
+        cofs = first(node.rnge) - 1
+        for subrnge in node.subranges
+            ofssubrnge = cofs .+ subrnge
+            for j in ((last_j+1):(first(ofssubrnge)-1))
+                _v = targetnode.rnge[j - cofs]
+                direct_map[j] = _v
+                reverse_map[_v] = j
+            end
+            for j in ofssubrnge
+                direct_map[j] = -targetnodeidx
+                reverse_map[j] = -shrunk_indirect_vmap[i]
+            end
+            last_j = last(ofssubrnge)
+        end
+        for j in (last_j+1):last(node.rnge)
+            _v = targetnode.rnge[j - cofs]
+            direct_map[j] = _v
+            reverse_map[_v] = j
+        end
+        last_j = last(node.rnge)
     end
     @toggleassert !any(iszero, direct_map) && !any(iszero, reverse_map)
-    modifystack = direct_map, reverse_map, collision_ranges, to_shrunk
+    modifystack = direct_map, reverse_map, collisions, to_shrunk
     backtrackstack = (modifystack, shrunk_pvmap, copy(direct_map), copy(reverse_map))
 
     for grand_index in (first_collision_m1+1):n
@@ -648,7 +674,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
             returnto, (before, idx_after) = vmapprogress[index]
             shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
             shrunk_after = first(shrunk_pvmap[shrunk_before]) # shrunk node to which "after" belongs
-            rnge = collision_ranges[shrunk_after - first_collision_m1]
+            rnge = collisions[shrunk_after - first_collision_m1].rnge
 
             # "before" is currently mapped to "rnge[after]"
             if backtracking
@@ -721,7 +747,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrun
                     # this situation can happen due to interference of a previous iteration
                     # of the "for actual in actual_neighbors" loop. For example, if there
                     # are two neighbors with the same vertex number but different offsets
-                    if !(attributed_previously in collision_ranges[targetrnge])
+                    if !(attributed_previously in collisions[targetrnge].rnge)
                         backtrack_target = findlast(x -> first(x[2]) == actual.v, vmapprogress)
                         break
                     end
@@ -775,7 +801,7 @@ function find_first_valid_translation_unstable(shrunk_net::CrystalNet{D,T}, (net
 
     collision_ranges = [node.rnge for node in collisions]
     for (t, shrunk_pvmap) in translations_to_check
-        direct_map = translation_to_direct_map(shrunk_pvmap, net, collision_ranges, to_shrunk)
+        direct_map = translation_to_direct_map(shrunk_pvmap, net, collisions, to_shrunk)
         if !(direct_map isa Nothing) # found a valid translation!
             @toggleassert isperm(direct_map)
             transformation = find_transformation_matrix(t)

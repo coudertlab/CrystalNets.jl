@@ -426,6 +426,8 @@ end
                              20 2 0 0  20 3 0 0  20 1 1 1  20 5 1 0  20 18 0 1  20 17 0 1  20 19 0 1
                              2 5 1 0  7 8 0 -1  10 11 0 0  14 16 0 0  18 19 0 0");
 
+    gn = PeriodicGraph("3  1 1 1 0 0  1 2 0 0 0  1 2 0 1 0  1 2 0 0 1  1 2 0 1 1  1 3 0 0 0  1 4 0 0 0  1 5 0 0 0  1 3 0 1 0  1 4 0 1 0  1 5 0 1 0  3 4 0 0 0  2 2 1 0 0  2 6 0 0 0  2 7 0 0 0  2 8 0 0 0  2 6 0 0 1  2 7 0 0 1  2 8 0 0 1  6 7 0 0 0");
+
     # Nets with invalid translations
     u1D = PeriodicGraph("1  1 2 0  2 1 1  1 3 0 3 4 0 3 5 0 4 6 0 5 6 0 4 7 0 5 7 0  2 8 0 8 9 0 8 10 0 9 10 0 9 11 0 10 12 0 11 12 0")
     u2D = PeriodicGraph("2  1 5 0 0  1 8 0 0  1 10 -1 0  1 9 -1 0  2 6 0 0  2 7 0 0  2 6 0 1  2 7 0 1  3 11 0 0  3 12 0 0  3 11 0 1  3 12 0 1  4 5 0 0  4 8 0 0  4 9 0 0  4 10 0 0  5 8 0 0  5 7 0 0  6 8 0 0  9 11 0 0  10 12 0 0  11 12 0 0")
@@ -438,7 +440,7 @@ end
     @test pvmap3 == PeriodicVertex2D[(2, (0,0)), (3, (0,0)), (1, (1,0)), (5, (0,0)), (6, (0,0)), (4, (1,0))]
     collisions_ranges3 = [node.rnge for node in collisions3]
     to_shrunk3 = [i+3 for (i, rnge) in enumerate(collisions_ranges3) for _ in rnge]
-    direct_map3 = CNets.translation_to_direct_map(pvmap3, equiv_net3, collisions_ranges3, to_shrunk3)
+    direct_map3 = CNets.translation_to_direct_map(pvmap3, equiv_net3, collisions3, to_shrunk3)
     @test direct_map3 == [2, 3, 1, 7, 8, 9, 10, 11, 12, 4, 5, 6]
     transformation3 = CNets.find_transformation_matrix(t3)
     collision_offsets3 = CNets.direct_map_to_collision_offsets(direct_map3, collisions_ranges3)
@@ -472,7 +474,7 @@ end
     @test nv(CNets.one_topology(topological_genome(u1D)).genome) == 12
 
     unstabletry = Union{PeriodicGraph1D,PeriodicGraph2D,PeriodicGraph3D}[
-        mini2, mini3_2, mini3_3, small, u1A, u1B, u2A, u2B, u2C, u3A, u3B, gm, u2D, u1D
+        mini2, mini3_2, mini3_3, small, u1A, u1B, u2A, u2B, u2C, u3A, u3B, gm, gn, u2D, u1D
     ]
 
     failurelock = ReentrantLock()
