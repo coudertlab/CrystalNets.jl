@@ -479,7 +479,8 @@ end
 
     failurelock = ReentrantLock()
     failures = 0
-    Threads.@threads :greedy for (i, graph) in enumerate(unstabletry)
+    Threads.@threads for i in eachindex(unstabletry)
+        graph = unstabletry[i]
         genome = CNets.one_topology(topological_genome(graph))
         @test !genome.unstable
         N = ndims(graph)
