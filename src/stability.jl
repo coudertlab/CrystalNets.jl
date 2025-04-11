@@ -1,6 +1,22 @@
 ## Functions related to unstable nets (some vertices have the same equilibrium placement)
 
+"""
+    CollisionNode
 
+Store information on all contiguous vertices of a graph whose placement collide to the same
+position.
+
+Vertices in a `CollisionNode` are stored by increasing number of their coordinationn
+sequences. The `subranges` field of a `CollisionNode` contains the sub-ranges of vertices
+sharing the same coordination sequence, but that could not be determined to be strictly
+equivalent. Each permutation of such vertices will need be explored.
+
+Use `get_CollisionNode` to create a `CollisionNode` from a graph and a range of colliding
+vertices. This will also return a `vmap` to be applied to the graph for the representation
+to be consistent.
+Two `CollisionNode`s can be compared to check if they could possibly be
+topologically equivalent using `possibly_equivalent_nodes`
+"""
 struct CollisionNode
     rnge::UnitRange{Int}
     uniquecsequences::Vector{Vector{Int}} # unique coordination sequences
@@ -27,15 +43,28 @@ function get_CollisionNode(g::PeriodicGraph, node::UnitRange)
     end
     keepat!(csequences, uniques)
     push!(subranges, next_start:length(node))
-    filter!(>(1)∘length, subranges)
-    # TODO: remove subranges containing only equivalent nodes
+    fully_equivalent_subranges = Int[]
+    for (i, subr) in enumerate(subranges)
+        allequivalent = true
+        ref = node[I[first(subr)]]
+        for j in subr[2:end]
+            if !equivalent_nodes(g, ref, node[I[j]])
+                allequivalent = false
+                break
+            end
+        end
+        if allequivalent
+            push!(fully_equivalent_subranges, i)
+        end
+    end
+    deleteat!(subranges, fully_equivalent_subranges)
     CollisionNode(node, csequences, uniques, subranges), I
 end
 
 function possibly_equivalent_nodes(node1::CollisionNode, node2::CollisionNode)
     length(node1.rnge) == length(node2.rnge) &&
         node1.uniquecsequences == node2.uniquecsequences &&
-        node1.uniques == node2.uniques
+        node1.uniques == node2.uniques &&
         node1.subranges == node2.subranges
 end
 

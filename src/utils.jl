@@ -568,6 +568,83 @@ function isoverfloworinexact(@nospecialize(e))
     return false
 end
 
+"""
+    equivalent_nodes(g::PeriodicGraph, a, b)
+
+Determine whether two vertices `a` and `b` are topologically strictly equivalent in graph `g`.
+
+This consists in checking whether the permutation of `a` and `b` yields a graph with a
+different representation.
+"""
+function equivalent_nodes(g::PeriodicGraph, a, b)
+    a == b && return true
+    a, b = minmax(a, b)
+    neighsa = neighbors(g, a)
+    neighsb = neighbors(g, b)
+    lasta = length(neighsa)
+    lastb = length(neighsb)
+    lasta == lastb || return false
+    ja = jb = 0
+    ka = kb = 0
+    for i in 1:lasta
+        va, _ = neighsa[i]
+        if ja == 0 && va == a
+            ja = i
+        elseif ka == 0 && va == b
+            ka = i
+        end
+        vb, _ = neighsb[i]
+        if jb == 0 && vb == b
+            jb = i
+        elseif kb == 0 && vb == a
+            kb = i
+        end
+    end
+    ((ja == 0) ⊻ (jb == 0)) && return false
+    ((ka == 0) ⊻ (kb == 0)) && return false
+    ia = ib = 1
+    checked = 0
+    while ia ≤ lasta && ib ≤ lastb
+        va, ofsa = neighsa[ia]
+        ia += 1
+        (va == a || va == b) && continue
+        vb = va
+        ofsb = ofsa
+        while ib ≤ lastb
+            vb, ofsb = neighsb[ib]
+            ib += 1
+            (vb == a || vb == b) || break
+        end
+        vb == a || vb == b || (va == vb && ofsa == ofsb) || return false
+        checked += 1
+    end
+    if ja != 0
+        while ja ≤ lasta && jb ≤ lastb
+            va, ofsa = neighsa[ja]
+            ja += 1
+            vb, ofsb = neighsb[jb]
+            jb += 1
+            (va != a && vb != b) && break
+            ((va == a && vb != b) || (va != a && vb == b)) && return false
+            ofsa == ofsb || return false
+            checked += 1
+        end
+    end
+    if ka != 0
+        while ka ≤ lasta && kb ≤ lastb
+            va, ofsa = neighsa[ka]
+            ka += 1
+            vb, ofsb = neighsb[kb]
+            kb += 1
+            (va != b && vb != a) && break
+            ((va == b && vb != a) || (va != b && vb == a)) && return false
+            ofsa == ofsb || return false
+            checked += 1
+        end
+    end
+    return checked == lasta
+end
+
 
 # PlainChangesIterator for iterating over relevant permutation of vertices in unstable nets
 
