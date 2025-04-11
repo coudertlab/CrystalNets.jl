@@ -666,7 +666,7 @@ function CrystalNet{D}(cell::Cell, types::Vector{Symbol}, graph::PeriodicGraph{D
     if check_dimensionality
         dims = dimensionality(graph)
         if length(dims) > 1 || length(first(values(dims))) > 1 || first(first(values(dims)))[2] > 1
-            throw(ArgumentError("Cannot construct a CrystalNet from a disconnected graph, use UnderylingNets instead"))
+            throw(ArgumentError("Cannot construct a CrystalNet from a disconnected graph, use UnderlyingNets instead"))
         end
     end
     placement = equilibrium(graph) # from PeriodicGraphEquilibriumPlacement.jl
@@ -779,7 +779,7 @@ function _collect_net!(ret::Vector{<:CrystalNet{D}}, encountered, idx, c, cluste
         export_default(Crystal{Nothing}(c.pge.cell, types, c.pge.pos[vmap], graph, opts),
             lazy"subnet_$clustering", c.options.name, c.options.export_subnets)
         ret[idx] = try
-            CrystalNet{D}(c.pge.cell, types, graph, opts)
+            CrystalNet{D}(c.pge.cell, types, graph, opts, false)
         catch e
             (c.options.throw_error || isinterrupt(e)) && rethrow()
             CrystalNet{D}(c.pge.cell, Options(opts; error=(string(e)::String)))
@@ -990,7 +990,7 @@ function UnderlyingNets(g::SmallPseudoGraph, options::Options)
             vmap = first.(first(pvmaps))
             opts = rev_permute_mapping!(options, vmap, n)
             gD = D == 1 ? groups.D1 : D == 2 ? groups.D2 : groups.D3
-            push!(gD, (CrystalNet{D}[CrystalNet{D}(cell, types, subg, opts)], length(pvmaps), vmap))
+            push!(gD, (CrystalNet{D}[CrystalNet{D}(cell, types, subg, opts, false)], length(pvmaps), vmap))
         end
     end
     @ifwarn if numdim0 > 0
