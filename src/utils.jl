@@ -568,6 +568,63 @@ function isoverfloworinexact(@nospecialize(e))
     return false
 end
 
+"""
+    equivalent_nodes(g::PeriodicGraph, a, b)
+
+Determine whether two vertices `a` and `b` are topologically strictly equivalent in graph `g`.
+
+This consists in checking whether the permutation of `a` and `b` yields a graph with a
+different representation.
+"""
+function equivalent_nodes(g::PeriodicGraph, a, b)
+    a == b && return true
+    a, b = minmax(a, b)
+    neighsa = neighbors(g, a)
+    neighsb = neighbors(g, b)
+    ia = ib = 1
+    lasta = length(neighsa)
+    lastb = length(neighsb)
+    lasta == lastb || return false
+    ja = jb = 0
+    while ia ≤ lasta && ib ≤ lastb
+        va, ofsa = neighsa[ia]
+        ia += 1
+        if va == a
+            if ja == 0
+                ja = ia - 1
+            end
+            continue
+        end
+        if va == b
+            va = a
+        end
+        vb, ofsb = neighsb[ib]
+        ib += 1
+        if vb == b
+            if jb == 0
+                jb = ib - 1
+            end
+            continue
+        end
+        (va == vb && ofsa == ofsb) || return false
+    end
+    (ia == lasta + 1 && ib == lastb + 1) || return false
+    if ja == 0
+        @toggleassert jb == 0
+        return true
+    end
+    while ja ≤ lasta && jb ≤ lastb
+        va, ofsa = neighsa[ja]
+        ja += 1
+        vb, ofsb = neighsb[jb]
+        jb += 1
+        (va != a && vb != b) && break
+        ((va == a && vb != b) || (va != a && vb == b)) && return false
+        ofsa == ofsb || return false
+    end
+    return true
+end
+
 
 # PlainChangesIterator for iterating over relevant permutation of vertices in unstable nets
 

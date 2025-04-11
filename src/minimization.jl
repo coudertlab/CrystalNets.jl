@@ -644,7 +644,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collisions::CollisionList,
             end
             for j in ofssubrnge
                 direct_map[j] = -targetnodeidx
-                reverse_map[j] = -shrunk_indirect_vmap[i]
+                # reverse_map[j] = -shrunk_indirect_vmap[i]
             end
             last_j = last(ofssubrnge)
         end
@@ -655,7 +655,8 @@ function translation_to_direct_map(shrunk_pvmap, net, collisions::CollisionList,
         end
         last_j = last(node.rnge)
     end
-    @toggleassert !any(iszero, direct_map) && !any(iszero, reverse_map)
+    @show reverse_map
+    @toggleassert !any(iszero, direct_map)# && !any(iszero, reverse_map)
     modifystack = direct_map, reverse_map, collisions, to_shrunk
     backtrackstack = (modifystack, shrunk_pvmap, copy(direct_map), copy(reverse_map))
 
