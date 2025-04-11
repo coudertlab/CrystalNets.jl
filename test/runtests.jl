@@ -429,7 +429,7 @@ end
     gn = PeriodicGraph("3  1 1 1 0 0  1 2 0 0 0  1 2 0 1 0  1 2 0 0 1  1 2 0 1 1  1 3 0 0 0  1 4 0 0 0  1 5 0 0 0  1 3 0 1 0  1 4 0 1 0  1 5 0 1 0  3 4 0 0 0  2 2 1 0 0  2 6 0 0 0  2 7 0 0 0  2 8 0 0 0  2 6 0 0 1  2 7 0 0 1  2 8 0 0 1  6 7 0 0 0");
 
     # Nets with invalid translations
-    u1D = PeriodicGraph("1  1 2 0  2 1 1  1 3 0 3 4 0 3 5 0 4 6 0 5 6 0 4 7 0 5 7 0  2 8 0 8 9 0 8 10 0 9 10 0 9 11 0 10 12 0 11 12 0")
+    u1D = PeriodicGraph("1  1 2 0  2 1 1  1 3 0  3 4 0  3 5 0  4 6 0  5 6 0  4 7 0  5 7 0   2 8 0  8 9 0  8 10 0  9 10 0  9 11 0  10 12 0  11 12 0")
     u2D = PeriodicGraph("2  1 5 0 0  1 8 0 0  1 10 -1 0  1 9 -1 0  2 6 0 0  2 7 0 0  2 6 0 1  2 7 0 1  3 11 0 0  3 12 0 0  3 11 0 1  3 12 0 1  4 5 0 0  4 8 0 0  4 9 0 0  4 10 0 0  5 8 0 0  5 7 0 0  6 8 0 0  9 11 0 0  10 12 0 0  11 12 0 0")
 
     _netgm3 = CrystalNet(make_supercell(gm, (3, 1))[[8, 11, 6, 12, 3, 2, 7, 9, 10, 4, 1, 5]])
@@ -479,7 +479,7 @@ end
 
     failurelock = ReentrantLock()
     failures = 0
-    Threads.@threads for graph in unstabletry
+    Threads.@threads :greedy for (i, graph) in enumerate(unstabletry)
         genome = CNets.one_topology(topological_genome(graph))
         @test !genome.unstable
         N = ndims(graph)
