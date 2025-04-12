@@ -670,6 +670,7 @@ function translation_to_direct_map(shrunk_pvmap, net, collisions::CollisionList,
         backtracking = false
 
         while index > 0
+            yield()
             # @show vmapprogress
             returnto, (before, idx_after) = vmapprogress[index]
             shrunk_before = to_shrunk[before-first_collision_m1] # shrunk node to which "before" belongs
