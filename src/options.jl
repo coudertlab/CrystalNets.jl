@@ -383,7 +383,8 @@ These boolean options have a default value that may be determined by [`Bonding`]
 - `premerge_metalbonds`: when a periodic metallic SBU is detected, cluster together bonded
   metal atoms of the same kind before splitting the SBU.
 - `split_O_vertex`: if a vertex is composed of a single O, remove it and bond together all of
-  its neighbors, unless removing its hydrogen bonds would make it bivalent. Default is true.
+  its neighbors, unless removing its hydrogen bonds would make it bivalent.
+  Default is false, unless [`StructureType`](@ref) is `MOF` or `Zeolite`.
 - `unify_sbu_decomposition`: apply the same rule to decompose both periodic and finite SBUs.
   Default is false.
 - `force_warn`: force printing warning and information even during `..._dataset` function
@@ -497,7 +498,7 @@ struct Options
                        detect_organiccycles=true,
                        detect_pe=true,
                        cluster_simple_pe=true,
-                       split_O_vertex=true,
+                       split_O_vertex=nothing,
                        unify_sbu_decomposition=false,
                        separate_metals=nothing,
                        premerge_metalbonds=true,
@@ -548,6 +549,12 @@ struct Options
             track_mapping
         end
 
+        _split_O_vertex = if split_O_vertex === nothing
+            structure == StructureType.MOF || structure == StructureType.Zeolite
+        else
+            split_O_vertex
+        end
+
         new(
             name,
             bonding,
@@ -576,7 +583,7 @@ struct Options
             detect_organiccycles,
             detect_pe,
             cluster_simple_pe,
-            split_O_vertex,
+            _split_O_vertex,
             unify_sbu_decomposition,
             separate_metals,
             premerge_metalbonds,
