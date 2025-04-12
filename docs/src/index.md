@@ -55,15 +55,11 @@ for warnings.
 
 #### Unknown nets
 
-If the net is not recognized, its topological genome is displayed preceded by an "UNKNOWN"
-mention, or "unstable" if the net is unstable:
+If the net is not recognized, its topological genome is displayed preceded by an "UNKNOWN" mention:
 
 ```julia
 julia> determine_topology("/path/to/new/material.cif")
 UNKNOWN 2 1 2 -2 0 1 2 0 0 1 2 0 1 2 2 1 0
-
-julia> determine_topology("/path/to/unstable/net.cif")
-unstable 1 1 1 1 1 2 0 2 2 1
 ```
 
 In both known and unknown cases, the result is an [`InterpenetratedTopologyResult`](@ref).

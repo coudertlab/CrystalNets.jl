@@ -61,9 +61,8 @@ topological_genome(net::CrystalNet{0}) = TopologicalGenome(net.options.error)
 function topological_genome(net::CrystalNet{D,T}, collisionsetup)::TopologicalGenome where {D,T}
     try
         g::PeriodicGraph{D} = topological_key(net, collisionsetup)
-        g.width[] == -2 && error("Internal error: should not be any unstable net left here!")
         ne(g) == 0 && return TopologicalGenome(net.options.error)
-        return TopologicalGenome(g, recognize_topology(g), false)
+        return TopologicalGenome(g, recognize_topology(g))
     catch e
         isinterrupt(e) && rethrow()
         if T == Rational{BigInt} || !isoverfloworinexact(e)
@@ -206,8 +205,7 @@ macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
             net isa CrystalNet || continue
             sig = get(encountered_graphs, net.pge.g, net.pge.g)
             if haskey(encountered_genomes, net.pge.g)
-                unstable, counter = encountered_genomes[sig]
-                encountered_genomes[sig] = (unstable, counter + 1)
+                encountered_genomes[sig] += 1
             else
                 genome = topological_genome(net)::TopologicalGenome
                 if dim == maxdim && genome.name !== nothing
@@ -215,7 +213,7 @@ macro ifvalidgenomereturn(opts, msg, skipcrystal=false)
                     return genome
                 end
                 encountered_graphs[sig] = genome.genome
-                encountered_genomes[genome.genome] = (genome.unstable, 1)
+                encountered_genomes[genome.genome] = 1
             end
         end
     end
@@ -235,7 +233,7 @@ the variation of options.
 function guess_topology(path, defopts::Options)
     maxdim = maximum(defopts.dimensions; init=0)
     encountered_graphs = Dict{PeriodicGraph,PeriodicGraph}()
-    encountered_genomes = Dict{PeriodicGraph,Tuple{Bool,Int}}()
+    encountered_genomes = Dict{PeriodicGraph,Bool}()
     if defopts.name == "unnamed"
         defopts = Options(defopts; name=splitext(splitdir(path)[2])[1])
     end
@@ -309,18 +307,16 @@ function guess_topology(path, defopts::Options)
     # Finally, if everything fails, return the one encountered most
     maxencounter = 0
     most_plausible_genome::PeriodicGraph = PeriodicGraph{0}()
-    final_unstable = false
-    for (genome, (unstable, i)) in encountered_genomes
+    for (genome, i) in encountered_genomes
         if i > maxencounter
             maxencounter = i
             most_plausible_genome = genome
-            final_unstable = unstable
         end
     end
     return most_plausible_genome == PeriodicGraph{0}() ? begin
             issetequal(defopts.dimensions, [1,2,3]) ? TopologicalGenome() :
                 TopologicalGenome("could not guess (perhaps because no net with suitable dimension in $(defopts.dimensions) was found?)")
-            end : TopologicalGenome(most_plausible_genome, nothing, final_unstable)
+            end : TopologicalGenome(most_plausible_genome, nothing)
 end
 guess_topology(path; kwargs...) = guess_topology(path, Options(structure=StructureType.Guess; kwargs...))
 
@@ -619,7 +615,7 @@ functions.
 
 If `keepext` is unset, remove the extension from the file names in `results`.
 
-If `fullunknown` is set, export the full "UNKNOWN" and "unstable" topologies.
+If `fullunknown` is set, export the full "UNKNOWN" topologies.
 """
 function export_report(path, results::Dict; keepext=true, fullunknown=false, clusterings=reduce(vcat, keys(first(first(results)[2])[1]))::Vector{_Clustering})
     sort!(clusterings)
@@ -658,8 +654,6 @@ function export_report(path, results::Dict; keepext=true, fullunknown=false, clu
                         print(io, "ERROR")
                     elseif ndims(topo.genome) == 0
                         print(io, "0-dimensional")
-                    elseif topo.unstable
-                        print(io, "UNSTABLE")
                     elseif topo.name isa Nothing
                         print(io, "UNKNOWN")
                     else

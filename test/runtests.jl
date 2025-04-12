@@ -521,7 +521,6 @@ end
         graph = (i > nlimit ? unstablematerials : unstabletry)[j]
         listname = i > nlimit ? :unstablematerials : :unstabletry
         genome = CNets.one_topology(topological_genome(graph))
-        @test !genome.unstable
         N = ndims(graph)
         Threads.nthreads() == 1 && (println(i, " / ", Nunstable))
         for k in 1:(i > nlimit ? 50 : 100)

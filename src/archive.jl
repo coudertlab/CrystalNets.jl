@@ -54,7 +54,7 @@ dia
     true
     ```
 """
-const REVERSE_CRYSTALNETS_ARCHIVE = Dict{String,String}(id => (startswith(key, "unstable") ? key[10:end] : key) for (key, id) in CRYSTALNETS_ARCHIVE)
+const REVERSE_CRYSTALNETS_ARCHIVE = Dict{String,String}(id => key for (key, id) in CRYSTALNETS_ARCHIVE)
 
 export REVERSE_CRYSTALNETS_ARCHIVE
 
@@ -102,12 +102,8 @@ function validate_archive(custom_arc, avoid_recompute=true)::Dict{String,String}
                 arc_per_thread = [Pair{String,String}[] for _ in 1:nthreads()]
                 Threads.@threads :static for (key, id) in collect(parsed)
                     _g = topological_genome(CrystalNet(PeriodicGraph(key)))
-                    if _g.unstable || !isempty(_g.error)
-                        if _g.unstable
-                            println(stderr, "Net ", id, " is unstable.")
-                        else
-                            println(stderr, "Failed for net ", id, " with error:", g.error)
-                        end
+                    if !isempty(_g.error)
+                        println(stderr, "Failed for net ", id, " with error:", g.error)
                         continue
                     end
                     genome = string(_g.genome)
@@ -348,7 +344,7 @@ function make_archive(path, destination, verbose=false)
         for (i, (topology, nfold)) in enumerate(results)
             nfold == 0 && continue
             genome = string(topology)
-            if startswith(genome, "unstable") || genome == "0-dimensional"
+            if genome == "0-dimensional"
                 flag = true
                 push!(flagerror[]::Vector{Tuple{Vector{Int},String}}, (vmap, genome))
                 continue

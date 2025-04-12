@@ -83,6 +83,7 @@ CrystalNets.allnodes_to_singlenodes
 
 ```@docs
 CrystalNets.collision_nodes
+CrystalNets.CollisionNode
 ```
 
 ## Archives

@@ -1030,12 +1030,11 @@ true
 struct TopologicalGenome
     genome::SmallDimPeriodicGraph
     name::Union{Nothing,String}
-    unstable::Bool
     error::String
 end
 
-TopologicalGenome(g, name, unstable=false) = TopologicalGenome(g, name, unstable, "")
-TopologicalGenome(x::AbstractString) = TopologicalGenome(PeriodicGraph{0}(), nothing, false, x)
+TopologicalGenome(g, name) = TopologicalGenome(g, name, "")
+TopologicalGenome(x::AbstractString) = TopologicalGenome(PeriodicGraph{0}(), nothing, x)
 TopologicalGenome() = TopologicalGenome("")
 
 function ==(s1::TopologicalGenome, s2::TopologicalGenome)
@@ -1054,8 +1053,6 @@ function Base.show(io::IO, x::TopologicalGenome)
         print(io, "FAILED with: ", x.error)
     elseif ndims(x.genome) == 0
         print(io, "0-dimensional")
-    elseif x.unstable
-        print(io, "unstable ", x.genome)
     elseif x.name isa String
         splitcomma = split(x.name, ','; limit=2)
         fstsplit = first(splitcomma)
@@ -1072,16 +1069,13 @@ end
 
 function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
     if startswith(s, "UNKNOWN")
-        return TopologicalGenome(PeriodicGraph(s[9:end]), nothing, false)
+        return TopologicalGenome(PeriodicGraph(s[9:end]), nothing)
     end
     s == "0-dimensional" && return TopologicalGenome()
-    if startswith(s, "unstable")
-        return TopologicalGenome(PeriodicGraph(s[10:end]), nothing, true)
-    end
     if startswith(s, "FAILED")
         return TopologicalGenome(s[14:end])
     end
-    return TopologicalGenome(parse(PeriodicGraph, REVERSE_CRYSTALNETS_ARCHIVE[s]), s, false)
+    return TopologicalGenome(parse(PeriodicGraph, REVERSE_CRYSTALNETS_ARCHIVE[s]), s)
 end
 
 
