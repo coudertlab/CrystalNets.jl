@@ -1,6 +1,6 @@
 # CrystalNets.jl
 
-`CrystalNets.jl` is a a Julia package for automatic detection and identification of
+`CrystalNets.jl` is a Julia package for automatic detection and identification of
 net topologies underlying crystalline materials.
 Its inputs can be chemical files in any format recognized by [chemfiles](https://chemfiles.org/).
 
@@ -10,7 +10,7 @@ To use it through Python, check the [Python interface](@ref) tutorial.
 
 ## Package installation
 
-The installation follows the usual procedure. Start by downloading and installing [Julia](https://julialang.org/), v1.6 at least for `CrystalNets.jl`. This package was optimized with Julia v1.8 so performance and latency will be better on the more recent versions of Julia. Then, either
+The installation follows the usual procedure. Start by downloading and installing [Julia](https://julialang.org/), v1.10 or more recent. Then, either
 
 - open the Julia REPL and enter the package manager by typing `]`, then install `CrystalNets.jl` by entering:
   ```julia
@@ -26,7 +26,6 @@ To use the package, open a REPL and enter
 ```julia
 julia> using CrystalNets
 ```
-or proceed with the [Full installation](@ref) to obtain an executable.
 
 
 ## Quick usage as a module
@@ -53,9 +52,9 @@ By default, the parsed input and the extracted underlying nets are exported as .
 [`CrystalNets.toggle_export`](@ref), and similarly with [`CrystalNets.toggle_warning`](@ref)
 for warnings.
 
-#### Unknown nets
+#### Unnamed nets
 
-If the net is not recognized, its topological genome is displayed preceded by an "UNKNOWN" mention:
+If the net is not recognized as part of either the RCSR, EPINET or as a known zeolite, its topological genome is displayed preceded by an "UNKNOWN" mention:
 
 ```julia
 julia> determine_topology("/path/to/new/material.cif")
@@ -91,7 +90,7 @@ PE: cab
 Standard: fff
 ```
 
-## Full installation
+## Installation as an executable
 
 To obtain an executable, `CrystalNets.jl` can be statically compiled.
 To do so, run the following julia script after changing the `INSTALLATION_PATH` variable to the location where the `CrystalNets.jl` executable will be installed.
@@ -110,7 +109,7 @@ create_app(root, INSTALLATION_PATH;
            filter_stdlibs=true)
 ```
 
-Compilation can take between fifteen minutes and an hour, depending on your hardware and the version of Julia.
+Compilation can take a long time, depending on your hardware and the version of Julia.
 
 The executable will be located in the "bin" subdirectory of the specified `INSTALLATION_PATH`, under the name "CrystalNets".
 
@@ -124,7 +123,7 @@ dia
 Run `CrystalNets --help` for the list of options available to the executable.
 
 !!! tip
-    In terms of performance, the compiled executable is the best option if you only want to identify a few structures from time to time. Using [the website](https://progs.coudert.name/topology) is recommended as well for this use-case, unless the nets you study are too big.
+    For casual usage, using [the website](https://progs.coudert.name/topology) is the most convenient option, unless the nets you study are too big.
 
     For intensive workloads with many structures to identify, it is best to use `CrystalNets.jl` as a Julia module through the
-    [`determine_topology_dataset`](@ref) function. The module is also the best option to perform more advanced analyses on the net in Julia, or to use the [`Options`](@ref) unavailable to the executable.
+    [`determine_topology_dataset`](@ref) function. The module is also the best option to perform more advanced analyses on the net in Julia, or to use the [`Options`](@ref) unavailable to the executable or the website.

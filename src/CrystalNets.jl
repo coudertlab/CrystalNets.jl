@@ -31,6 +31,7 @@ export CrystalNet,
        parse_chemfile,
        parse_cgd,
        topological_genome,
+       one_topology,
        StructureType,
        Bonding,
        Clustering

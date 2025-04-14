@@ -6,12 +6,14 @@ This page covers a few issues that may occur when using CrystalNets.jl. If your 
 
 Sure! If you only want to identify the topology of a structure, the easiest way is to use the website interface at [https://progs.coudert.name/topology](https://progs.coudert.name/topology)
 
-If you want to use the package in a programmatic way without learning Julia, it is possible to use it through Python. To do so, please check the dedicated [Python interface](@ref) tutorial.
+If you want to use the package in a programmatic way through Python, please check the dedicated [Python interface](@ref) tutorial.
 
 ## How can I check that the detected topology corresponds to my input?
 
 This is the focus of the [Visualization](@ref) tutorial.
 You may also want to check the [Vertex mapping](@ref mapping) tutorial.
+
+On the website, a visualization panel automatically opens once the topology is computed, which enables checking the correspondence between the topology and the input.
 
 ## How can I silence warnings or remove exports?
 
@@ -78,7 +80,7 @@ There are several customizable heuristics for bond-guessing available among the
 several of the options in the "Miscellaneous" section.
 
 If nothing works, the last solution consists in providing an input file with explicit bonds
-set, and use the `bonding=Input` keyword argument to [`Options`](@ref).
+set, and use the `bonding=Bonding.Input` keyword argument to [`Options`](@ref).
 
 ## The topology has a name given by ToposPro but CrystalNets.jl yields "UNKNOWN ..."
 
@@ -92,8 +94,8 @@ While both algorithms usually align, the result may not be the same in all cases
 
 Most often, the difference will come from either:
 
-- an oxygen atom having three (or more) bonds becomes a vertex for ToposPro but is removed by CrystalNets.jl. To solve this, use `split_O_vertex=false` in the [`Options`](@ref).
-- a paddle-wheel pattern is grouped into a single cluster by CrystalNets.jl but not by ToposPro. To solve this, use `detect_paddlewheels=false` in the [`Options`](@ref).
+- an oxygen atom having three (or more) bonds becomes a vertex for ToposPro but is removed by CrystalNets.jl in MOFs. To use ToposPro's default behaviour, set `split_O_vertex=false` in the [`Options`](@ref).
+- a paddle-wheel pattern is grouped into a single cluster by CrystalNets.jl but not by ToposPro. To use ToposPro's default behaviour, use `detect_paddlewheels=false` in the [`Options`](@ref).
 
 ## How can I do a database topology analysis with CrystalNets.jl?
 
@@ -157,6 +159,8 @@ The string representation of the genome is simply `string(genome)`:
 julia> string(genome)
 "3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 4 0 0 1 1 5 0 0 0 1 6 0 0 0 2 4 0 0 1 2 6 -1 0 0 3 4 0 0 1 3 5 0 -1 0 4 5 0 0 0 4 6 0 0 0"
 ```
+
+In case the topology is unique, or unique for the given clustering, you can use the shortcut function [`one_topology`](@ref).
 
 ## Can I identify which input atom maps to which vertex of the returned genome?
 
