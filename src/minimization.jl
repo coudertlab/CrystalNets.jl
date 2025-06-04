@@ -316,7 +316,7 @@ function find_transformation_matrix(t::SVector{D,T}) where {D,T}
     elseif D == 2
         push!(images, SA[one(T), zero(T)], SA[zero(T), one(T)])
         n += 2
-        transformation2 = zero(MMatrix{2,2,T,4})
+        transformation2 = zero(T == Rational{BigInt} ? SizedMatrix{2,2,T,2,Matrix{T}} : MMatrix{2,2,T,4})
         mindet2 = (typemax(Int)-1)//1
         best2 = (0,0)
         for i in 1:(n-1)
@@ -336,7 +336,7 @@ function find_transformation_matrix(t::SVector{D,T}) where {D,T}
         oT = one(T); zT = zero(T)
         push!(images, SA[oT, zT, zT], SA[zT, oT, zT], SA[zT, zT, oT])
         n += 3
-        transformation3 = zero(MMatrix{3,3,T,9})
+        transformation3 = zero(T == Rational{BigInt} ? SizedMatrix{3,3,T,2,Matrix{T}} : MMatrix{3,3,T,9})
         mindet3 = (typemax(Int)-1)//1
         best3 = (0,0,0)
         for i in 1:(n-1)
@@ -872,13 +872,13 @@ function reduce_with_matrix(c::Crystal{Nothing}, _mat)
     cell = Cell(c.pge.cell, c.pge.cell.mat * mat)
 
     imat = round.(Int, inv(mat)) # The inverse should only have integer coefficients
-    poscol = (imat,) .* c.pge.pos # position in the new reference, will be in [0,1)
+    poscol = [imat * round.(x; digits=12) for x in c.pge.pos] # position in the new reference, will be in [0,1)
     n = length(poscol)
     offset = Vector{SVector{D,Int}}(undef, n) # offsets in the new reference
     for (i, pos) in enumerate(poscol)
         ofs = floor.(Int, pos)
         offset[i] = ofs
-        poscol[i] = pos .- ofs
+        poscol[i] = round.(pos .- ofs; digits=12)
     end
     I_sort = sort(1:n; by=i->(poscol[i], hash_position(offset[i])))
     _i = popfirst!(I_sort)

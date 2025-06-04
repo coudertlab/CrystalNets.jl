@@ -320,7 +320,7 @@ function candidate_key_unstable(net::CrystalNet{D,T}, shrunk_candidate, u_s, bas
     n = nv(net.pge.g)
     newpos_s, offsets_s, vmap_s = shrunk_candidate
 
-    newpos = Vector{SVector{D,T}}(undef, n) # positions of the kept representatives
+    newpos = Vector{SVector{D,widen(T)}}(undef, n) # positions of the kept representatives
     offsets = Vector{SVector{D,Int32}}(undef, n) # offsets of the new representatives w.r.t. the original one, in the original basis
     vmap = Vector{Int}(undef, n) # bijection from the old to the new node number
     rev_vmap = Vector{Int}(undef, n)
@@ -346,9 +346,9 @@ function candidate_key_unstable(net::CrystalNet{D,T}, shrunk_candidate, u_s, bas
 
     u = u_s ≤ first_collision_m1 ? u_s : first(collision_ranges[u_s - first_collision_m1])
     origin = net.pge.pos[u]
-    edgs = Tuple{Int,Int,SVector{D,T}}[]
+    edgs = Tuple{Int,Int,SVector{D,widen(T)}}[]
     bigbasis = T == Rational{BigInt} ? basis : widen(T).(basis)
-    mat = T == Rational{BigInt} ? inv(bigbasis) : T.(inv(bigbasis))
+    mat = T == Rational{BigInt} ? inv(bigbasis) : widen(T).(inv(bigbasis))
     for t in 1:n # t is the node being processed
         neighs = neighbors(net.pge.g, vmap[t])
         ofst = offsets[t]
