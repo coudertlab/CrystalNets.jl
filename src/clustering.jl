@@ -1406,7 +1406,7 @@ function _collapse_clusters(crystal::Crystal{Nothing}, clusters::Clusters, onlyn
         atts = clusters.attributions[s]
         neigh0 = neighbors(crystal.pge.g, s)
         # @show s, atts
-        @toggleassert length(neigh0) ≥ 2
+        @toggleassert !crystal.options.trim || length(neigh0) ≥ 2
         typisnotC = crystal.types[s] !== :C
         for x in neigh0
             d = x.v
@@ -1511,7 +1511,7 @@ function _find_clusters(c::Crystal{T}, guess::Bool, separate_metals::Bool)::Tupl
 end
 
 function find_clusters(_c::Crystal{T}) where T
-    c = trim_monovalent(_c)
+    c = _c.options.trim ? trim_monovalent(_c) : _c
     structure = c.options.structure
     clusterings = c.options.clusterings
     ret = Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}}(undef, length(clusterings))
@@ -1549,6 +1549,7 @@ transformed into a new vertex, for each targeted clustering.
 """
 function collapse_clusters(crystal::Crystal)
     crystalclusters::Vector{Tuple{Crystal{Nothing},Union{Int,Clusters}}} = find_clusters(crystal)
+    # @show only(crystalclusters)[2]
     ret = Vector{Crystal{Nothing}}(undef, length(crystalclusters))
     alreadyexported = false
     for (i, (cryst, clust)) in enumerate(crystalclusters)

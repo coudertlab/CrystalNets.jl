@@ -497,8 +497,10 @@ end
     trimmed_crystal(c::Crystal{Nothing})
 
 Rebuild the crystal after trimming its graph according to [`trim_topology`](@ref CrystalNets.trim_topology).
+Does nothing if `c.options.trim` is unset.
 """
 function trimmed_crystal(c::Crystal{Nothing})
+    c.options.trim || return c
     g = deepcopy(c.pge.g)
     remove_metal_cluster_bonds!(g, c.types, c.options)
     vmap, graph = trim_topology(g)
@@ -768,7 +770,11 @@ end
 
 
 function _collect_net!(ret::Vector{<:CrystalNet{D}}, encountered, idx, c, clustering) where D
-    vmap, graph = trim_topology(c.pge.g)
+    vmap, graph = if c.options.trim
+        trim_topology(c.pge.g)
+    else
+        collect(1:length(c.types)), c.pge.g
+    end
     types = c.types[vmap]
     idx > 1 && c.options.track_mapping isa Vector{Int} && c.options.keep_single_track && throw(ArgumentError("Cannot keep a single mapping track for multiple sub-nets. Please use keep_single_track=true only on single components with a single clustering."))
     opts = rev_permute_mapping!(c.options, vmap, length(c.types))

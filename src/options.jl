@@ -387,6 +387,10 @@ These boolean options have a default value that may be determined by [`Bonding`]
   Default is false, unless [`StructureType`](@ref) is `MOF` or `Zeolite`.
 - `unify_sbu_decomposition`: apply the same rule to decompose both periodic and finite SBUs.
   Default is false.
+- `trim`: remove vertices with zero or one neighbor and transform vertices with exactly two
+  neighbors into an edge, iteratively until convergence. Default is true and must be left
+  to true if the topology needs to be compared to databases of topologies, which all use
+  this convention.
 - `force_warn`: force printing warning and information even during `..._dataset` function
   calls. Default is false.
 - `label_for_type`: use the atom label instead of its type. Default is false.
@@ -450,6 +454,7 @@ struct Options
     cluster_simple_pe::Bool
     split_O_vertex::Bool
     unify_sbu_decomposition::Bool
+    trim::Bool
     separate_metals::Union{Nothing,Bool}
     premerge_metalbonds::Bool
     max_polyhedron_radius::Int
@@ -500,6 +505,7 @@ struct Options
                        cluster_simple_pe=true,
                        split_O_vertex=nothing,
                        unify_sbu_decomposition=false,
+                       trim=true,
                        separate_metals=nothing,
                        premerge_metalbonds=true,
                        max_polyhedron_radius=4,
@@ -585,6 +591,7 @@ struct Options
             cluster_simple_pe,
             _split_O_vertex,
             unify_sbu_decomposition,
+            trim,
             separate_metals,
             premerge_metalbonds,
             max_polyhedron_radius,
