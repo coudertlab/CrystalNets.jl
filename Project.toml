@@ -1,7 +1,7 @@
 name = "CrystalNets"
 uuid = "7952bbbe-a946-4118-bea0-081a0932faa9"
 authors = ["Lionel Zoubritzky lionel.zoubritzky@gmail.com"]
-version = "1.0.1"
+version = "1.0.2"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
