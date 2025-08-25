@@ -82,7 +82,19 @@ several of the options in the "Miscellaneous" section.
 If nothing works, the last solution consists in providing an input file with explicit bonds
 set, and use the `bonding=Bonding.Input` keyword argument to [`Options`](@ref).
 
-## The topology has a name given by ToposPro but CrystalNets.jl yields "UNKNOWN ..."
+## What is the meaning of a topology name such as "**cds**", "MFI", "sqc2423" or "3-bdeswydmyd" ?
+
+The names of the topology come from different possible sources:
+1. The Reticular Chemistry Structural Resource, [RCSR](http://rcsr.net/nets): these are three-character names with bold lowercase letters, possibly followed by one-letter extensions preceded by hyphens. For instance: **pcu**, **bcu-x**, **mtn-e-a**.
+2. The International Zeolite Association Structure Commission, [IZA-SC](https://europe.iza-structure.org/IZA-SC/ftc_table.php): these are three-character long names with uppercase letters, possibly preceded by a hyphen or a star. For instance: FAU, LTA, -ITV.
+3. The Euclidean Patterns In Non-Euclidean Tilings, [EPINET](https://epinet.anu.edu.au/systre_net_searches/new) project: these are names that start by the three characters "sqc" followed by a number. For instance: sqc2, sqc800, sqc14645.
+4. If the topology does not appear in any of the previous databases, CrystalNets attributes a custom name made of an integer, a hyphen, and a sequence of ten lowercase letters. The integer is the dimensionality of the net, and the sequence of letters is the hash of the topological genome. For instance: 2-rsyqrylwon, 3-whaqtajcyp, 3-xbuaxasgyz.
+
+Note that the custom CrystalNets hash is not guaranteed to be unique: since it is computed by reducing ("hashing") the topological genome into ten letters, there could be two topologies with different genomes but the same reduced name. Comparing the topological genomes (the sequence of numbers after the name) is the only guaranteed way to make sure that two topologies are different or the same. In practise, the probability of a hash collision is extremely low and we checked that no two topologies shared the same name among all the 42303 unique unnamed topologies encountered in the Materials Project database.
+
+When a topology is present in both the RCSR and IZA-SC, both names are given. Otherwise, the only displayed name is that given by the first database in the previous order of the sources. For example, the zeolite net **fau** in the RCSR is called FAU by the IZA-SC, sqc13519 by EPINET and 3-cbouziyluz by the custom naming scheme of CrystalNets.jl, but it is only printed as "**fau**, FAU".
+
+## The topology has a name given by ToposPro but CrystalNets.jl yields another name
 
 In CrystalNets.jl, a net is identified if the graph of the crystal is [isomorphic](https://en.wikipedia.org/wiki/Graph_isomorphism) to the net. This correspondence is exact. To do so, CrystalNets.jl actually solves the more complex [graph canonicalization problem](https://en.wikipedia.org/wiki/Graph_canonization) which consists in finding a "genome" (a sequence of numbers) provably unique for each net and such that two isomorphic nets have the same genome. Each genome is then associated with a name. See [this article](https://doi.org/10/dbg89q) for more information on the implementation in the program Systre, from which CrystalNets.jl is derived.
 

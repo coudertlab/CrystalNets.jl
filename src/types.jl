@@ -1,6 +1,7 @@
 ## Type definitions for intermediate representations of crystals up to a net
 
 import Base: ==
+using SHA: SHA2_224_CTX, update!, digest!
 
 function cell_with_warning(mat::StaticArray{Tuple{3,3},BigFloat})
     if !all(isfinite, mat) || iszero(det(mat))
@@ -1054,6 +1055,46 @@ end
 
 haserror(x::TopologicalGenome) = !isempty(x.error)
 
+function update_minimal_type!(ctx, x)
+    data = reinterpret(UInt8, [x])
+    i = length(data) - 1
+    while i > 0 && iszero(data[i])
+        i -= 1
+    end
+    update!(ctx, data, i+1)
+end
+
+nextletter(io, num) = begin x, r = divrem(num, UInt(26)); print(io, 'a'+r); x end
+nextconsonant(io, num) = begin x, r = divrem(num, UInt(20)); print(io, "bcdfghjklmnpqrstvwxz"[r+1]); x end
+nextvowel(io, num) = begin x, r = divrem(num, UInt(6)); print(io, "aeiouy"[r+1]); x end
+
+function print_custom_name(io, genome)
+    if genome == PeriodicGraph("1 1 1 1")
+        print(io, "1-lineartopo")
+        return
+    end
+    ctx = SHA2_224_CTX()
+    for (s, (d, ofs)) in edges(genome)
+        update_minimal_type!(ctx, s)
+        update_minimal_type!(ctx, d)
+        update_minimal_type!(ctx, hash_position(ofs))
+    end
+    h = digest!(ctx)
+    num = reinterpret(UInt64, @view h[1:8])[1]
+    print(io, ndims(genome), '-')
+    num = nextletter(io, num)
+    num = nextconsonant(io, num)
+    num = nextvowel(io, num)
+    num = nextletter(io, num)
+    num = nextconsonant(io, num)
+    num = nextvowel(io, num)
+    num = nextletter(io, num)
+    num = nextconsonant(io, num)
+    num = nextvowel(io, num)
+    num = nextletter(io, num)
+    return
+end
+
 function Base.show(io::IO, x::TopologicalGenome)
     if !isempty(x.error)
         print(io, "FAILED with: ", x.error)
@@ -1069,17 +1110,19 @@ function Base.show(io::IO, x::TopologicalGenome)
         end
         length(splitcomma) == 2 && print(io, ',', last(splitcomma))
     else
-        print(io, "UNKNOWN ", x.genome)
+        print_custom_name(io, x.genome)
+        print(io, ' ', '(', x.genome, ')')
     end
 end
 
 function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
-    if startswith(s, "UNKNOWN")
-        return TopologicalGenome(PeriodicGraph(s[9:end]), nothing)
-    end
     s == "0-dimensional" && return TopologicalGenome()
     if startswith(s, "FAILED")
         return TopologicalGenome(s[14:end])
+    end
+    if startswith(s, "UNKNOWN") || (length(s) > 15 && isnumeric(s[1]) && s[2] == '-' && all(isletter, @view s[3:15]))
+        colon = s[1] == 'U' ? 9 : 15
+        return TopologicalGenome(PeriodicGraph(s[colon:(end-(colon==15))]), nothing)
     end
     return TopologicalGenome(parse(PeriodicGraph, REVERSE_CRYSTALNETS_ARCHIVE[s]), s)
 end

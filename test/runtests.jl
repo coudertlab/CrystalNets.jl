@@ -26,7 +26,7 @@ end
 
 const safeARCHIVE = deepcopy(CNets.CRYSTALNETS_ARCHIVE)
 const safeREVERSE = deepcopy(CNets.REVERSE_CRYSTALNETS_ARCHIVE)
-function __reset_archive!(safeARCHIVE, safeREVERSE)
+function _reset_archive!(safeARCHIVE, safeREVERSE)
     empty!(CNets.CRYSTALNETS_ARCHIVE)
     empty!(CNets.REVERSE_CRYSTALNETS_ARCHIVE)
     merge!(CNets.CRYSTALNETS_ARCHIVE, safeARCHIVE)
@@ -132,7 +132,7 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
     @test juc101[SingleNodes].name == "nia"
     @test juc101[AllNodes].name == "jjt"
     @test string(juc101[Standard].genome) == "3 1 2 0 0 0 1 2 0 1 1 1 3 0 0 0 1 3 0 1 0 1 4 0 0 0 1 4 0 0 1 1 5 0 0 0 1 5 0 1 1 1 6 0 0 0 1 6 0 1 0 1 7 0 0 0 1 7 0 0 1 2 3 0 0 -1 2 4 0 0 0 2 8 0 0 0 2 8 0 1 1 3 4 0 0 1 3 8 0 0 1 3 8 0 1 1 4 8 0 1 0 4 8 0 1 1 5 6 0 0 0 5 7 0 -1 0 5 8 1 0 0 5 8 1 1 1 6 7 0 -1 0 6 8 1 0 1 6 8 1 1 1 7 8 1 1 0 7 8 1 1 1"
-    @test string(juc101[PE]) == "UNKNOWN 3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 2 3 0 0 0 2 6 0 0 0 2 7 0 0 0 3 8 0 0 0 3 9 0 0 0 4 7 0 0 0 4 8 0 0 0 4 10 0 0 0 5 11 0 0 0 5 12 0 0 0 6 11 1 0 0 6 13 0 0 0 7 8 0 0 0 7 14 0 0 0 8 15 0 0 0 9 11 0 1 0 9 16 0 0 0 10 17 0 0 0 10 18 0 0 0 12 13 -1 1 0 12 16 -1 0 0 12 18 0 0 -1 13 16 0 -1 0 13 19 0 0 0 14 17 1 0 0 14 19 0 0 1 15 17 0 1 0 15 20 0 0 0 16 20 0 0 -1 18 19 -1 1 1 18 20 -1 0 0 19 20 0 -1 -1"
+    @test string(juc101[PE]) == "3-jctvzkujyuniy (3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 2 3 0 0 0 2 6 0 0 0 2 7 0 0 0 3 8 0 0 0 3 9 0 0 0 4 7 0 0 0 4 8 0 0 0 4 10 0 0 0 5 11 0 0 0 5 12 0 0 0 6 11 1 0 0 6 13 0 0 0 7 8 0 0 0 7 14 0 0 0 8 15 0 0 0 9 11 0 1 0 9 16 0 0 0 10 17 0 0 0 10 18 0 0 0 12 13 -1 1 0 12 16 -1 0 0 12 18 0 0 -1 13 16 0 -1 0 13 19 0 0 0 14 17 1 0 0 14 19 0 0 1 15 17 0 1 0 15 20 0 0 0 16 20 0 0 -1 18 19 -1 1 1 18 20 -1 0 0 19 20 0 -1 -1)"
     @test juc101[PEM].genome == PeriodicGraph("3 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 1 5 0 0 0 1 6 0 0 0 1 7 0 0 0 2 4 0 0 0 2 8 0 0 0 3 4 0 0 0 3 9 0 0 0 4 6 0 0 0 4 10 0 0 0 4 11 0 0 0 5 6 0 0 0 5 12 0 0 0 6 7 0 0 0 6 10 0 0 0 6 11 0 0 0 7 13 0 0 0 8 14 0 0 0 8 15 0 0 0 9 16 0 0 0 9 17 0 0 0 10 18 0 0 0 11 19 0 0 0 12 15 -1 0 0 12 20 0 0 0 13 16 -1 0 0 13 21 0 0 0 14 22 0 0 0 14 23 0 0 0 15 18 1 0 -1 16 19 1 0 -1 17 22 -1 1 0 17 23 -1 1 0 18 24 0 0 0 19 25 0 0 0 20 22 -1 0 1 20 26 0 0 0 21 22 -2 1 1 21 26 -1 1 0 22 23 0 0 0 22 26 1 0 -1 23 24 0 0 -1 23 25 1 -1 -1 23 26 1 0 -1 24 26 1 0 0 25 26 0 1 0")
 
     ewetuw = extract1(determine_topology(joinpath(cifs, "EWETUW_clean.cif"); kwargs...))
@@ -151,11 +151,11 @@ import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
 
     # test cell minimization with collision nodes
     nott112 = extract1(determine_topology(joinpath(cifs, "NOTT-112.cif"); kwargs..., bonding=Bonding.Input))
-    @test startswith(string(nott112), "AllNodes, PEM: ntt\nSingleNodes, Standard: nts\nPE: ")
+    @test startswith(string(nott112), "AllNodes, PEM: ntt\nSingleNodes, Standard: nts\nPE: 3-pwihwdelgsbne")
 
     # test input bonding when different symmetric images of the same atoms have different bonds
     fowwar = extract1(determine_topology(joinpath(cifs, "FOWWAR.cif"); kwargs..., bonding=Bonding.Input, clusterings=[Clustering.Standard]))
-    @test string(fowwar) == "Standard: UNKNOWN 3 1 1 0 0 1 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 2 5 0 0 0 2 6 0 0 0 3 6 0 0 0 3 7 0 0 0 4 5 1 0 0 4 7 0 -1 0 5 5 0 1 1 5 8 0 0 0 6 6 0 0 1 6 8 0 1 0 7 7 0 1 1 7 8 1 1 0"
+    @test string(fowwar) == "Standard: 3-pbgaqhjekldnr (3 1 1 0 0 1 1 2 0 0 0 1 3 0 0 0 1 4 0 0 0 2 5 0 0 0 2 6 0 0 0 3 6 0 0 0 3 7 0 0 0 4 5 1 0 0 4 7 0 -1 0 5 5 0 1 1 5 8 0 0 0 6 6 0 0 1 6 8 0 1 0 7 7 0 1 1 7 8 1 1 0)"
 
     # Test 0-dimensional input
     calfig = extract1(determine_topology(joinpath(cifs, "CALFIG.cif"); kwargs..., clusterings=[Clustering.Auto]))
@@ -290,7 +290,7 @@ end
     result, written = capture_out(out)
     @test result == 0
     @test written == ["sra"]
-    __reset_archive!(safeARCHIVE, safeREVERSE)
+    _reset_archive!(safeARCHIVE, safeREVERSE)
 
     empty!(ARGS)
     path = joinpath(cifs, "RRO.cif")
@@ -304,8 +304,8 @@ end
     push!(ARGS, "-a", joinpath(CNets.arc_location, "rcsr.arc"), path)
     result, written = capture_out(out)
     @test result == 0
-    @test startswith(only(written), "UNKNOWN")
-    __reset_archive!(safeARCHIVE, safeREVERSE)
+    @test startswith(only(written), "3-famnajlkuuavo")
+    _reset_archive!(safeARCHIVE, safeREVERSE)
 
     empty!(ARGS)
     path = joinpath(cifs, "HKUST-1.cif")
@@ -354,7 +354,7 @@ end
     push!(ARGS, "-s", "guess", "-b", "input", path)
     result, written = capture_out(out)
     @test result == 0
-    @test startswith(only(written), "AllNodes, SingleNodes: UNKNOWN 3") # Unknown topology with the input bonds
+    @test startswith(only(written), "AllNodes, SingleNodes: 3-wvdtgkntkmkqz") # Unknown topology with the input bonds
 
     empty!(ARGS)
     path = joinpath(cifs, "ALPO-3.1.1.37.001.cif")
