@@ -1120,7 +1120,7 @@ function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
     if startswith(s, "FAILED")
         return TopologicalGenome(s[14:end])
     end
-    if startswith(s, "UNKNOWN") || (length(s) > 15 && isnumeric(s[1]) && s[2] == '-' && all(isletter, @view s[3:15]))
+    if startswith(s, "UNKNOWN") || (length(s) > 15 && isnumeric(s[1]) && s[2] == '-')
         colon = s[1] == 'U' ? 9 : 15
         return TopologicalGenome(PeriodicGraph(s[colon:(end-(colon==15))]), nothing)
     end
