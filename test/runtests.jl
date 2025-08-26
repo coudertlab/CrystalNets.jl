@@ -40,6 +40,14 @@ function extract1(x)
     topo
 end
 
+function count_valid_tests(n, failures)
+    # accounting the correct number of tests
+    for _ in 1:(n-failures)
+        @test true
+    end
+    @test failures == 0
+end
+
 import CrystalNets.Clustering: SingleNodes, AllNodes, Standard, PE, PEM
 
 @testset "MOF examples" begin
@@ -199,8 +207,7 @@ end
             end
         end
     end
-    Test.get_testset().n_passed += length(reverse_archive) - failures
-    @test failures == 0
+    count_valid_tests(length(reverse_archive), failures)
 end
 
 @testset "Module" begin
@@ -227,8 +234,8 @@ end
         end
     end
 
-    Test.get_testset().n_passed += length(targets) - failures
-    @test failures == 0
+    count_valid_tests(length(targets), failures)
+
     cifs, crystalnetsdir = _finddirs()
     @test redirect_stderr(devnull) do;
         c = parse_chemfile(joinpath(cifs, "Moganite.cif"))
@@ -554,8 +561,7 @@ end
     g2 = PeriodicGraph("2 1 2 2 1 1 6 3 -1 1 17 -2 1 2 9 0 -1 2 11 4 1 3 5 -7 1 3 6 -1 -2 3 17 -6 0 4 6 2 2 4 7 3 4 4 12 -2 6 5 8 4 -3 5 11 5 1 6 14 -2 2 7 13 -2 2 7 14 -3 0 7 18 -4 -3 8 10 -2 1 8 15 -4 -1 8 16 -5 4 9 12 1 2 9 15 -1 -2 9 16 -2 3 10 11 3 3 10 13 -1 3 11 12 -3 0 13 17 -4 -1 14 16 -1 2 15 18 3 -1 17 18 2 -4");
     @test topological_genome(g1) == topological_genome(g2)
 
-    Test.get_testset().n_passed += length(unstabletry) - failures
-    @test failures == 0
+    count_valid_tests(length(unstabletry), failures)
 end
 
 @testset "Non-CIF Files" begin
