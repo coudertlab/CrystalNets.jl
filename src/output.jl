@@ -148,32 +148,34 @@ PeriodicGraphEmbeddings.export_cgd(file, c::CrystalNet) = export_cgd(file, Perio
 
 
 function export_attributions(crystal::Crystal{Clusters}, path=joinpath(tempdir(),tempname()))
-    frame = Chemfiles.Frame()
-    m = length(crystal.clusters.classes)
-    # residues = [Chemfiles.Residue(string(i)) for i in 1:m]
-    # for i in 1:m
-    #     Chemfiles.set_property!(residues[i], "chainname", string(i))
-    #     Chemfiles.set_property!(residues[i], "chainid", string(i))
-    #     Chemfiles.add_residue!(frame, residues[i])
-    # end
-    ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(crystal.pge.cell)
-    Chemfiles.set_cell!(frame, Chemfiles.UnitCell(Float64[_a, _b, _c], Float64[_α, _β, _γ]))
-    recenter::SVector{3,Float64} = minimum(reduce(hcat, crystal.pge.pos); dims=2)
-    for i in 1:length(crystal.types)
-        # resid = crystal.clusters.attributions[i]
-        atom = Chemfiles.Atom(string(crystal.clusters.classes[crystal.clusters.attributions[i]]))
-        Chemfiles.set_type!(atom, string_atomtype(crystal.types[i]))
-        Chemfiles.add_atom!(frame, atom, collect(Float64.(mat * (crystal.pge.pos[i] .- recenter))))
-        # Chemfiles.add_atom!(residues[resid], i)
+    @lock ChemfileLock begin
+        frame = Chemfiles.Frame()
+        m = length(crystal.clusters.classes)
+        # residues = [Chemfiles.Residue(string(i)) for i in 1:m]
+        # for i in 1:m
+        #     Chemfiles.set_property!(residues[i], "chainname", string(i))
+        #     Chemfiles.set_property!(residues[i], "chainid", string(i))
+        #     Chemfiles.add_residue!(frame, residues[i])
+        # end
+        ((_a, _b, _c), (_α, _β, _γ)), mat = cell_parameters(crystal.pge.cell)
+        Chemfiles.set_cell!(frame, Chemfiles.UnitCell(Float64[_a, _b, _c], Float64[_α, _β, _γ]))
+        recenter::SVector{3,Float64} = minimum(reduce(hcat, crystal.pge.pos); dims=2)
+        for i in 1:length(crystal.types)
+            # resid = crystal.clusters.attributions[i]
+            atom = Chemfiles.Atom(string(crystal.clusters.classes[crystal.clusters.attributions[i]]))
+            Chemfiles.set_type!(atom, string_atomtype(crystal.types[i]))
+            Chemfiles.add_atom!(frame, atom, collect(Float64.(mat * (crystal.pge.pos[i] .- recenter))))
+            # Chemfiles.add_atom!(residues[resid], i)
+        end
+        for e in edges(crystal.pge.g)
+            iszero(last(last(e))) || continue
+            Chemfiles.add_bond!(frame, first(e)-1, first(last(e))-1)
+        end
+        target = isempty(last(splitext(path))) ? path*".pdb" : path
+        output = Chemfiles.Trajectory(target, 'w')
+        write(output, frame)
+        close(output)
     end
-    for e in edges(crystal.pge.g)
-        iszero(last(last(e))) || continue
-        Chemfiles.add_bond!(frame, first(e)-1, first(last(e))-1)
-    end
-    target = isempty(last(splitext(path))) ? path*".pdb" : path
-    output = Chemfiles.Trajectory(target, 'w')
-    write(output, frame)
-    close(output)
 end
 
 function _export_trimmed_and_attributions(crystal::Crystal{Nothing}, clusters::Clusters)

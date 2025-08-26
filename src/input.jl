@@ -1400,67 +1400,73 @@ function parse_as_cif(cif::CIF, options::Options, name::String)
     n -= length(ignored)
 
     cell = cell_with_warning(cif.cell.mat)
-    return finalize_checks(cell, pos, types, Int[], bonds, guessed_bonds, options, name)
+    finalize_checks(cell, pos, types, Int[], bonds, guessed_bonds, options, name)
 end
 
+const ChemfileLock = ReentrantLock()
 
 function parse_as_chemfile(frame::Chemfiles.Frame, options::Options, name::String)
-    types = Symbol[]
-    for i in Int(size(frame))-1:-1:0
-        typ = Symbol(Chemfiles.type(Chemfiles.Atom(frame, i))::String)
-        if typ ∈ options.ignore_atoms
-            Chemfiles.remove_atom!(frame, i)
+    cell, pos, types, attributions, bonds, guessed_bonds, options, name = try
+        types = Symbol[]
+        for i in Int(size(frame))-1:-1:0
+            typ = Symbol(Chemfiles.type(Chemfiles.Atom(frame, i))::String)
+            if typ ∈ options.ignore_atoms
+                Chemfiles.remove_atom!(frame, i)
+            else
+                push!(types, typ)
+            end
+        end
+        reverse!(types)
+
+        _pos = collect(eachcol(Chemfiles.positions(frame)))
+        cell = cell_with_warning(SMatrix{3,3,BigFloat,9}(Chemfiles.matrix(Chemfiles.UnitCell(frame)))')
+
+        pos::Vector{SVector{3,Float64}} = (inv(cell.mat),) .* _pos
+        mat = Float64.(cell.mat)
+
+        toremove = check_collision(pos, mat)
+        if !isempty(toremove)
+            deleteat!(types, toremove)
+            deleteat!(pos, toremove)
+            for j in Iterators.reverse(toremove)
+                Chemfiles.remove_atom!(frame, j-1)
+            end
+            if !(options.dryrun isa Nothing)
+                options.dryrun[:collisions] = nothing
+            end
+        end
+
+        n = length(pos)
+        guessed_bonds = false
+        _topology = Chemfiles.Topology(frame)
+        if Chemfiles.bonds_count(_topology) == 0
+            guessed_bonds = true
+            bonds = guess_bonds(pos, types, mat, options)
+            for (u, bondu) in enumerate(bonds), (v, _) in bondu
+                v > u && Chemfiles.add_bond!(frame, u-1, v-1)
+            end
         else
-            push!(types, typ)
+            bonds = [Tuple{Int,Float32}[] for _ in 1:n]
+            for (a, b) in eachcol(Chemfiles.bonds(_topology))
+                push!(bonds[a+1], (b+1, -Inf32))
+                push!(bonds[b+1], (a+1, -Inf32))
+            end
+            @toggleassert all(issorted, bonds)
+            if !(options.dryrun isa Nothing) && options.bonding == Bonding.Auto
+                options.dryrun[:try_Input_bonds] = nothing
+            end
         end
+
+        topology = Chemfiles.Topology(frame) # Just a precaution since frame was possibly modified
+        m = Int(Chemfiles.count_residues(topology))
+        residues = [Chemfiles.Residue(topology, i) for i in 0:(m-1)]
+
+        attributions = attribute_residues(residues, n, options.bonding == Bonding.Input)
+        cell, pos, types, attributions, bonds, guessed_bonds, options, name
+    finally
+        unlock(ChemfileLock)
     end
-    reverse!(types)
-
-    _pos = collect(eachcol(Chemfiles.positions(frame)))
-    cell = cell_with_warning(SMatrix{3,3,BigFloat,9}(Chemfiles.matrix(Chemfiles.UnitCell(frame)))')
-
-    pos::Vector{SVector{3,Float64}} = Ref(inv(cell.mat)) .* _pos
-    mat = Float64.(cell.mat)
-
-    toremove = check_collision(pos, mat)
-    if !isempty(toremove)
-        deleteat!(types, toremove)
-        deleteat!(pos, toremove)
-        for j in Iterators.reverse(toremove)
-            Chemfiles.remove_atom!(frame, j-1)
-        end
-        if !(options.dryrun isa Nothing)
-            options.dryrun[:collisions] = nothing
-        end
-    end
-
-    n = length(pos)
-    guessed_bonds = false
-    _topology = Chemfiles.Topology(frame)
-    if Chemfiles.bonds_count(_topology) == 0
-        guessed_bonds = true
-        bonds = guess_bonds(pos, types, mat, options)
-        for (u, bondu) in enumerate(bonds), (v, _) in bondu
-            v > u && Chemfiles.add_bond!(frame, u-1, v-1)
-        end
-    else
-        bonds = [Tuple{Int,Float32}[] for _ in 1:n]
-        for (a, b) in eachcol(Chemfiles.bonds(_topology))
-            push!(bonds[a+1], (b+1, -Inf32))
-            push!(bonds[b+1], (a+1, -Inf32))
-        end
-        @toggleassert all(issorted, bonds)
-        if !(options.dryrun isa Nothing) && options.bonding == Bonding.Auto
-            options.dryrun[:try_Input_bonds] = nothing
-        end
-    end
-
-    topology = Chemfiles.Topology(frame) # Just a precaution since frame was possibly modified
-    m = Int(Chemfiles.count_residues(topology))
-    residues = [Chemfiles.Residue(topology, i) for i in 0:(m-1)]
-
-    attributions = attribute_residues(residues, n, options.bonding == Bonding.Input)
-    return finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
+    finalize_checks(cell, pos, types, attributions, bonds, guessed_bonds, options, name)
 end
 
 
@@ -1565,6 +1571,7 @@ function parse_chemfile(_path, options::Options)
         end
         return parse_as_cif(cif, options, name)
     end
+    lock(ChemfileLock)
     frame = read(Chemfiles.Trajectory(path))
     return parse_as_chemfile(frame, options, name)
 end
