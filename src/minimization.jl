@@ -359,6 +359,10 @@ function find_transformation_matrix(t::SVector{D,T}) where {D,T}
     ret
 end
 
+@static if VERSION ≤ v"1.11-" # compat for the @toggleassert in orbits_pvmap
+    Base.allequal(f, xs) = allequal(Base.Generator(f, xs))
+end
+
 
 """
     orbits_pvmap(shrunk_pvmap::Vector{PeriodicVertex{D}}) where D
