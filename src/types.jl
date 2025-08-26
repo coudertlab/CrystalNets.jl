@@ -1064,13 +1064,9 @@ function update_minimal_type!(ctx, x)
     update!(ctx, data, i+1)
 end
 
-nextletter(io, num) = begin x, r = divrem(num, UInt(26)); print(io, 'a'+r); x end
-nextconsonant(io, num) = begin x, r = divrem(num, UInt(20)); print(io, "bcdfghjklmnpqrstvwxz"[r+1]); x end
-nextvowel(io, num) = begin x, r = divrem(num, UInt(6)); print(io, "aeiouy"[r+1]); x end
-
 function print_custom_name(io, genome)
     if genome == PeriodicGraph("1 1 1 1")
-        print(io, "1-lineartopo")
+        print(io, "1-rod")
         return
     end
     ctx = SHA2_224_CTX()
@@ -1082,16 +1078,30 @@ function print_custom_name(io, genome)
     h = digest!(ctx)
     num = reinterpret(UInt64, @view h[1:8])[1]
     print(io, ndims(genome), '-')
-    num = nextletter(io, num)
-    num = nextconsonant(io, num)
-    num = nextvowel(io, num)
-    num = nextletter(io, num)
-    num = nextconsonant(io, num)
-    num = nextvowel(io, num)
-    num = nextletter(io, num)
-    num = nextconsonant(io, num)
-    num = nextvowel(io, num)
-    num = nextletter(io, num)
+    vowels = "aeiouy"
+    svowels = Set(vowels)
+    consonants = "bcdfghjklmnpqrstvwxz"
+    sconsonants = Set(consonants)
+    letters = "abcdefghijklmnopqrstuvwxyz"
+    num, r = divrem(num, UInt(26))
+    cm2 = 'a' + r
+    print(io, cm2)
+    num, r = divrem(num, UInt(26))
+    cm1 = 'a' + r
+    print(io, cm1)
+    for _ in 1:10
+        alphabet = if cm1 in sconsonants && cm2 in sconsonants
+            vowels
+        elseif cm1 in svowels && cm2 in svowels
+            consonants
+        else
+            letters
+        end
+        num, r = divrem(num, UInt(length(alphabet)))
+        cm2 = cm1
+        cm1 = alphabet[1+r]
+        print(io, cm1)
+    end
     return
 end
 
@@ -1120,9 +1130,11 @@ function Base.parse(::Type{TopologicalGenome}, s::AbstractString)
     if startswith(s, "FAILED")
         return TopologicalGenome(s[14:end])
     end
-    if startswith(s, "UNKNOWN") || (length(s) > 15 && isnumeric(s[1]) && s[2] == '-')
-        colon = s[1] == 'U' ? 9 : 15
-        return TopologicalGenome(PeriodicGraph(s[colon:(end-(colon==15))]), nothing)
+    if s == "1-rod (1 1 1 1)"
+        return TopologicalGenome(PeriodicGraph1D("1 1 1 1"), nothing, "")
+    elseif startswith(s, "UNKNOWN") || (length(s) > 17 && isnumeric(s[1]) && s[2] == '-')
+        colon = s[1] == 'U' ? 9 : 17
+        return TopologicalGenome(PeriodicGraph(s[colon:(end-(colon==17))]), nothing)
     end
     return TopologicalGenome(parse(PeriodicGraph, REVERSE_CRYSTALNETS_ARCHIVE[s]), s)
 end
