@@ -151,8 +151,8 @@ end
 function delete_target_from_list!(l, v)
     j = findfirst(x -> x.v == v, l)
     if !isnothing(j)
-        l[j] = l[end]
-        resize!(l, length(l)-1)
+        l[j] = last(l)
+        pop!(l)
     end
     return nothing
 end
