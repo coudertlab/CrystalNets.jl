@@ -149,17 +149,12 @@ function trim_monovalent(crystal::Crystal{T}) where T
 end
 
 function delete_target_from_list!(l, v)
-    len = length(l)
-    for (j, x) in enumerate(l)
-        if x.v == v
-            if j != len
-                l[j] = l[end]
-            end
-            resize!(l, len - 1)
-            break
-        end
+    j = findfirst(x -> x.v == v, l)
+    if !isnothing(j)
+        l[j] = l[end]
+        resize!(l, length(l)-1)
     end
-    nothing
+    return nothing
 end
 
 
