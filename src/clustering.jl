@@ -154,7 +154,7 @@ function delete_target_from_list!(l, v)
         l[j] = last(l)
         pop!(l)
     end
-    return nothing
+    nothing
 end
 
 
