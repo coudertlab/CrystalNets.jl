@@ -22,7 +22,7 @@ end
 
 (::Type{T})(x::Modulo) where {T<:Integer} = T(x.value)
 
-function hash(x::Modulo{p}, h::UInt64=UInt64(0)) where p
+function hash(x::Modulo{p}, h::UInt) where p
     hash(Integer(x), hash(p, h))
 end
 
