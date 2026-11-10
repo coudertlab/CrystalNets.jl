@@ -84,6 +84,7 @@ include("arithmetics.jl") # Handling of (possibly sparse) integer/rational matri
 include("stability.jl") # Functions related to unstable nets
 include("minimization.jl") # Cell minimization
 include("topology.jl") # Main functions of the algorithm
+include("paired_translations.jl") # Translation choices for paired-collision nets
 include("query.jl") # Entry point for the user-facing functions
 include("executable.jl") # Entry point for the argument parsing of the executable
 include("precompile.jl")

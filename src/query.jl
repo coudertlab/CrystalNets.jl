@@ -14,7 +14,7 @@ Return a [`TopologicalGenome`](@ref).
 !!! info
     Options must be passed directly within `net`.
 """
-function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
+function topological_genome(net::CrystalNet{D,T}; _normalize_paired=true)::TopologicalGenome where {D,T}
     isempty(net.types) && return TopologicalGenome(net.options.error)
     if net.options.ignore_types
         net = CrystalNet{D,T}(net.pge, fill(Symbol(""), length(net.types)), net.options)
@@ -45,7 +45,7 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
         end
         if widen_flag # not in the catch to avoid a StackOverflow of errors in case something goes wrong
             newnet = CrystalNet{D,widen(T)}(net; ignore_types=false)
-            return topological_genome(newnet)
+            return topological_genome(newnet; _normalize_paired)
         end
     end
 
@@ -53,7 +53,19 @@ function topological_genome(net::CrystalNet{D,T})::TopologicalGenome where {D,T}
                  net.options.export_subnets : "" : net.options.export_net
     export_default(net, "net", net.options.name, export_net)
 
-    return topological_genome(shrunk_net, collisionsetup)
+    result = topological_genome(shrunk_net, collisionsetup)
+    if _normalize_paired && !isempty(collisionsetup[2]) && isempty(result.error) &&
+       net.options.ignore_types && !net.options.skip_minimize && isnothing(net.options.track_mapping)
+        try
+            g = normalize_paired_genome(result.genome)
+            g == result.genome || return TopologicalGenome(g, recognize_topology(g))
+        catch e
+            isinterrupt(e) && rethrow()
+            net.options.throw_error && rethrow()
+            return TopologicalGenome(string(e)::String)
+        end
+    end
+    return result
 end
 
 topological_genome(net::CrystalNet{0}) = TopologicalGenome(net.options.error)
