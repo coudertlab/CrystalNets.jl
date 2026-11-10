@@ -1,0 +1,38 @@
+D12 — disagreement
+
+Representative net: mp-aaahewsb:Se:1:0
+Material / sublattice: KSe6 / Se
+Intrinsic dimension: 1
+Source graph: 24 vertices, 26 edges
+Source input file: D12_source.pgraph
+Original exact graph SHA256: f48c50220e0e5f5b3b6216a06b201e83e2d4af21ec6a01ddb330887562d9f6ef
+
+Observed with Julia 1.11.5 / CrystalNets.jl 1.2.0.
+Options: ignore_types=true, authorize_pruning=false, trim=false.
+The input files retain ambient dimension 3; UnderlyingNets finds intrinsic periodicity.
+
+Systre key (original successful classification):
+1 1 2 0 1 3 0 1 4 0 2 5 0 3 6 0 3 7 0 4 8 0 5 9 0 6 10 0 7 11 0 8 12 0 9 11 1 10 12 1
+
+Companion graph decoded from the original Systre key:
+D12_systre.pgraph
+Companion exact graph SHA256: b2e58e151ea0bc152197cad9dce02f112c4e0a3d3cecac49772c477974254156
+
+CrystalNets result for the SOURCE graph:
+  Component 1: dimension 1
+  Genome: 1 1 2 0 1 3 0 1 5 0 2 4 0 2 6 0 3 7 0 4 8 0 5 9 0 6 10 0 7 11 0 8 12 0 9 11 1 10 12 1
+  Archive name: unavailable
+
+CrystalNets result for the SYSTRE-KEY graph:
+  Component 1: dimension 1
+  Genome: 1 1 2 0 1 3 0 1 5 0 2 4 0 2 6 0 3 7 0 4 8 0 5 9 0 6 10 0 7 11 0 8 12 0 9 12 1 10 11 1
+  Archive name: unavailable
+
+Both original calls succeeded, but their full genomes differ. Exact infinite-graph equivalence has since been independently verified; see proof/input-certificates.json and proof/verify_input_certificates.py.
+
+Input files are raw serialized PeriodicGraphs, not precomputed canonical keys.
+No atom coordinates or bond inference are needed for these graph-only reproductions.
+
+Human-readable edge lists:
+source: D12_source.edges.txt
+systre: D12_systre.edges.txt

@@ -1,0 +1,12 @@
+# vertices: 2
+# edges: 7
+# vertex IDs: one-based
+# edge: u in cell (0,0,0) -- v in cell (tx,ty,tz); reverse is implicit
+# u v tx ty tz
+1 1 -1 0 0
+1 2 -1 0 0
+1 2 0 0 0
+1 2 0 1 0
+1 2 0 2 0
+1 2 1 2 0
+2 2 -1 0 0

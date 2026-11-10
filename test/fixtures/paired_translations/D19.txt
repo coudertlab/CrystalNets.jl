@@ -1,0 +1,38 @@
+D19 — disagreement
+
+Representative net: mp-aaabqxsl:Li:1:0
+Material / sublattice: Li3MnO3 / Li
+Intrinsic dimension: 2
+Source graph: 12 vertices, 22 edges
+Source input file: D19_source.pgraph
+Original exact graph SHA256: 9761976872ae39d9ab8610e5527e970c59dba80620f6581c4d460a264b58a6a8
+
+Observed with Julia 1.11.5 / CrystalNets.jl 1.2.0.
+Options: ignore_types=true, authorize_pruning=false, trim=false.
+The input files retain ambient dimension 3; UnderlyingNets finds intrinsic periodicity.
+
+Systre key (original successful classification):
+2 1 2 0 0 1 2 1 0 1 3 0 0 1 4 0 0 2 5 0 0 2 6 0 0 3 5 0 1 3 6 0 0 3 6 1 0 4 5 0 1 4 6 0 1
+
+Companion graph decoded from the original Systre key:
+D19_systre.pgraph
+Companion exact graph SHA256: 695c09381c37f80e14807b8a6da700068e62a4b4a39bc2bb69a7f884f43a8568
+
+CrystalNets result for the SOURCE graph:
+  Component 1: dimension 2
+  Genome: 2 1 2 0 0 1 3 -1 0 1 3 0 0 1 5 0 0 2 4 -1 0 2 4 0 0 2 6 0 0 3 4 0 0 3 5 0 -1 4 6 0 -1 5 6 0 0
+  Archive name: unavailable
+
+CrystalNets result for the SYSTRE-KEY graph:
+  Component 1: dimension 2
+  Genome: 2 1 2 0 0 1 3 -1 0 1 3 0 0 1 5 0 0 2 4 -1 0 2 4 0 0 2 6 0 0 3 4 0 0 3 6 0 -1 4 5 0 -1 5 6 0 0
+  Archive name: unavailable
+
+Both original calls succeeded, but their full genomes differ. Exact infinite-graph equivalence has since been independently verified; see proof/input-certificates.json and proof/verify_input_certificates.py.
+
+Input files are raw serialized PeriodicGraphs, not precomputed canonical keys.
+No atom coordinates or bond inference are needed for these graph-only reproductions.
+
+Human-readable edge lists:
+source: D19_source.edges.txt
+systre: D19_systre.edges.txt

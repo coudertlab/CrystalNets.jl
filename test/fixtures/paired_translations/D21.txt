@@ -1,0 +1,38 @@
+D21 — disagreement
+
+Representative net: mp-aaabfylq:Bi:0:0
+Material / sublattice: NbBi4BrO8 / Bi
+Intrinsic dimension: 2
+Source graph: 8 vertices, 34 edges
+Source input file: D21_source.pgraph
+Original exact graph SHA256: 81e84dae64f8412993d7a8f1cdb86af26cd86b5a3b58651af5284a40405f4330
+
+Observed with Julia 1.11.5 / CrystalNets.jl 1.2.0.
+Options: ignore_types=true, authorize_pruning=false, trim=false.
+The input files retain ambient dimension 3; UnderlyingNets finds intrinsic periodicity.
+
+Systre key (original successful classification):
+2 1 2 -1 2 1 2 0 0 1 2 0 1 1 2 0 2 1 2 1 0 1 3 -1 2 1 3 0 0 1 4 0 0 1 4 1 0 2 3 -1 0 2 3 0 0 2 4 0 0 2 4 1 -2 3 4 0 0 3 4 1 -2 3 4 1 0 3 4 2 -2
+
+Companion graph decoded from the original Systre key:
+D21_systre.pgraph
+Companion exact graph SHA256: 45ca4fcacd7d0c4542e3be2debb56b983e5dc976d728382ceb8fed666b2d0aa2
+
+CrystalNets result for the SOURCE graph:
+  Component 1: dimension 2
+  Genome: 2 1 1 0 1 1 1 1 0 1 2 0 0 1 3 -1 0 1 3 -1 1 1 3 0 0 1 3 0 1 2 2 0 1 2 2 1 0 2 4 -1 0 2 4 -1 1 2 4 0 0 2 4 0 1 3 3 0 1 3 3 1 0 4 4 0 1 4 4 1 0
+  Archive name: unavailable
+
+CrystalNets result for the SYSTRE-KEY graph:
+  Component 1: dimension 2
+  Genome: 2 1 2 -1 0 1 2 0 -1 1 2 0 0 1 2 0 1 1 2 1 0 1 3 -1 1 1 3 0 0 1 4 -1 0 1 4 0 1 2 3 -1 0 2 3 0 1 2 4 -1 1 2 4 0 0 3 4 -1 0 3 4 0 -1 3 4 0 1 3 4 1 0
+  Archive name: unavailable
+
+Both original calls succeeded, but their full genomes differ. Exact infinite-graph equivalence has since been independently verified; see proof/input-certificates.json and proof/verify_input_certificates.py.
+
+Input files are raw serialized PeriodicGraphs, not precomputed canonical keys.
+No atom coordinates or bond inference are needed for these graph-only reproductions.
+
+Human-readable edge lists:
+source: D21_source.edges.txt
+systre: D21_systre.edges.txt
