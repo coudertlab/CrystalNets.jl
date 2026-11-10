@@ -539,7 +539,7 @@ function find_necessary_image(iactual, (direct_map, reverse_map, collisions, to_
     prev = reverse_map[postprev]
     niter = 0
     nitermax = length(direct_map)
-    while niter < nitermax && prev > 0 && to_shrunk[prev-first_collision_m1] != irnge
+    while niter < nitermax && prev > 0 && to_shrunk[prev-first_collision_m1] - first_collision_m1 != irnge
         niter += 1
         postprev = prev
         prev = reverse_map[postprev]
@@ -564,7 +564,9 @@ function attribute_next_available_modify!(vmapprogress, thisindex, returnto, iac
     crnge = collisions[irnge].rnge
     rnge = @view crnge[exclude+1:end]
     idxinrnge = if necessaryimage > 0
-        necessaryimage in rnge ? necessaryimage-first(rnge)+1 : nothing
+        # A forced image must still be unused: otherwise the map ceases to
+        # be injective and a later assignment silently overwrites reverse_map.
+        necessaryimage in rnge && reverse_map[necessaryimage] < 0 ? necessaryimage-first(rnge)+1 : nothing
     else
         findfirst(<(0), @view reverse_map[rnge])
     end
@@ -731,6 +733,14 @@ function translation_to_direct_map(shrunk_pvmap, net, collisions::CollisionList,
             backtrack_target = 0
             for (i_actual, actual) in enumerate(actual_neighbors)
                 met_attributed[i_actual] && continue
+
+                # Every non-colliding neighbor has a fixed image and must
+                # already have matched an attributed expected neighbor above.
+                # An unmatched one makes this partial assignment impossible.
+                if actual.v <= first_collision_m1
+                    failure = true
+                    break
+                end
 
                 # mapping of a colliding vertex
                 shrunk_actual = PeriodicVertex(-to_shrunk[actual.v - first_collision_m1] + first_collision_m1, actual.ofs)
