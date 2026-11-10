@@ -576,3 +576,5 @@ end
     # Test ordering of species is correct while parsing with chemfiles
     @test parse_chemfile(testcase).types == [repeat([:Si], 12); repeat([:O], 24)]
 end
+
+include("paired_translations.jl")

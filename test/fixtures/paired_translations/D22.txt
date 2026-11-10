@@ -1,0 +1,38 @@
+D22 — disagreement
+
+Representative net: mp-aaabfqso:N:0:0
+Material / sublattice: AsSeS3N5F6 / N
+Intrinsic dimension: 2
+Source graph: 20 vertices, 42 edges
+Source input file: D22_source.pgraph
+Original exact graph SHA256: be95757851b0bd213c9d229e04b40db1b7ea974c35868c2258217c80c52ee47b
+
+Observed with Julia 1.11.5 / CrystalNets.jl 1.2.0.
+Options: ignore_types=true, authorize_pruning=false, trim=false.
+The input files retain ambient dimension 3; UnderlyingNets finds intrinsic periodicity.
+
+Systre key (original successful classification):
+2 1 2 0 0 1 3 0 0 1 4 0 0 1 5 0 0 1 6 0 0 2 3 0 0 2 5 0 0 2 6 1 0 3 6 0 0 3 7 0 0 4 7 0 1 4 8 0 0 4 9 0 0 4 10 0 0 5 6 0 0 5 9 0 1 7 8 0 -1 7 10 0 -1 8 9 0 0 8 10 1 0 9 10 0 0
+
+Companion graph decoded from the original Systre key:
+D22_systre.pgraph
+Companion exact graph SHA256: d6eee17530e897f49b514f343e3c269b5640753f62e22a5824ec461b117dfe2b
+
+CrystalNets result for the SOURCE graph:
+  Component 1: dimension 2
+  Genome: 2 1 2 0 0 1 3 0 0 1 5 0 0 1 7 0 0 1 9 0 0 2 4 0 0 2 6 0 0 2 8 0 0 2 10 0 0 3 5 0 0 3 7 0 0 3 9 0 -1 4 6 0 0 4 8 0 0 4 10 0 -1 5 7 1 0 5 9 0 0 6 8 1 0 6 10 0 0 7 9 0 0 8 10 0 0
+  Archive name: unavailable
+
+CrystalNets result for the SYSTRE-KEY graph:
+  Component 1: dimension 2
+  Genome: 2 1 2 0 0 1 3 0 0 1 5 0 0 1 7 0 0 1 9 0 0 2 4 0 0 2 6 0 0 2 8 0 0 2 10 0 0 3 5 0 0 3 7 0 0 3 9 0 -1 4 6 0 0 4 8 0 0 4 10 0 -1 5 8 1 0 5 9 0 0 6 7 1 0 6 10 0 0 7 9 0 0 8 10 0 0
+  Archive name: unavailable
+
+Both original calls succeeded, but their full genomes differ. Exact infinite-graph equivalence has since been independently verified; see proof/input-certificates.json and proof/verify_input_certificates.py.
+
+Input files are raw serialized PeriodicGraphs, not precomputed canonical keys.
+No atom coordinates or bond inference are needed for these graph-only reproductions.
+
+Human-readable edge lists:
+source: D22_source.edges.txt
+systre: D22_systre.edges.txt

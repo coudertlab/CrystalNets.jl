@@ -1,0 +1,38 @@
+D20 — disagreement
+
+Representative net: mp-aaahhfdw:Al:0:0
+Material / sublattice: Lu2Al8Si2Os3 / Al
+Intrinsic dimension: 2
+Source graph: 16 vertices, 32 edges
+Source input file: D20_source.pgraph
+Original exact graph SHA256: 157d0383a2c27cc5133100f08cc2c31c2100c53fe023a5351337b36e0b1f8b5a
+
+Observed with Julia 1.11.5 / CrystalNets.jl 1.2.0.
+Options: ignore_types=true, authorize_pruning=false, trim=false.
+The input files retain ambient dimension 3; UnderlyingNets finds intrinsic periodicity.
+
+Systre key (original successful classification):
+2 1 2 0 0 1 3 0 0 1 4 0 0 1 5 0 0 2 6 0 0 2 7 0 0 2 8 0 0 3 6 1 0 3 7 0 0 3 8 0 1 4 6 1 0 4 7 1 0 4 8 0 0 5 6 1 1 5 7 0 1 5 8 0 1
+
+Companion graph decoded from the original Systre key:
+D20_systre.pgraph
+Companion exact graph SHA256: efe7b4b0046e02e42b93e897df6c9d1c0bd0123a14300ab9692630fd144281e2
+
+CrystalNets result for the SOURCE graph:
+  Component 1: dimension 2
+  Genome: 2 1 2 0 0 1 3 0 0 1 5 0 0 1 7 0 0 2 4 0 0 2 6 0 0 2 8 0 0 3 4 0 0 3 5 0 -1 3 7 -1 0 4 6 0 -1 4 8 -1 0 5 6 0 0 5 7 -1 0 6 8 -1 0 7 8 0 0
+  Archive name: unavailable
+
+CrystalNets result for the SYSTRE-KEY graph:
+  Component 1: dimension 2
+  Genome: 2 1 2 0 0 1 3 0 0 1 5 0 0 1 7 0 0 2 4 0 0 2 6 0 0 2 8 0 0 3 4 0 0 3 6 0 -1 3 8 -1 0 4 5 0 -1 4 7 -1 0 5 6 0 0 5 8 -1 0 6 7 -1 0 7 8 0 0
+  Archive name: unavailable
+
+Both original calls succeeded, but their full genomes differ. Exact infinite-graph equivalence has since been independently verified; see proof/input-certificates.json and proof/verify_input_certificates.py.
+
+Input files are raw serialized PeriodicGraphs, not precomputed canonical keys.
+No atom coordinates or bond inference are needed for these graph-only reproductions.
+
+Human-readable edge lists:
+source: D20_source.edges.txt
+systre: D20_systre.edges.txt
