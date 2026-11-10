@@ -1,0 +1,37 @@
+E01 — internal_error
+
+Representative net: mp-aaacqahi:F:1:0
+Material / sublattice: Ho2SeOF2 / F
+Intrinsic dimension: 1
+Source graph: 12 vertices, 30 edges
+Source input file: E01_source.pgraph
+Original exact graph SHA256: 0614ae049c8a92d8ecd20e27da33e6d384c6eb274452610ccff19033320e77fa
+
+Observed with Julia 1.11.5 / CrystalNets.jl 1.2.0.
+Options: ignore_types=true, authorize_pruning=false, trim=false.
+The input files retain ambient dimension 3; UnderlyingNets finds intrinsic periodicity.
+
+Systre key (original successful classification):
+Unavailable: Systre did not classify this graph successfully.
+
+CrystalNets successful key:
+Unavailable: this call returned an internal error.
+The raw genome field "0" below is an ERROR SENTINEL, not a successful topological genome.
+
+Original CrystalNets result:
+  Component 1: dimension 1
+  Genome: 0
+  Archive name: unavailable
+  Error: AssertionError("isperm(direct_map)")
+
+Original Systre diagnostic(s):
+  mp-aaacqahi:F:1:0: NN_COLLISION
+
+Affected catalogue records (same exact graph):
+  mp-aaacqahi:F:1:0
+
+Input files are raw serialized PeriodicGraphs, not precomputed canonical keys.
+No atom coordinates or bond inference are needed for these graph-only reproductions.
+
+Human-readable edge lists:
+source: E01_source.edges.txt
