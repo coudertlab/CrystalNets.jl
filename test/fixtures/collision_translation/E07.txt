@@ -1,0 +1,37 @@
+E07 — internal_error
+
+Representative net: mp-aaacqkes:O:0:0
+Material / sublattice: Cs3P(SeO6)2 / O
+Intrinsic dimension: 1
+Source graph: 24 vertices, 42 edges
+Source input file: E07_source.pgraph
+Original exact graph SHA256: 8b8994937951da95125e12ae59e3b5b42b010e3242a05220e8ffcd0d4934e6e5
+
+Observed with Julia 1.11.5 / CrystalNets.jl 1.2.0.
+Options: ignore_types=true, authorize_pruning=false, trim=false.
+The input files retain ambient dimension 3; UnderlyingNets finds intrinsic periodicity.
+
+Systre key (original successful classification):
+Unavailable: Systre did not classify this graph successfully.
+
+CrystalNets successful key:
+Unavailable: this call returned an internal error.
+The raw genome field "0" below is an ERROR SENTINEL, not a successful topological genome.
+
+Original CrystalNets result:
+  Component 1: dimension 1
+  Genome: 0
+  Archive name: unavailable
+  Error: BoundsError([5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], (-3,))
+
+Original Systre diagnostic(s):
+  mp-aaacqkes:O:0:0: NN_COLLISION
+
+Affected catalogue records (same exact graph):
+  mp-aaacqkes:O:0:0
+
+Input files are raw serialized PeriodicGraphs, not precomputed canonical keys.
+No atom coordinates or bond inference are needed for these graph-only reproductions.
+
+Human-readable edge lists:
+source: E07_source.edges.txt
